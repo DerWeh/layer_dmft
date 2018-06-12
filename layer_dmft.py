@@ -194,7 +194,6 @@ if version == 2:
         # calculate explicitly -> neighboring layers untouched, in-plane removal
         ct_hyb.G0_iw['up'][0,0] << inverse(iOmega_n + G_inv_bare_up[cont_i, cont_i] - 0.25*prm.D*prm.D*gf_iw['up'][i, i])
         ct_hyb.G0_iw['dn'][0,0] << inverse(iOmega_n + G_inv_bare_dn[cont_i, cont_i] - t*t*gf_iw['dn'][i, i])
-        break  # FIXME: remove
         ct_hyb.solve(h_int=U_l*pt.operators.n('up',0)*pt.operators.n('dn',0),
                      n_cycles=100000, n_warmup_cycles=50000)
         # TODO: store values, rename self
