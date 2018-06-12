@@ -102,6 +102,9 @@ prm.t_mat[sdiag+1, sdiag] = prm.t_mat[sdiag, sdiag+1] = t
 # technical parameters
 N_POINTS = 2**10  # number of Matsubara frequencies
 ITER_MAX = 10
+ct_hyb_prm = {
+    'n_cycles': 100000, 'n_warmup_cycles': 50000
+}
 
 # dependent parameters
 beta = 1./prm.T
@@ -196,7 +199,7 @@ if version == 1:
         for sp in ('up', 'dn'):
             ct_hyb.G0_iw[sp][0,0] << inverse(inverse(gf_iw[sp][i, i]) + self_iw[sp][i, i])
         ct_hyb.solve(h_int=U_l*pt.operators.n('up',0)*pt.operators.n('dn',0),
-                     n_cycles=100000, n_warmup_cycles=50000)
+                     **ct_hyb_prm)
         # TODO: store values
         for sp in ('up', 'dn'):
             self_iw[sp][i, i] << ct_hyb.Sigma_iw[sp][0, 0]
@@ -215,9 +218,8 @@ if version == 2:
         # calculate explicitly -> neighboring layers untouched, in-plane removal
         for sp in ('up', 'dn'):
             ct_hyb.G0_iw[sp][0,0] << inverse(iOmega_n + g_inv_bare[sp][cont_i, cont_i] - 0.25*prm.D*prm.D*gf_iw[sp][i, i])
-        # FIXME: uncoment
-        # ct_hyb.solve(h_int=U_l*pt.operators.n('up',0)*pt.operators.n('dn',0),
-        #              n_cycles=100000, n_warmup_cycles=50000)
+        ct_hyb.solve(h_int=U_l*pt.operators.n('up',0)*pt.operators.n('dn',0),
+                     **ct_hyb_prm)
         # TODO: store values, rename self
         for sp in ('up', 'dn'):
             g_imp_iw[sp][0,0] << ct_hyb.G_iw[sp][0, 0]
