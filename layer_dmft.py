@@ -36,13 +36,40 @@ class _hubbard_model(type):
 
 
 class prm(object):
-    """Parameters of the Hubbard model."""
+    """Parameters of the Hubbard model.
+    
+    Attributes
+    ----------
+    T : float
+        temperature
+    D : float
+        half-bandwidth
+    mu : array(float)
+        chemical potential of the layers
+    V : array(float)
+        electrical potential energy
+    h : array(float)
+        Zeeman magnetic field
+    U : array(float)
+        onsite interaction
+    t_mat: array(float, float)
+        hopping matrix
+    """
     __slots__ = ('T', 'D', 'mu', 'V', 'h', 'U', 't_mat')
     __metaclass__ = _hubbard_model
 
     @classmethod
     def onsite_energy(cls, spin):
         return cls.mu + 0.5*cls.U - cls.V - spin*cls.h
+
+    @classmethod
+    def assert_valid(cls):
+        """Raise error if attributes are not valid."""
+        if not prm.mu.size == prm.h.size == prm.U.size == prm.V.size:
+            raise ValueError(
+                "all parameter arrays need to have the same shape"
+                "mu: {cls.mu.size}, h: {cls.h.size}, U:{cls.U.size}, V: {cls.V.size}".format(cls)
+            )
 
 
 ## Paramters
@@ -83,7 +110,7 @@ interacting_labels = labels[prm.U!=0]
 
 
 # check parameters
-assert prm.mu.size == prm.h.size == prm.U.size == prm.V.size == Ni
+prm.assert_valid()
 
 g_inv_bare = SpinResolved(
     up=np.asarray(prm.t_mat + np.diag(prm.onsite_energy(spin.up)[expand]), dtype=np.complex),
