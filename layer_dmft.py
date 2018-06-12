@@ -17,6 +17,7 @@ import gftools.matrix as gfmatrix
 
 class SpinResolved(namedtuple('Spin', ['up', 'dn'])):
     __slots__ = ()
+
     def __getitem__(self, element):
         try:
             return super().__getitem__(element)
@@ -109,7 +110,8 @@ ct_hyb_prm = {
 # dependent parameters
 beta = 1./prm.T
 iw_points = gf.matsubara_frequencies(np.arange(N_POINTS), beta)
-interacting_labels = labels[prm.U!=0]
+interacting_labels = labels[prm.U != 0]
+interacting_layers = expand[prm.U[expand] != 0]
 
 
 # check parameters
@@ -125,7 +127,7 @@ gf_iw = BlockGf(mesh=mesh, gf_struct=[('up', list(labels)), ('dn', list(labels))
                 target_rank=2, name='Gf_layer_iw')
 
 
-# FIXME: very inefficient, Self mostly empty data -> use target_shape
+# TODO: very inefficient, Self mostly empty data -> use target_shape
 self_iw = BlockGf(mesh=mesh, gf_struct=[('up', list(labels)), ('dn', list(labels))],
                   target_rank=2, name='Sigma_layer_iw')
 # Self_iw_up = Gf(mesh=mesh, target_shape=[1], indices=[0], name="Self_up")
@@ -144,10 +146,7 @@ def fill_gf(Gf_iw, Self_iw, g_inv_bare):
         gf_up = gfmatrix.construct_gf_omega(rv_inv, h_bar, rv)
         Gf_iw[Idx(n)] = gf_up[contract, contract]
         # FIXME: transpose is necessary
-        Gf_iw[Idx(-1-n)] = gf_up[contract, contract].conjugate()  # FIXME: adjoint? 
-
-
-interacting_layers = expand[prm.U[expand] != 0]
+        Gf_iw[Idx(-1-n)] = gf_up[contract, contract].conjugate()  # FIXME: adjoint?
 
 
 def fill_gf_imp(Gf_iw, gf_imp_iw, g_inv_bare):
@@ -223,7 +222,7 @@ if version == 2:
         # TODO: store values, rename self
         for sp in ('up', 'dn'):
             g_imp_iw[sp][0,0] << ct_hyb.G_iw[sp][0, 0]
-            fill_gf(gf_iw[sp], self_iw[sp], g_inv_bare[sp])
-            # fill_gf_imp(gf_iw[sp], gf_iw[sp], g_inv_bare[sp])
+            # fill_gf(gf_iw[sp], self_iw[sp], g_inv_bare[sp])
+            fill_gf_imp(gf_iw[sp], gf_iw[sp], g_inv_bare[sp])
         print 'finished', i, U_l
         break
