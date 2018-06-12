@@ -3,7 +3,7 @@ import pytriqs as pt
 from collections import namedtuple
 from triqs_cthyb import Solver as Ct_hyb
 from pytriqs.gf import (Gf, GfImFreq, GfImTime, GfReFreq, Idx, inverse,
-                        iOmega_n)
+                        iOmega_n, BlockGf)
 from pytriqs.gf.meshes import MeshImFreq, MeshReFreq
 from pytriqs.plot.mpl_interface import oplot
 
@@ -77,13 +77,15 @@ assert prm.mu.size == prm.h.size == prm.U.size == prm.V.size == Ni
 G_inv_bare_up = np.asarray(prm.t_mat + np.diag(prm.onsite_energy(spin.up)[expand]), dtype=np.complex)
 G_inv_bare_dn = np.asarray(prm.t_mat + np.diag(prm.onsite_energy(spin.dn)[expand]), dtype=np.complex)
 
-# FIXME: very inefficient, Self mostly empty data -> use target_shape
 mesh = MeshImFreq(beta, 'Fermion', N_POINTS)
-Gf_iw_up = GfImFreq(mesh=mesh, indices=list(labels), name="Gf_up")
+gf_iw = BlockGf(mesh=mesh, gf_struct=[('up', list(labels)), ('dn', list(labels))],
+                target_rank=2, name='Gf_layer_iw')
+
+
+# FIXME: very inefficient, Self mostly empty data -> use target_shape
 Self_iw_up = GfImFreq(mesh=mesh, indices=list(labels), name="Self_up")
 # Self_iw_up = Gf(mesh=mesh, target_shape=[1], indices=[0], name="Self_up")
-Gf_iw_dn = GfImFreq(mesh=mesh,indices=list(labels), name="Gf_dn")
-Self_iw_dn = GfImFreq(mesh=mesh,indices=list(labels), name="Self_dn")
+Self_iw_dn = GfImFreq(mesh=mesh, indices=list(labels), name="Self_dn")
 
 
 # helper functions
@@ -154,7 +156,7 @@ def plot_dos(gf_test):
 Self_iw_up << 0.
 Self_iw_dn << 0.
 print 'start initialisation'
-fill_gf(Gf_iw_up, Gf_iw_dn, Self_iw_up, Self_iw_dn)
+fill_gf(gf_iw['up'], gf_iw['dn'], Self_iw_up, Self_iw_dn)
 print 'done'
 
 # gf_test = Gf_iw_dn[0, 0]
@@ -170,14 +172,14 @@ if version == 1:
     for i, U_l in enumerate(prm.U):
         if U_l == 0.:
             continue
-        ct_hyb.G0_iw['up'][0,0] << inverse(inverse(Gf_iw_up[i, i]) + Self_iw_up[i,i])
-        ct_hyb.G0_iw['dn'][0,0] << inverse(inverse(Gf_iw_dn[i, i]) + Self_iw_dn[i,i])
+        ct_hyb.G0_iw['up'][0,0] << inverse(inverse(gf_iw['up'][i, i]) + Self_iw_up[i,i])
+        ct_hyb.G0_iw['dn'][0,0] << inverse(inverse(gf_iw['dn'][i, i]) + Self_iw_dn[i,i])
         ct_hyb.solve(h_int=U_l*pt.operators.n('up',0)*pt.operators.n('dn',0),
                      n_cycles=100000, n_warmup_cycles=50000)
         # TODO: store values
         Self_iw_up[0,0] << ct_hyb.Sigma_iw['up'][0, 0]
         Self_iw_dn[0,0] << ct_hyb.Sigma_iw['dn'][0, 0]
-        fill_gf(Gf_iw_up, Gf_iw_dn, Self_iw_up, Self_iw_dn)
+        fill_gf(gf_iw['up'], gf_iw['dn'], Self_iw_up, Self_iw_dn)
         print 'finished', i, U_l
         break
 
@@ -190,15 +192,15 @@ if version == 2:
             continue
         # !only valid for Bethe lattice
         # calculate explicitly -> neighboring layers untouched, in-plane removal
-        ct_hyb.G0_iw['up'][0,0] << inverse(iOmega_n + G_inv_bare_up[cont_i, cont_i] - 0.25*prm.D*prm.D*Gf_iw_up[i, i])
-        ct_hyb.G0_iw['dn'][0,0] << inverse(iOmega_n + G_inv_bare_dn[cont_i, cont_i] - t*t*Gf_iw_dn[i, i])
+        ct_hyb.G0_iw['up'][0,0] << inverse(iOmega_n + G_inv_bare_up[cont_i, cont_i] - 0.25*prm.D*prm.D*gf_iw['up'][i, i])
+        ct_hyb.G0_iw['dn'][0,0] << inverse(iOmega_n + G_inv_bare_dn[cont_i, cont_i] - t*t*gf_iw['dn'][i, i])
         break  # FIXME: remove
         ct_hyb.solve(h_int=U_l*pt.operators.n('up',0)*pt.operators.n('dn',0),
                      n_cycles=100000, n_warmup_cycles=50000)
         # TODO: store values, rename self
         g_imp_iw_up[0,0] << ct_hyb.G_iw['up'][0, 0]
         g_imp_iw_dn[0,0] << ct_hyb.G_iw['dn'][0, 0]
-        fill_gf(Gf_iw_up, Gf_iw_dn, Self_iw_up, Self_iw_dn)
+        fill_gf(gf_iw['up'], gf_iw['dn'], Self_iw_up, Self_iw_dn)
         # fill_gf_imp(Gf_iw_up, Gf_iw_dn, g_imp_iw_up, g_imp_iw_dn)
         print 'finished', i, U_l
         break
