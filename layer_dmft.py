@@ -1,3 +1,4 @@
+# encoding: utf-8
 from builtins import (bytes, str, open, super, range,
                       zip, round, input, int, pow, object)
 import pytriqs as pt
@@ -88,6 +89,27 @@ class prm(object):
 
 
 def fill_gf(gf_iw, self_iw, g_inv_bare):
+    ur"""Calculate data of `gf_iw` using the self-energy `self_iw`.
+
+    The calculation uses the symmetry of `gf_iw`, no transpose is performed.
+    Depends on the variables `expand` and `contract`.
+
+    Parameters
+    ----------
+    gf_iw : BlockGf
+        Green's function defined on a Matsubara frequency mesh.
+        The data of this Green's function will be modified.
+        The indices of `gf_iw` correspond to the labels of unique layers.
+    self_iw : BlockGf
+        Self-energy  defiend on a Matsubara frequency mesh.
+        It is used to calculate the Green's function.
+        The indices of `self_iw` correspond to the labels of unique layers.
+    g_inv_bare : ndarray(complex)
+        The inverse of the non-interacting Green's function stripped of the
+        ϵ and ω dependence:
+        :math:`G(iω, ϵ) - iω + ϵ`
+
+    """
     for n, iw in enumerate(iw_points):
         gf_inv = g_inv_bare.copy()
         # TODO: expand (check Self)
