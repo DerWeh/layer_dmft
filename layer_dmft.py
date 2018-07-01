@@ -195,17 +195,17 @@ if __name__ == '__main__':
     prm.assert_valid()
 
     g_inv_bare = SpinResolved(
-        up=np.asarray(prm.t_mat + np.diag(prm.onsite_energy(sigma.up)[expand]), dtype=np.complex),
-        dn=np.asarray(prm.t_mat + np.diag(prm.onsite_energy(sigma.dn)[expand]), dtype=np.complex),
+        **{sp: np.asarray(prm.t_mat + np.diag(prm.onsite_energy(sigma[sp])[expand]), dtype=np.complex)
+           for sp in spins}
     )
 
     mesh = MeshImFreq(beta, 'Fermion', N_POINTS)
-    gf_iw = BlockGf(mesh=mesh, gf_struct=[('up', list(labels)), ('dn', list(labels))],
+    gf_iw = BlockGf(mesh=mesh, gf_struct=[(sp, list(labels)) for sp in spins],
                     target_rank=2, name='Gf_layer_iw')
 
 
     # TODO: very inefficient, Self mostly empty data -> use target_shape
-    self_iw = BlockGf(mesh=mesh, gf_struct=[('up', list(labels)), ('dn', list(labels))],
+    self_iw = BlockGf(mesh=mesh, gf_struct=[(sp, list(labels)) for sp in spins],
                       target_rank=2, name='Sigma_layer_iw')
     # Self_iw_up = Gf(mesh=mesh, target_shape=[1], indices=[0], name="Self_up")
 
@@ -221,8 +221,7 @@ if __name__ == '__main__':
     # gf.density(gf_test.data[gf_test.data.size/2:], potential=+0.9, beta=beta)
 
     ct_hyb = Ct_hyb(beta=beta, n_iw=N_POINTS,
-                    gf_struct=[('up', [0]), ('dn', [0])])
-
+                    gf_struct=[(sp, [0]) for sp in spins])
 
     # # r-DMFT
     # # for i in xrange(ITER_MAX):
