@@ -34,6 +34,10 @@ spin = SpinResolved(up=0.5, dn=-0.5)
 
 
 class _hubbard_model(type):
+    """Meta class for `prm` to provide a representation.
+    
+    TODO: check if meta class should have '__slots__ = ()' for memory.
+    """
     def __repr__(self):
         _str = "Hubbard model parametr: "
         _str += ", ".join(('{}={}'.format(prm, getattr(self, prm))
@@ -62,7 +66,7 @@ class prm(object):
         hopping matrix
     """
     __slots__ = ('T', 'D', 'mu', 'V', 'h', 'U', 't_mat')
-    __metaclass__ = _hubbard_model
+    __metaclass__ = _hubbard_model  # provides representation
 
     @classmethod
     def onsite_energy(cls, spin):
