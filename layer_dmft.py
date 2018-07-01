@@ -14,8 +14,13 @@ import numpy as np
 import gftools as gf
 import gftools.matrix as gfmatrix
 
+spins = ('up', 'dn')
 
-class SpinResolved(namedtuple('Spin', ['up', 'dn'])):
+
+class SpinResolved(namedtuple('Spin', spins)):
+    """Container class for spin resolved quantites.
+    
+    It is a `namedtuple` which can also be accesd like a `dict`"""
     __slots__ = ()
 
     def __getitem__(self, element):
