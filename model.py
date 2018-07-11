@@ -42,10 +42,10 @@ class _hubbard_model(type):
     TODO: check if meta class should have '__slots__ = ()' for memory.
     """
 
-    def __repr__(self):
+    def __repr__(cls):
         _str = "Hubbard model parameters: "
-        _str += ", ".join(('{}={}'.format(prm, getattr(self, prm))
-                           for prm in self.__slots__))
+        _str += ", ".join(('{}={}'.format(prm, getattr(cls, prm))
+                           for prm in cls.__slots__))
         return _str
 
 
