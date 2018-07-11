@@ -79,9 +79,9 @@ class prm(object):
     @classmethod
     def assert_valid(cls):
         """Raise error if attributes are not valid."""
-        if not prm.mu.size == prm.h.size == prm.U.size == prm.V.size:
+        if not cls.mu.size == cls.h.size == cls.U.size == cls.V.size:
             raise ValueError(
-                "all parameter arrays need to have the same shape"
+                "all parameter arrays need to have the same shape - "
                 "mu: {cls.mu.size}, h: {cls.h.size}, "
-                "U:{cls.U.size}, V: {cls.V.size}".format(cls)
+                "U:{cls.U.size}, V: {cls.V.size}".format(cls=cls)
             )
