@@ -63,7 +63,7 @@ class prm(object):
         Zeeman magnetic field
     U : array(float)
         onsite interaction
-    t_mat: array(float, float)
+    t_mat : array(float, float)
         hopping matrix
     """
     __slots__ = ('T', 'D', 'mu', 'V', 'h', 'U', 't_mat')
