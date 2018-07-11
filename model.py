@@ -50,7 +50,7 @@ class _hubbard_model(type):
 
 
 class prm(object):
-    """Parameters of the Hubbard model.
+    """Parameters of the (layered) Hubbard model.
     
     Attributes
     ----------
@@ -73,8 +73,22 @@ class prm(object):
     __metaclass__ = _hubbard_model  # provides representation
 
     @classmethod
-    def onsite_energy(cls, spin):
-        return cls.mu + 0.5*cls.U - cls.V - spin*cls.h
+    def onsite_energy(cls, sigma):
+        """Return the single-particle on-site energy.
+
+        Parameters
+        ----------
+        sigma : {-.5, +5}
+            The value of :math:`σ∈{↑,↓}` which is needed to determine the
+            Zeeman energy contribution :math:`σh`.
+
+        Returns
+        -------
+        onsite_energy : float, array(float)
+            The (layer dependant) onsite energy :math:`μ + 1/2 U - V - σh`.
+
+        """
+        return cls.mu + 0.5*cls.U - cls.V - sigma*cls.h
 
     @classmethod
     def assert_valid(cls):
