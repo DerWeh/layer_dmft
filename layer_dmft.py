@@ -3,10 +3,8 @@ from builtins import (bytes, str, open, super, range,
                       zip, round, input, int, pow, object)
 import pytriqs as pt
 
-from collections import namedtuple
 from triqs_cthyb import Solver as Ct_hyb
-from pytriqs.gf import (Gf, GfImFreq, GfImTime, GfReFreq, Idx, inverse,
-                        iOmega_n, BlockGf)
+from pytriqs.gf import BlockGf, Gf, GfImTime, GfReFreq, Idx, inverse, iOmega_n
 from pytriqs.gf.meshes import MeshImFreq, MeshReFreq
 from pytriqs.plot.mpl_interface import oplot
 
@@ -15,73 +13,7 @@ import numpy as np
 import gftools as gf
 import gftools.matrix as gfmatrix
 
-spins = ('up', 'dn')
-
-
-class SpinResolved(namedtuple('Spin', spins)):
-    """Container class for spin resolved quantites.
-    
-    It is a `namedtuple` which can also be accesd like a `dict`"""
-    __slots__ = ()
-
-    def __getitem__(self, element):
-        try:
-            return super().__getitem__(element)
-        except TypeError:
-            return getattr(self, element)
-
-
-sigma = SpinResolved(up=0.5, dn=-0.5)
-
-
-class _hubbard_model(type):
-    """Meta class for `prm` to provide a representation.
-    
-    TODO: check if meta class should have '__slots__ = ()' for memory.
-    """
-    def __repr__(self):
-        _str = "Hubbard model parametr: "
-        _str += ", ".join(('{}={}'.format(prm, getattr(self, prm))
-                           for prm in self.__slots__))
-        return _str
-
-
-class prm(object):
-    """Parameters of the Hubbard model.
-    
-    Attributes
-    ----------
-    T : float
-        temperature
-    D : float
-        half-bandwidth
-    mu : array(float)
-        chemical potential of the layers
-    V : array(float)
-        electrical potential energy
-    h : array(float)
-        Zeeman magnetic field
-    U : array(float)
-        onsite interaction
-    t_mat : array(float, float)
-        hopping matrix
-    """
-    __slots__ = ('T', 'D', 'mu', 'V', 'h', 'U', 't_mat')
-    __metaclass__ = _hubbard_model  # provides representation
-
-    @classmethod
-    def onsite_energy(cls, spin):
-        return cls.mu + 0.5*cls.U - cls.V - spin*cls.h
-
-    @classmethod
-    def assert_valid(cls):
-        """Raise error if attributes are not valid."""
-        if not prm.mu.size == prm.h.size == prm.U.size == prm.V.size:
-            raise ValueError(
-                "all parameter arrays need to have the same shape"
-                "mu: {cls.mu.size}, h: {cls.h.size}, U:{cls.U.size}, V: {cls.V.size}".format(cls)
-            )
-
+from model import prm, sigma, SpinResolved, spins
 
 # helper functions
 # def get_g_bath_iw(g_loc_iw, label, sigma):
