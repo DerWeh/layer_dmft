@@ -36,20 +36,7 @@ class SpinResolved(namedtuple('Spin', spins)):
 sigma = SpinResolved(up=0.5, dn=-0.5)
 
 
-class _hubbard_model(type):
-    """Meta class for `prm` to provide a representation.
-    
-    TODO: check if meta class should have '__slots__ = ()' for memory.
-    """
-
-    def __repr__(cls):
-        _str = "Hubbard model parameters: "
-        _str += ", ".join(('{}={}'.format(prm, getattr(cls, prm))
-                           for prm in cls.__slots__))
-        return _str
-
-
-class prm(object):
+class _Hubbard_Parameters(object):
     """Parameters of the (layered) Hubbard model.
     
     Attributes
@@ -70,10 +57,8 @@ class prm(object):
         hopping matrix
     """
     __slots__ = ('T', 'D', 'mu', 'V', 'h', 'U', 't_mat')
-    __metaclass__ = _hubbard_model  # provides representation
 
-    @classmethod
-    def onsite_energy(cls, sigma):
+    def onsite_energy(self, sigma):
         """Return the single-particle on-site energy.
 
         Parameters
@@ -88,14 +73,28 @@ class prm(object):
             The (layer dependant) onsite energy :math:`μ + 1/2 U - V - σh`.
 
         """
-        return cls.mu + 0.5*cls.U - cls.V - sigma*cls.h
+        return self.mu + 0.5*self.U - self.V - sigma*self.h
 
-    @classmethod
-    def assert_valid(cls):
+    def assert_valid(self):
         """Raise error if attributes are not valid."""
-        if not cls.mu.size == cls.h.size == cls.U.size == cls.V.size:
+        if not self.mu.size == self.h.size == self.U.size == self.V.size:
             raise ValueError(
                 "all parameter arrays need to have the same shape - "
-                "mu: {cls.mu.size}, h: {cls.h.size}, "
-                "U:{cls.U.size}, V: {cls.V.size}".format(cls=cls)
+                "mu: {self.mu.size}, h: {self.h.size}, "
+                "U:{self.U.size}, V: {self.V.size}".format(self=self)
             )
+
+    def __repr__(self):
+        def _save_get(attribue):
+            try:
+                return getattr(self, attribue)
+            except AttributeError:
+                return '<not assigned>'
+
+        _str = "Hubbard model parameters: "
+        _str += ", ".join(('{}={}'.format(prm, _save_get(prm))
+                           for prm in self.__slots__))
+        return _str
+
+
+prm = _Hubbard_Parameters()
