@@ -9,13 +9,15 @@ The main constituents are:
 
 Most likely you want to import this module like::
 
-    from model import prm, sigma, SpinResolved, spins
+    from model import prm, sigma, SpinResolvedArray, spins
 
 """
 from collections import namedtuple
 
 from builtins import (bytes, input, int, object, open, pow, range, round, str,
                       super, zip)
+
+import numpy as np
 
 spins = ('up', 'dn')
 
@@ -33,7 +35,63 @@ class SpinResolved(namedtuple('Spin', spins)):
             return getattr(self, element)
 
 
-sigma = SpinResolved(up=0.5, dn=-0.5)
+class SpinResolvedArray(np.ndarray):
+    """Container class for spin resolved quantities allowing array calculations.
+    
+    It is a `ndarray` with syntactic sugar. The first axis represents spin and
+    thus has to have the dimension 2.
+    On top on the typical array manipulations it allows to access the first
+    with the indices 'up' and 'dn'.
+
+    Attributes
+    ----------
+    up :
+        The up spin component, equal to self[0]
+    dn :
+        The down spin component, equal to self[1]
+
+    """
+    def __new__(cls, *args, **kwargs):
+        """Create the object using `np.array` function.
+
+        up, dn : (optional)
+            If the keywords `up` *and* `dn` are present, `numpy` uses these
+            two parameters to construct the array.
+
+        Returns
+        -------
+        obj :
+            The created `np.ndarray` instance
+        """
+        try:  # standard initialization via `np.array`
+            obj = np.array(*args, **kwargs).view(cls)
+        except TypeError:  # alternative: use SpinResolvedArray(up=..., dn=...)
+            obj = np.array(object=(kwargs.pop('up'), kwargs.pop('dn')),
+                           **kwargs).view(cls)
+        assert obj.shape[0] == 2
+        obj.up = obj[0]
+        obj.dn = obj[1]
+        return obj
+
+    def __getitem__(self, element):
+        """Expands `np.ndarray`'s version to handle string indices 'up'/'dn'
+
+        Regular slices will be handle by numpy, additionally the following can
+        be handled:
+
+            1. If the element is in `spins` ('up', 'dn').
+            2. If the element's first index is in `spins` and the rest is a
+               regular slice. The usage of this is however discouraged.
+
+        """
+        try:  # use default np.ndarray method
+            return super().__getitem__(element)
+        except IndexError:  # if element is just ('up'/'dn') use the attribute
+            try:
+                return getattr(self, element)
+            except TypeError:  # convert string to index and use numpy slicing
+                element = (spins.index(element[0]), ) + element[1:]
+                return super().__getitem__(element)
 
 
 class _Hubbard_Parameters(object):
@@ -96,5 +154,8 @@ class _Hubbard_Parameters(object):
                            for prm in self.__slots__))
         return _str
 
+
+sigma = SpinResolvedArray(up=0.5, dn=-0.5)
+sigma.flags.writeable = False
 
 prm = _Hubbard_Parameters()
