@@ -122,6 +122,15 @@ class _Hubbard_Parameters(object):
 
     __slots__ = ('T', 'D', 'mu', 'V', 'h', 'U', 't_mat')
 
+    @property
+    def beta(self):
+        """Inverse temperature."""
+        return 1./self.T
+
+    @beta.setter
+    def beta(self, value):
+        self.T = 1./value
+
     def onsite_energy(self, sigma):
         """Return the single-particle on-site energy.
 

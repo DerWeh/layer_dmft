@@ -175,7 +175,7 @@ def get_gf_0_loc(omega, params=None):
 
 def occupation(gf_iw_local, params, spin):
     potential = prm.onsite_energy(sigma=spin)
-    beta = 1./params.T
+    beta = params.beta
     occ = np.array([gf.density(gf_iw, potential=V, beta=beta) for gf_iw, V
                     in zip(gf_iw_local.T, potential)])
     return occ
@@ -183,7 +183,7 @@ def occupation(gf_iw_local, params, spin):
 
 def self_consistency(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
     params = parameter
-    iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=1./params.T)
+    iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
 
     # start loop paramters
     i, n, n_old = 0, 0, np.infty
@@ -293,7 +293,7 @@ def broyden_self_consistency(parameters, accuracy, guess=None, kind='n'):
     if guess is None:
         guess = np.zeros_like(parameters.mu)
     params = parameters
-    iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=1./params.T)
+    iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
     gf_iw_up, gf_iw_dn = get_gf_0_loc(iw_array, params=params)
     n_initial = SpinResolvedArray(up=occupation(gf_iw_up, params, sigma.up),
                                   dn=occupation(gf_iw_dn, params, sigma.dn))
@@ -355,7 +355,7 @@ if __name__ == '__main__':
 
 # if __name__ == '__main__':
 #     # params = load_param()
-#     # iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=1./params.T)
+#     # iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
 #     # gf_iw_up, gf_iw_dn = get_gf_0_loc(iw_array)
 #     # _, compres, expand = np.unique(get_impurity_lable(), return_index=True, return_inverse=True)
 #     # print(occupation(gf_iw_dn[compres], params)[expand])
