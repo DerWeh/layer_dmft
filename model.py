@@ -25,7 +25,9 @@ spins = ('up', 'dn')
 class SpinResolved(namedtuple('Spin', spins)):
     """Container class for spin resolved quantities.
     
-    It is a `namedtuple` which can also be accessed like a `dict`"""
+    It is a `namedtuple` which can also be accessed like a `dict`
+    """
+
     __slots__ = ()
 
     def __getitem__(self, element):
@@ -51,6 +53,7 @@ class SpinResolvedArray(np.ndarray):
         The down spin component, equal to self[1]
 
     """
+
     def __new__(cls, *args, **kwargs):
         """Create the object using `np.array` function.
 
@@ -62,6 +65,7 @@ class SpinResolvedArray(np.ndarray):
         -------
         obj :
             The created `np.ndarray` instance
+
         """
         try:  # standard initialization via `np.array`
             obj = np.array(*args, **kwargs).view(cls)
@@ -74,7 +78,7 @@ class SpinResolvedArray(np.ndarray):
         return obj
 
     def __getitem__(self, element):
-        """Expands `np.ndarray`'s version to handle string indices 'up'/'dn'
+        """Expand `np.ndarray`'s version to handle string indices 'up'/'dn'.
 
         Regular slices will be handle by numpy, additionally the following can
         be handled:
@@ -113,7 +117,9 @@ class _Hubbard_Parameters(object):
         onsite interaction
     t_mat : array(float, float)
         hopping matrix
+
     """
+
     __slots__ = ('T', 'D', 'mu', 'V', 'h', 'U', 't_mat')
 
     def onsite_energy(self, sigma):
