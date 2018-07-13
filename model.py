@@ -97,6 +97,11 @@ class SpinResolvedArray(np.ndarray):
                 element = (spins.index(element[0]), ) + element[1:]
                 return super().__getitem__(element)
 
+    @property
+    def total(self):
+        """Sum of up and down spin."""
+        return self.up + self.dn
+
 
 class _Hubbard_Parameters(object):
     """Parameters of the (layered) Hubbard model.

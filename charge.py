@@ -135,7 +135,8 @@ def invert_gf_0(omega, gf_0_inv, half_bandwidth):
 
 
 def get_gf_0_loc_deprecated(omega, params=None):
-    """Old version, only diagonalizing in \epsilon.
+    r"""Old version, only diagonalizing in \epsilon.
+
     Might be necessary later to include self-energy.
     """
     # TODO: implement option do give back only unique layers
@@ -230,8 +231,9 @@ def update_occupation(n_start, i_omega, params):
 
     Parameters
     ----------
-    n_start : array(float)
-        Start occupation used to calculate new occupation.
+    n_start : SpinResolvedArray(float, float)
+        Start occupation used to calculate new occupation. The expected shape
+        is (#spins=2, #layers).
     i_omega : array(complex)
         Matsubara frequencies :math:`iω_n` at which the Green's function is
         evaluated to calculate the occupation.
@@ -241,12 +243,13 @@ def update_occupation(n_start, i_omega, params):
 
     Returns
     -------
-    update_occupation : array(float)
-        The new occupation incorporating the potential obtained via `get_V`
+    update_occupation : array(float, float)
+        The change in occupation caused by the potential obtained via `get_V`.
+        Has the same shape as `n_start`.
 
     """
     assert n_start.shape[0] == 2
-    params.V[:] = get_V(n_start[0] + n_start[1] - np.average(n_start[0] + n_start[1]))
+    params.V[:] = get_V(n_start.total - np.average(n_start.total))
     update_occupation.check_V.append(params.V.copy())
     gf_iw_up, gf_iw_dn = get_gf_0_loc(i_omega, params=params)
     n = SpinResolvedArray(up=occupation(gf_iw_up, params, spin=sigma.up),
@@ -255,15 +258,15 @@ def update_occupation(n_start, i_omega, params):
 
 
 def update_potential(V_start, i_omega, params):
-    # FIXME
     r"""Calculate new potential by setting :math:`V_l` from the method `get_V`.
 
     This methods modifies `params.V`.
 
     Parameters
     ----------
-    n_start : array(float)
-        Start occupation used to calculate new occupation.
+    V_start : array(float)
+            Starting potential used to calculate the occupation and
+            subsequently the new potential.
     i_omega : array(complex)
         Matsubara frequencies :math:`iω_n` at which the Green's function is
         evaluated to calculate the occupation.
@@ -283,7 +286,7 @@ def update_potential(V_start, i_omega, params):
     n = SpinResolvedArray(up=occupation(gf_iw_up, params, spin=sigma.up),
                           dn=occupation(gf_iw_dn, params, spin=sigma.dn))
     update_potential.check_n.append(n.copy())
-    V = get_V(n.up + n.dn - np.average(n.up + n.dn))
+    V = get_V(n.total - np.average(n.total))
     return V - V_start
 
 
