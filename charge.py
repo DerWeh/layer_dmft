@@ -134,7 +134,10 @@ def invert_gf_0(omega, gf_0_inv, half_bandwidth):
     return gf_diag
 
 
-def get_gf_0_loc(omega, params=None):
+def get_gf_0_loc_deprecated(omega, params=None):
+    """Old version, only diagonalizing in \epsilon.
+    Might be necessary later to include self-energy.
+    """
     # TODO: implement option do give back only unique layers
     prm = params
     diag = np.diag_indices_from(prm.t_mat)
@@ -149,7 +152,7 @@ def get_gf_0_loc(omega, params=None):
     return gf_diag_up, gf_diag_dn
 
 
-def get_gf_0_loc_opt(omega, params=None):
+def get_gf_0_loc(omega, params=None):
     # TODO: implement option do give back only unique layers
     prm = params
     diag = np.diag_indices_from(prm.t_mat)
@@ -171,13 +174,11 @@ def get_gf_0_loc_opt(omega, params=None):
 
 
 def occupation(gf_iw_local, params, spin):
-    shape = gf_iw_local.shape
-    gf_iw_local = np.reshape(gf_iw_local, (-1, shape[-1]))
     potential = prm.onsite_energy(sigma=spin)
     beta = 1./params.T
     occ = np.array([gf.density(gf_iw, potential=V, beta=beta) for gf_iw, V
-                    in zip(gf_iw_local, potential)])
-    return occ.reshape(shape[:-1])
+                    in zip(gf_iw_local.T, potential)])
+    return occ
 
 
 def self_consistency(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
@@ -280,6 +281,7 @@ def print_status(x, dx):
     print("======== " + str(print_status.itr) + " =============")
     print(x)
     print("--- " + str(np.linalg.norm(dx)) + " ---")
+
 
 print_status.itr = 0
 
