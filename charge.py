@@ -15,7 +15,7 @@ import gftools as gf
 import capacitor_formula
 import gftools.matrix as gfmatrix
 
-from model import prm, SpinResolvedArray, sigma
+from model import prm, SpinResolvedArray, sigma, spins
 
 # V_DATA = 'loop/Vsteps.dat'
 # DMFT_PARAM = 'layer_hb_param.init'
@@ -153,24 +153,35 @@ def get_gf_0_loc_deprecated(omega, params=None):
 
 
 def get_gf_0_loc(omega, params=None):
+    """Return local (diagonal) elements of the non-interacting Green's function.
+
+    Parameters
+    ----------
+    omega : array(complex)
+        Frequencies at which the Green's function is evaluated
+    params : prm
+        Parameter object with the Hamiltonian parameters.
+
+    Returns
+    -------
+    get_gf_0_loc : tuple(array(complex), array(complex))
+        The Green's function for spin up and down.
+
+    """
     # TODO: implement option do give back only unique layers
     prm = params
     diag = np.diag_indices_from(prm.t_mat)
-    gf_0_inv_up = np.array(prm.t_mat, dtype=np.complex256, copy=True)
-    gf_0_inv_up[diag] += prm.onsite_energy(sigma=sigma.up)
-    rv_inv_up, xi_up, rv_up = gfmatrix.decompose_gf_omega(gf_0_inv_up)
-    xi_bar_up = gf.bethe_hilbert_transfrom(omega[..., np.newaxis] + xi_up,
-                                           half_bandwidth=prm.D)
-    gf_up = np.einsum('ij, ...j, jk -> ...ik', rv_up, xi_bar_up, rv_inv_up)
+    gf_0 = {}
+    for sp in spins:
+        gf_0_inv = np.array(prm.t_mat, dtype=np.complex256, copy=True)
+        gf_0_inv[diag] += prm.onsite_energy(sigma=sigma[sp])
+        rv_inv, xi, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
+        xi_bar = gf.bethe_hilbert_transfrom(omega[..., np.newaxis] + xi,
+                                            half_bandwidth=prm.D)
+        gf_0[sp] = np.einsum('ij, ...j, jk -> ...ik', rv, xi_bar, rv_inv)
 
-    gf_0_inv_dn = np.array(prm.t_mat, dtype=np.complex256, copy=True)
-    gf_0_inv_dn[diag] += prm.onsite_energy(sigma=sigma.dn)
-    rv_inv_dn, xi_dn, rv_dn = gfmatrix.decompose_gf_omega(gf_0_inv_dn)
-    xi_bar_dn = gf.bethe_hilbert_transfrom(omega[..., np.newaxis] + xi_dn,
-                                           half_bandwidth=prm.D)
-    gf_dn = np.einsum('ij, ...j, jk -> ...ik', rv_dn, xi_bar_dn, rv_inv_dn)
-
-    return np.diagonal(gf_up, axis1=-2, axis2=-1), np.diagonal(gf_dn, axis1=-2, axis2=-1)
+    return (np.diagonal(gf_0['up'], axis1=-2, axis2=-1),
+            np.diagonal(gf_0['dn'], axis1=-2, axis2=-1))
 
 
 def occupation(gf_iw_local, params, spin):
