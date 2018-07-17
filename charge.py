@@ -84,9 +84,10 @@ def get_gf_0_loc_deprecated(omega, params=None):
 
 def occupation(gf_iw_local, params, spin):
     potential = prm.onsite_energy(sigma=spin)
+    assert np.all(gf_iw_local.shape[:-1] == potential.shape)
     beta = params.beta
     occ = np.array([gf.density(gf_iw, potential=V, beta=beta) for gf_iw, V
-                    in zip(gf_iw_local.T, potential)])
+                    in zip(gf_iw_local, potential)])
     return occ
 
 
