@@ -1,5 +1,5 @@
 # encoding: utf-8
-u"""Module to define the layered Hubbard model in use.
+"""Module to define the layered Hubbard model in use.
 
 The main constituents are:
 * The `prm` class which defines the Hamiltonian
@@ -12,10 +12,12 @@ Most likely you want to import this module like::
     from model import prm, sigma, SpinResolvedArray, spins
 
 """
-from collections import namedtuple
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
 from builtins import (bytes, input, int, object, open, pow, range, round, str,
                       super, zip)
+from collections import namedtuple
 
 import numpy as np
 
@@ -186,7 +188,10 @@ class _Hubbard_Parameters(object):
         return SpinResolvedArray(**gf_0)
 
     def assert_valid(self):
-        """Raise error if attributes are not valid."""
+        """Raise error if attributes are not valid.
+        
+        Currently only the shape of the parameters is checked.
+        """
         if not self.mu.size == self.h.size == self.U.size == self.V.size:
             raise ValueError(
                 "all parameter arrays need to have the same shape - "

@@ -15,7 +15,7 @@ import gftools as gf
 import capacitor_formula
 import gftools.matrix as gfmatrix
 
-from model import prm, SpinResolvedArray, sigma, spins
+from model import prm, sigma, SpinResolvedArray, spins
 
 # V_DATA = 'loop/Vsteps.dat'
 # DMFT_PARAM = 'layer_hb_param.init'
@@ -28,77 +28,6 @@ layers = np.arange(40)
 e_schot = np.ones_like(layers) * 0.4
 get_V = partial(capacitor_formula.potential_energy_vector,
                 e_schot=e_schot, layer_labels=layers)
-
-
-# def load_param():
-#     """Return parameters if possible to load param file, else return None.
-#
-#     Assumes you are already in the proper directory.
-#     """
-#     with open(DMFT_PARAM, 'r') as param_file:
-#         content_array = np.array(param_file.readlines(), dtype=object)
-#     mask = [(not line.strip().startswith('#')) & (line.strip() != '')
-#             for line in content_array]
-#     bare_content = content_array[mask]  # striped all empty lines and comments
-
-#     N_layer = int(bare_content[0])  # layers
-#     NL = int(bare_content[1])  # labels
-#     bare_mu_pos = 4 + N_layer + 8
-#     hoppin_matrix = np.genfromtxt(bare_content[4:4+N_layer], dtype=int)
-#     assert hoppin_matrix.shape == (N_layer, N_layer)
-#     assert np.alltrue(hoppin_matrix.T == hoppin_matrix)
-#     diagonal = np.diag(hoppin_matrix)
-#     super_diag = np.diag(hoppin_matrix, k=1)
-#     hopping_param = np.fromstring(bare_content[bare_mu_pos-2], sep=' ')
-
-#     # parameters in order of file
-#     # prm = type('Parameter', (), {})
-#     prm = {}
-#     prm["D"] = float(bare_content[bare_mu_pos - 4].strip())
-#     prm["T"] = float(bare_content[bare_mu_pos - 3].strip())
-#     # FIXME not very stable or readable
-#     prm["t_nn"] = hopping_param[super_diag[NL-2:]]
-#     prm["eps"] = hopping_param[diagonal[NL-1:]]
-#     prm["U"] = np.fromstring(bare_content[bare_mu_pos - 1], sep=' ')
-#     prm["mu"] = np.fromstring(bare_content[bare_mu_pos], sep=' ')
-#     prm["h"] = np.fromstring(bare_content[bare_mu_pos + 1], sep=' ')
-#     try:
-#         prm["V"] = np.loadtxt(V_DATA, ndmin=2)[-1]
-#     except IOError:
-#         prm["V"] = np.zeros_like(prm['mu'])
-#     else:
-#         assert prm["V"].shape == prm["mu"].shape
-#     return Parameter(N=NL, **prm)
-
-
-# def get_impurity_lable():
-#     """Get array of impurity label, can be used to expand arrays."""
-#     with open(OUTPUT, 'r') as out_file:
-#         for line in out_file.readlines():
-#             if 'impurity label' in line:
-#                 label_str = line.split("=")[1].strip()
-#                 break
-#         else:
-#             raise EOFError("'impurity label' is not in {output}".format(output=OUTPUT))
-#     return np.fromstring(label_str, dtype=int, sep=' ')
-
-
-# def load_hopping_matrix():
-#     with open(DMFT_PARAM, 'r') as param_file:
-#         content_array = np.array(param_file.readlines(), dtype=object)
-#     mask = [(not line.strip().startswith('#')) & (line.strip() != '')
-#             for line in content_array]
-#     bare_content = content_array[mask]  # striped all empty lines and comments
-
-#     N_layer = int(bare_content[0])  # layers
-#     bare_mu_pos = 4 + N_layer + 8
-#     hoppin_matrix = np.genfromtxt(bare_content[4:4+N_layer], dtype=int)
-#     assert hoppin_matrix.shape == (N_layer, N_layer)
-#     assert np.alltrue(hoppin_matrix.T == hoppin_matrix)
-#     hopping_param = np.fromstring(bare_content[bare_mu_pos-2], sep=' ')
-
-#     t_mat = hopping_param[hoppin_matrix]
-#     return t_mat
 
 
 def invert_gf_0(omega, gf_0_inv, half_bandwidth):
@@ -151,38 +80,6 @@ def get_gf_0_loc_deprecated(omega, params=None):
     gf_diag_up = invert_gf_0(omega, gf_0_inv_up, half_bandwidth=prm.D)
     gf_diag_dn = invert_gf_0(omega, gf_0_inv_dn, half_bandwidth=prm.D)
     return gf_diag_up, gf_diag_dn
-
-
-def get_gf_0_loc(omega, params=None):
-    """Return local (diagonal) elements of the non-interacting Green's function.
-
-    Parameters
-    ----------
-    omega : array(complex)
-        Frequencies at which the Green's function is evaluated
-    params : prm
-        Parameter object with the Hamiltonian parameters.
-
-    Returns
-    -------
-    get_gf_0_loc : tuple(array(complex), array(complex))
-        The Green's function for spin up and down.
-
-    """
-    # TODO: implement option do give back only unique layers
-    prm = params
-    diag = np.diag_indices_from(prm.t_mat)
-    gf_0 = {}
-    for sp in spins:
-        gf_0_inv = np.array(prm.t_mat, dtype=np.complex256, copy=True)
-        gf_0_inv[diag] += prm.onsite_energy(sigma=sigma[sp])
-        rv_inv, xi, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
-        xi_bar = gf.bethe_hilbert_transfrom(omega[..., np.newaxis] + xi,
-                                            half_bandwidth=prm.D)
-        gf_0[sp] = np.einsum('ij, ...j, jk -> ...ik', rv, xi_bar, rv_inv)
-
-    return (np.diagonal(gf_0['up'], axis1=-2, axis2=-1),
-            np.diagonal(gf_0['dn'], axis1=-2, axis2=-1))
 
 
 def occupation(gf_iw_local, params, spin):
@@ -280,7 +177,6 @@ def update_potential(V_start, i_omega, params):
         The new occupation incorporating the potential obtained via `get_V`
 
     """
-    print("-Update V-")
     params.V[:] = V_start
     gf_iw_up, gf_iw_dn = params.gf0(i_omega)
     n = SpinResolvedArray(up=occupation(gf_iw_up, params, spin=sigma.up),
@@ -365,14 +261,3 @@ if __name__ == '__main__':
     update_potential.check_n = []
     opt_param = broyden_self_consistency(prm, accuracy=2e-3, kind='V')
     # return update_occupation.check_V
-
-
-# if __name__ == '__main__':
-#     # params = load_param()
-#     # iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
-#     # gf_iw_up, gf_iw_dn = get_gf_0_loc(iw_array)
-#     # _, compres, expand = np.unique(get_impurity_lable(), return_index=True, return_inverse=True)
-#     # print(occupation(gf_iw_dn[compres], params)[expand])
-#     # print('finished')
-#     # print('!!!!!!!!')
-#     Vs = main()
