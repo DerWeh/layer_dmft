@@ -82,12 +82,19 @@ def get_gf_0_loc_deprecated(omega, params=None):
     return gf_diag_up, gf_diag_dn
 
 
-def occupation(gf_iw_local, params, spin):
+def occupation(gf_iw_local, params, spin=None):
+    shape = gf_iw_local.shape
     potential = prm.onsite_energy(sigma=spin)
-    assert np.all(gf_iw_local.shape[:-1] == potential.shape)
     beta = params.beta
-    occ = np.array([gf.density(gf_iw, potential=V, beta=beta) for gf_iw, V
-                    in zip(gf_iw_local, potential)])
+    if spin is None:
+        assert shape[0] == 2, \
+            "`gf_iw_local` must be spin-resolved for `spin=None`"
+        assert shape[1:-1] == potential.shape
+
+    else:
+        assert np.all(shape[:-1] == potential.shape)
+        occ = np.array([gf.density(gf_iw, potential=V, beta=beta) for gf_iw, V
+                        in zip(gf_iw_local, potential)])
     return occ
 
 

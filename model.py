@@ -48,7 +48,7 @@ class SpinResolvedArray(np.ndarray):
     It is a `ndarray` with syntactic sugar. The first axis represents spin and
     thus has to have the dimension 2.
     On top on the typical array manipulations it allows to access the first
-    with the indices 'up' and 'dn'.
+    axis with the indices 'up' and 'dn'.
 
     Attributes
     ----------
@@ -78,14 +78,12 @@ class SpinResolvedArray(np.ndarray):
             obj = np.array(object=(kwargs.pop('up'), kwargs.pop('dn')),
                            **kwargs).view(cls)
         assert obj.shape[0] == 2
-        obj.up = obj[0].view(type=np.ndarray)
-        obj.dn = obj[1].view(type=np.ndarray)
         return obj
 
     def __getitem__(self, element):
         """Expand `np.ndarray`'s version to handle string indices 'up'/'dn'.
 
-        Regular slices will be handle by numpy, additionally the following can
+        Regular slices will be handle by `numpy`, additionally the following can
         be handled:
 
             1. If the element is in `spins` ('up', 'dn').
@@ -104,6 +102,15 @@ class SpinResolvedArray(np.ndarray):
                     return super().__getitem__(element)
             except:  # important to raise original error to raise out of range
                 raise idx_error
+
+    def __getattr__(self, name):
+        """Lazily add the attribute `up`/`dn` and return it."""
+        spin_dict = {'up': 0, 'dn': 1}
+        if name in spin_dict:  # special cases
+            setattr(self, name, self[spin_dict[name]].view(type=np.ndarray))
+            return getattr(self, name)
+        else:  # default behavior
+            raise AttributeError
 
     @property
     def total(self):
