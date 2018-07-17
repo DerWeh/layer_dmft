@@ -118,6 +118,10 @@ class SpinResolvedArray(np.ndarray):
         return self.up + self.dn
 
 
+sigma = SpinResolvedArray(up=0.5, dn=-0.5)
+sigma.flags.writeable = False
+
+
 class _Hubbard_Parameters(object):
     """Parameters of the (layered) Hubbard model.
     
@@ -151,7 +155,7 @@ class _Hubbard_Parameters(object):
     def beta(self, value):
         self.T = 1./value
 
-    def onsite_energy(self, sigma):
+    def onsite_energy(self, sigma=sigma):
         """Return the single-particle on-site energy.
 
         Parameters
@@ -166,7 +170,10 @@ class _Hubbard_Parameters(object):
             The (layer dependant) onsite energy :math:`μ + 1/2 U - V - σh`.
 
         """
-        return self.mu + 0.5*self.U - self.V - sigma*self.h
+        try:
+            return self.mu + 0.5*self.U - self.V - sigma[:, np.newaxis]*self.h
+        except IndexError:  # sigma is a scalar
+            return self.mu + 0.5*self.U - self.V - sigma*self.h
 
     def gf0(self, omega):
         """Return local (diagonal) elements of the non-interacting Green's function.
@@ -229,8 +236,5 @@ class _Hubbard_Parameters(object):
         _str += ",\n ".join(('{}={}'.format(prm, _save_get(prm))
                              for prm in self.__slots__))
         return _str
-
-sigma = SpinResolvedArray(up=0.5, dn=-0.5)
-sigma.flags.writeable = False
 
 prm = _Hubbard_Parameters()
