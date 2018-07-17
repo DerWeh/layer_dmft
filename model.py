@@ -73,8 +73,8 @@ class SpinResolvedArray(np.ndarray):
             obj = np.array(object=(kwargs.pop('up'), kwargs.pop('dn')),
                            **kwargs).view(cls)
         assert obj.shape[0] == 2
-        obj.up = obj[0]
-        obj.dn = obj[1]
+        obj.up = obj[0].view(type=np.ndarray)
+        obj.dn = obj[1].view(type=np.ndarray)
         return obj
 
     def __getitem__(self, element):

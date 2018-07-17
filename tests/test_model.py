@@ -2,9 +2,8 @@
 """Tests for the Hubbards model related building blocks"""
 from __future__ import absolute_import, unicode_literals
 
-import numpy as np
-
 import pytest
+import numpy as np
 
 from .context import model
 
@@ -31,3 +30,9 @@ def test_SpinResolvedArray_access():
     assert np.all(test_array['dn', ...] == dndata)
     assert np.all(test_array['dn', 2:5:-2] == dndata[2:5:-2])
 
+
+def test_SpinResolvedArray_elements():
+    """Assert that the elements of SpinResolvedArray are regular arrays."""
+    assert type(model.SpinResolvedArray([1, 2]).up) is not model.SpinResolvedArray
+    assert type(model.SpinResolvedArray(up=np.arange(9), dn=np.arange(9)).up) \
+        is not model.SpinResolvedArray
