@@ -90,12 +90,15 @@ class SpinResolvedArray(np.ndarray):
         """
         try:  # use default np.ndarray method
             return super().__getitem__(element)
-        except IndexError:  # if element is just ('up'/'dn') use the attribute
+        except IndexError as idx_error:  # if element is just ('up'/'dn') use the attribute
             try:
-                return getattr(self, element)
-            except TypeError:  # convert string to index and use numpy slicing
-                element = (spins.index(element[0]), ) + element[1:]
-                return super().__getitem__(element)
+                try:
+                    return getattr(self, element)
+                except TypeError:  # convert string to index and use numpy slicing
+                    element = (spins.index(element[0]), ) + element[1:]
+                    return super().__getitem__(element)
+            except:  # important to raise original error to raise out of range
+                raise idx_error
 
     @property
     def total(self):

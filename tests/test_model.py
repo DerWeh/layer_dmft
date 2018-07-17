@@ -36,3 +36,11 @@ def test_SpinResolvedArray_elements():
     assert type(model.SpinResolvedArray([1, 2]).up) is not model.SpinResolvedArray
     assert type(model.SpinResolvedArray(up=np.arange(9), dn=np.arange(9)).up) \
         is not model.SpinResolvedArray
+
+
+def test_SpinResolvedArray_iteration():
+    """Assert that the array is iterable."""
+    test = model.SpinResolvedArray(up=np.arange(9).reshape(3, 3),
+                                   dn=np.arange(9).reshape(3, 3))
+    for i, element in enumerate(test):
+        pass
