@@ -173,10 +173,21 @@ class _Hubbard_Parameters(object):
                 return '<not assigned>'
 
         _str = "Hubbard model parameters: "
-        _str += ", ".join(('{}={}'.format(prm, _save_get(prm))
+        _str += ", ".join(('{}={!r}'.format(prm, _save_get(prm))
                            for prm in self.__slots__))
         return _str
 
+    def __str__(self):
+        def _save_get(attribue):
+            try:
+                return getattr(self, attribue)
+            except AttributeError:
+                return '<not assigned>'
+
+        _str = "Hubbard model parameters:\n"
+        _str += ",\n ".join(('{}={}'.format(prm, _save_get(prm))
+                             for prm in self.__slots__))
+        return _str
 
 sigma = SpinResolvedArray(up=0.5, dn=-0.5)
 sigma.flags.writeable = False
