@@ -19,6 +19,9 @@ from builtins import (bytes, input, int, object, open, pow, range, round, str,
 
 import numpy as np
 
+import gftools as gf
+import gftools.matrix as gfmatrix
+
 spins = ('up', 'dn')
 
 
@@ -155,6 +158,32 @@ class _Hubbard_Parameters(object):
 
         """
         return self.mu + 0.5*self.U - self.V - sigma*self.h
+
+    def gf0(self, omega):
+        """Return local (diagonal) elements of the non-interacting Green's function.
+
+        Parameters
+        ----------
+        omega : array(complex)
+            Frequencies at which the Green's function is evaluated
+
+        Returns
+        -------
+        get_gf_0_loc : SpinResolvedArray(array(complex), array(complex))
+            The Green's function for spin up and down.
+
+        """
+        diag = np.diag_indices_from(self.t_mat)
+        gf_0 = {}
+        for sp in spins:
+            gf_0_inv = np.array(self.t_mat, dtype=np.complex256, copy=True)
+            gf_0_inv[diag] += self.onsite_energy(sigma=sigma[sp])
+            rv_inv, xi, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
+            xi_bar = gf.bethe_hilbert_transfrom(omega[..., np.newaxis] + xi,
+                                                half_bandwidth=self.D)
+            gf_0[sp] = np.einsum('ij, ...j, ji -> i...', rv, xi_bar, rv_inv)
+
+        return SpinResolvedArray(**gf_0)
 
     def assert_valid(self):
         """Raise error if attributes are not valid."""

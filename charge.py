@@ -203,7 +203,7 @@ def self_consistency(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
         print('**** difference *****')
         print(np.linalg.norm(n - n_old))
         n_old = n
-        gf_iw_up, gf_iw_dn = get_gf_0_loc(iw_array, params=params)
+        gf_iw_up, gf_iw_dn = params.gf0(iw_array)
         n = SpinResolvedArray(up=occupation(gf_iw_up, params, sigma.up),
                               dn=occupation(gf_iw_dn, params, sigma.dn))
         print('<n>: ', n)
@@ -251,7 +251,7 @@ def update_occupation(n_start, i_omega, params):
     assert n_start.shape[0] == 2
     params.V[:] = get_V(n_start.total - np.average(n_start.total))
     update_occupation.check_V.append(params.V.copy())
-    gf_iw_up, gf_iw_dn = get_gf_0_loc(i_omega, params=params)
+    gf_iw_up, gf_iw_dn = params.gf0(i_omega)
     n = SpinResolvedArray(up=occupation(gf_iw_up, params, spin=sigma.up),
                           dn=occupation(gf_iw_dn, params, spin=sigma.dn))
     return n - n_start
@@ -282,7 +282,7 @@ def update_potential(V_start, i_omega, params):
     """
     print("-Update V-")
     params.V[:] = V_start
-    gf_iw_up, gf_iw_dn = get_gf_0_loc(i_omega, params=params)
+    gf_iw_up, gf_iw_dn = params.gf0(i_omega)
     n = SpinResolvedArray(up=occupation(gf_iw_up, params, spin=sigma.up),
                           dn=occupation(gf_iw_dn, params, spin=sigma.dn))
     update_potential.check_n.append(n.copy())
@@ -308,7 +308,7 @@ def broyden_self_consistency(parameters, accuracy, guess=None, kind='n'):
         guess = np.zeros_like(parameters.mu)
     params = parameters
     iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
-    gf_iw_up, gf_iw_dn = get_gf_0_loc(iw_array, params=params)
+    gf_iw_up, gf_iw_dn = params.gf0(iw_array)
     n_initial = SpinResolvedArray(up=occupation(gf_iw_up, params, sigma.up),
                                   dn=occupation(gf_iw_dn, params, sigma.dn))
     # use a partial instead of args?
