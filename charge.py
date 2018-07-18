@@ -139,7 +139,7 @@ def update_occupation(n_start, i_omega, params):
 
     """
     assert n_start.shape[0] == 2
-    params.V[:] = get_V(n_start.total - np.average(n_start.total))
+    params.V[:] = get_V(n_start.sum(axis=0) - np.average(n_start.sum(axis=0)))
     update_occupation.check_V.append(params.V.copy())
     gf_iw = params.gf0(i_omega)
     n = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
@@ -173,7 +173,7 @@ def update_potential(V_start, i_omega, params):
     gf_iw = params.gf0(i_omega)
     n = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
     update_potential.check_n.append(n.copy())
-    V = get_V(n.total - np.average(n.total))
+    V = get_V(n.sum(axis=0) - np.average(n.sum(axis=0)))
     return V - V_start
 
 
