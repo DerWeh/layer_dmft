@@ -15,8 +15,8 @@ Most likely you want to import this module like::
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-from builtins import (bytes, input, int, object, open, pow, range, round, str,
-                      super, zip)
+from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
+                      next, oct, open, pow, range, round, str, super, zip)
 from collections import namedtuple
 
 import numpy as np
@@ -68,7 +68,7 @@ class SpinResolvedArray(np.ndarray):
 
         Returns
         -------
-        obj :
+        obj : SpinResolvedArray
             The created `np.ndarray` instance
 
         """
@@ -160,13 +160,13 @@ class _Hubbard_Parameters(object):
 
         Parameters
         ----------
-        sigma : {-.5, +5}
+        sigma : {-.5, +5, sigma}
             The value of :math:`σ∈{↑,↓}` which is needed to determine the
             Zeeman energy contribution :math:`σh`.
 
         Returns
         -------
-        onsite_energy : float, array(float)
+        onsite_energy : float or ndarray(float)
             The (layer dependant) onsite energy :math:`μ + 1/2 U - V - σh`.
 
         """

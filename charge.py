@@ -11,8 +11,9 @@ import numpy as np
 
 from scipy import optimize
 
-import gftools as gf
 import capacitor_formula
+
+import gftools as gf
 import gftools.matrix as gfmatrix
 
 from model import prm, sigma, SpinResolvedArray, spins
@@ -31,7 +32,7 @@ get_V = partial(capacitor_formula.potential_energy_vector,
 
 
 def invert_gf_0(omega, gf_0_inv, half_bandwidth):
-    r"""Return the diagonal elements of the Green's function in real space.
+    """Return the diagonal elements of the Green's function in real space.
 
     Parameters
     ----------
@@ -45,7 +46,7 @@ def invert_gf_0(omega, gf_0_inv, half_bandwidth):
 
     Returns
     -------
-    invert_gf_0 : array(complex)
+    gf_diag : array(complex)
         The diagonal elements of the real space Green's function.
 
     """
@@ -82,23 +83,8 @@ def get_gf_0_loc_deprecated(omega, params=None):
     return gf_diag_up, gf_diag_dn
 
 
-def occupation(gf_iw_local, params, spin=None):
-    shape = gf_iw_local.shape
-    potential = prm.onsite_energy(sigma=spin)
-    beta = params.beta
-    if spin is None:
-        assert shape[0] == 2, \
-            "`gf_iw_local` must be spin-resolved for `spin=None`"
-        assert shape[1:-1] == potential.shape
-
-    else:
-        assert np.all(shape[:-1] == potential.shape)
-        occ = np.array([gf.density(gf_iw, potential=V, beta=beta) for gf_iw, V
-                        in zip(gf_iw_local, potential)])
-    return occ
-
-
 def self_consistency(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
+    """Naive self-consistency loop using simple mixing."""
     params = parameter
     iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
 
@@ -108,9 +94,8 @@ def self_consistency(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
         print('**** difference *****')
         print(np.linalg.norm(n - n_old))
         n_old = n
-        gf_iw_up, gf_iw_dn = params.gf0(iw_array)
-        n = SpinResolvedArray(up=occupation(gf_iw_up, params, sigma.up),
-                              dn=occupation(gf_iw_dn, params, sigma.dn))
+        gf_iw = params.gf0(iw_array)
+        n = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
         print('<n>: ', n)
         V_l = get_V(n.up + n.dn - np.average(n))  # FIXME: better dimension checks!!!
         print('V_l: ', V_l)
@@ -143,7 +128,7 @@ def update_occupation(n_start, i_omega, params):
         Matsubara frequencies :math:`iω_n` at which the Green's function is
         evaluated to calculate the occupation.
     params : prm
-        `prm` class with the parameters set, determining the non-interacting
+        `prm` object with the parameters set, determining the non-interacting
         Green's function. `params.V` will be updated.
 
     Returns
@@ -156,9 +141,8 @@ def update_occupation(n_start, i_omega, params):
     assert n_start.shape[0] == 2
     params.V[:] = get_V(n_start.total - np.average(n_start.total))
     update_occupation.check_V.append(params.V.copy())
-    gf_iw_up, gf_iw_dn = params.gf0(i_omega)
-    n = SpinResolvedArray(up=occupation(gf_iw_up, params, spin=sigma.up),
-                          dn=occupation(gf_iw_dn, params, spin=sigma.dn))
+    gf_iw = params.gf0(i_omega)
+    n = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
     return n - n_start
 
 
@@ -186,18 +170,18 @@ def update_potential(V_start, i_omega, params):
 
     """
     params.V[:] = V_start
-    gf_iw_up, gf_iw_dn = params.gf0(i_omega)
-    n = SpinResolvedArray(up=occupation(gf_iw_up, params, spin=sigma.up),
-                          dn=occupation(gf_iw_dn, params, spin=sigma.dn))
+    gf_iw = params.gf0(i_omega)
+    n = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
     update_potential.check_n.append(n.copy())
     V = get_V(n.total - np.average(n.total))
     return V - V_start
 
 
 def print_status(x, dx):
+    """Intermediate print output for `optimize.root`."""
     print_status.itr += 1
     print("======== " + str(print_status.itr) + " =============")
-    print(x)
+    # print(x)
     print("--- " + str(np.linalg.norm(dx)) + " ---")
 
 
@@ -205,19 +189,49 @@ print_status.itr = 0
 
 
 def broyden_self_consistency(parameters, accuracy, guess=None, kind='n'):
+    """Charge self-consistency using root-finding algorithm.
+
+    Parameters
+    ----------
+    parameters : prm
+        `prm` object with the parameters set, determining Hamiltonian.
+    accuracy : float
+        Target accuracy of the self-consistency. Iteration stops if it is
+        achieved.
+    guess : ndarray, optional
+        Starting value for the occupation or electrical potential.
+    kind : {'n', 'V'}
+        Weather self-consistency is determined according to the charge 'n' or
+        the electrical potential 'V'. In the magnetic case 'V' seems to
+        convergence better, there are half as many degrees of freedom.
+
+    Returns
+    -------
+    n_opt : OptimizedResult
+        The solution of the optimization routine, see `optimize.root`.
+        `x` contains the actual values, and `success` states if convergence was
+        achieved.
+
+    """
     # TODO: better to determine V_l self-consistently? We have a start guess
     #       for V_l. On the other hand accuracy can easily be set from the
     #       accuracy for `n_l` determined by CT-Cyb
-    if guess is None:
-        guess = np.zeros_like(parameters.mu)
+    #   -> Optimization of V_l takes for the magnetic case only have as many
+    #      steps, as we only have have the parameters
     params = parameters
     iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
-    gf_iw_up, gf_iw_dn = params.gf0(iw_array)
-    n_initial = SpinResolvedArray(up=occupation(gf_iw_up, params, sigma.up),
-                                  dn=occupation(gf_iw_dn, params, sigma.dn))
+    if kind == 'n':
+        if guess is None:
+            gf_iw = params.gf0(iw_array)
+            n_initial = gf.density(gf_iw, params.onsite_energy(),
+                                   beta=params.beta)
+        else:
+            n_initial = guess
+    elif kind == 'V':
+        if guess is None:
+            guess = np.zeros_like(parameters.mu)
+        params.V[:] = guess
     # use a partial instead of args?
-    print('======== start ==========')
-    print(n_initial)
     print('======== optimize =======')
     n_opt = optimize.root(fun=update_occupation if kind == 'n' else update_potential,
                           x0=n_initial if kind == 'n' else guess,
@@ -241,9 +255,9 @@ def broyden_self_consistency(parameters, accuracy, guess=None, kind='n'):
     return n_opt
 
 
-if __name__ == '__main__':
 # def main():
-    """Function to test convergence"""
+#    """Function to test convergence"""
+if __name__ == '__main__':
     # Setup
     N = layers.size
 
