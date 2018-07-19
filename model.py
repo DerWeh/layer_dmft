@@ -217,6 +217,43 @@ class _Hubbard_Parameters(object):
 
         return SpinResolvedArray(**gf_0)
 
+    def gf_dmft(self, z, self_z):
+        """Return local Green's function for a diagonal self-energy.
+        
+        This corresponds to the dynamical mean-field theory.
+
+        Parameters
+        ----------
+        z : ndarray(complex)
+            Frequencies at which the Green's function is evaluated.
+        self_z : ndarray(complex)
+            Self-energy of the green's function. The self-energy is diagonal.
+            It's last axis corresponds to the frequencies `z`. The first axis
+            contains the spin components and the second the diagonal matrix
+            elements.
+
+        Returns
+        -------
+        gf_dmft : SpinResolvedArray
+            The Green's function.
+
+        """
+        assert z.size == self_z.shape[-1], "Same number of frequencies"
+        assert len(spins) == self_z.shape[0], "Two spin components"
+        diag = np.diag_indices_from(self.t_mat)
+        gf_out = SpinResolvedArray(np.zeros_like(self_z))
+        for sp, self_sp_z, gf_out_sp in zip(spins, self_z, gf_out):
+            gf_0_inv = np.array(self.t_mat, dtype=np.complex256, copy=True)
+            gf_0_inv[diag] += self.onsite_energy(sigma=sigma[sp])
+            constant = np.diagonal(gf_0_inv).copy()
+            for i, zi in enumerate(z):
+                gf_0_inv[diag] = constant + zi - self_sp_z[..., i]
+                rv_inv, h, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
+                h_bar = gf.bethe_hilbert_transfrom(h, half_bandwidth=self.D)
+                gf_mat = gfmatrix.construct_gf_omega(rv_inv=rv_inv, diag_inv=h_bar, rv=rv)
+                gf_out_sp[..., i] = np.diagonal(gf_mat)
+        return gf_out
+
     def assert_valid(self):
         """Raise error if attributes are not valid.
         
