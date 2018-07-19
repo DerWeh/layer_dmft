@@ -158,6 +158,9 @@ class _Hubbard_Parameters(object):
     def onsite_energy(self, sigma=sigma, hartree=False):
         """Return the single-particle on-site energy.
 
+        The energy is given with respect to half-filling, thus the chemical
+        potential μ is corrected by :math:`-U/2`
+
         Parameters
         ----------
         sigma : {-.5, +5, sigma}
@@ -171,17 +174,14 @@ class _Hubbard_Parameters(object):
         Returns
         -------
         onsite_energy : float or ndarray(float)
-            The (layer dependant) onsite energy :math:`μ + 1/2 U - V - σh`.
+            The (layer dependent) on-site energy :math:`μ + U/2 - V - σh`.
 
         """
-        if hartree is False:
-            e_hart = 0
-        else:
-            e_hart = hartree * self.U
-        try:
-            return self.mu + 0.5*self.U - self.V - sigma[:, np.newaxis]*self.h - e_hart
-        except IndexError:  # sigma is a scalar
-            return self.mu + 0.5*self.U - self.V - sigma*self.h - e_hart
+        onsite_energy = np.multiply.outer(sigma, self.h)
+        onsite_energy += self.mu + 0.5*self.U - self.V
+        if hartree is not False:
+            onsite_energy -= hartree * self.U
+        return onsite_energy
 
     def gf0(self, omega, hartree=False):
         """Return local (diagonal) elements of the non-interacting Green's function.
