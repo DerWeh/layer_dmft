@@ -155,7 +155,7 @@ class _Hubbard_Parameters(object):
     def beta(self, value):
         self.T = 1./value
 
-    def onsite_energy(self, sigma=sigma):
+    def onsite_energy(self, sigma=sigma, hartree=False):
         """Return the single-particle on-site energy.
 
         Parameters
@@ -163,6 +163,10 @@ class _Hubbard_Parameters(object):
         sigma : {-.5, +5, sigma}
             The value of :math:`σ∈{↑,↓}` which is needed to determine the
             Zeeman energy contribution :math:`σh`.
+        hartree : False or ndarray(float)
+            If Hartree term is included. If it is `False` (default) Hartree is
+            not included. Else it needs to be the electron density necessary
+            to calculate the mean-field term.
 
         Returns
         -------
@@ -170,18 +174,26 @@ class _Hubbard_Parameters(object):
             The (layer dependant) onsite energy :math:`μ + 1/2 U - V - σh`.
 
         """
+        if hartree is False:
+            e_hart = 0
+        else:
+            e_hart = hartree * self.U
         try:
-            return self.mu + 0.5*self.U - self.V - sigma[:, np.newaxis]*self.h
+            return self.mu + 0.5*self.U - self.V - sigma[:, np.newaxis]*self.h - e_hart
         except IndexError:  # sigma is a scalar
-            return self.mu + 0.5*self.U - self.V - sigma*self.h
+            return self.mu + 0.5*self.U - self.V - sigma*self.h - e_hart
 
-    def gf0(self, omega):
+    def gf0(self, omega, hartree=False):
         """Return local (diagonal) elements of the non-interacting Green's function.
 
         Parameters
         ----------
         omega : array(complex)
             Frequencies at which the Green's function is evaluated
+        hartree : False or ndarray(float)
+            If Hartree Green's function is returned. If it is `False` (default),
+            non-interacting Green's function is returned. If it is the electron
+            density, the (one-shot) Hartree Green's function is returned.
 
         Returns
         -------
@@ -190,10 +202,14 @@ class _Hubbard_Parameters(object):
 
         """
         diag = np.diag_indices_from(self.t_mat)
+        if hartree is False:  # for common loop
+            hartree = (False, False)
+        else:  # first axis needs to be spin such that loop is possible
+            assert hartree.shape[0] == 2
         gf_0 = {}
-        for sp in spins:
+        for sp, n in zip(spins, hartree[::-1]):
             gf_0_inv = np.array(self.t_mat, dtype=np.complex256, copy=True)
-            gf_0_inv[diag] += self.onsite_energy(sigma=sigma[sp])
+            gf_0_inv[diag] += self.onsite_energy(sigma=sigma[sp], hartree=n)
             rv_inv, xi, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
             xi_bar = gf.bethe_hilbert_transfrom(omega[..., np.newaxis] + xi,
                                                 half_bandwidth=self.D)

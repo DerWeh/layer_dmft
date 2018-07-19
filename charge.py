@@ -6,6 +6,7 @@ from __future__ import (absolute_import, division, print_function,
 from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
                       next, oct, open, pow, range, round, str, super, zip)
 from functools import partial
+import warnings
 
 import numpy as np
 
@@ -141,7 +142,7 @@ def update_occupation(n_start, i_omega, params):
     assert n_start.shape[0] == 2
     params.V[:] = get_V(n_start.sum(axis=0) - np.average(n_start.sum(axis=0)))
     update_occupation.check_V.append(params.V.copy())
-    gf_iw = params.gf0(i_omega)
+    gf_iw = params.gf0(i_omega, hartree=n_start)
     n = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
     return n - n_start
 
@@ -169,6 +170,9 @@ def update_potential(V_start, i_omega, params):
         The new occupation incorporating the potential obtained via `get_V`
 
     """
+    if np.any(params.U != 0):
+        warnings.warn("Only non-interacting case is considered.\n"
+                      "Optimize occupation to at least include Hartree term.")
     params.V[:] = V_start
     gf_iw = params.gf0(i_omega)
     n = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
