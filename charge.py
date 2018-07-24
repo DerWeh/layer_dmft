@@ -5,20 +5,20 @@ from __future__ import (absolute_import, division, print_function,
 
 from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
                       next, oct, open, pow, range, round, str, super, zip)
-from functools import partial, wraps
+
 import warnings
+
+from functools import partial, wraps
+from collections import namedtuple
 
 import numpy as np
 
 from scipy import optimize
 
+import gftools as gf
 import capacitor_formula
 
-import gftools as gf
-import gftools.matrix as gfmatrix
-
 from model import prm, sigma, SpinResolvedArray, spins
-
 
 VERBOSE = True
 SMALL_WIDTH = 50
@@ -97,7 +97,7 @@ def self_consistency(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
     print(np.linalg.norm(prm.V - V_l))
 
 
-def update_occupation(n_start, i_omega, params):
+def update_occupation(n_start, i_omega, params, out_dict):
     r"""Calculate new occupation by setting :math:`V_l` from the method `get_V`.
 
     This methods modifies `params.V`.
@@ -113,6 +113,9 @@ def update_occupation(n_start, i_omega, params):
     params : prm
         `prm` object with the parameters set, determining the non-interacting
         Green's function. `params.V` will be updated.
+    out_dict : dict
+        Dictionary into which the outputs are written:
+        'n': occupation, 'V': potential and 'Gf': local Green's function
 
     Returns
     -------
@@ -122,14 +125,13 @@ def update_occupation(n_start, i_omega, params):
 
     """
     assert n_start.shape[0] == 2
-    params.V[:] = get_V(n_start.sum(axis=0) - np.average(n_start.sum(axis=0)))
-    update_occupation.check_V.append(params.V.copy())
-    gf_iw = params.gf0(i_omega, hartree=n_start)
-    n = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
+    params.V[:] = out_dict['V'] = get_V(n_start.sum(axis=0) - np.average(n_start.sum(axis=0)))
+    gf_iw = out_dict['Gf'] = params.gf0(i_omega, hartree=n_start)
+    n = out_dict['n'] = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
     return n - n_start
 
 
-def update_potential(V_start, i_omega, params):
+def update_potential(V_start, i_omega, params, out_dict):
     r"""Calculate new potential by setting :math:`V_l` from the method `get_V`.
 
     This methods modifies `params.V`.
@@ -145,6 +147,9 @@ def update_potential(V_start, i_omega, params):
     params : prm
         `prm` class with the parameters set, determining the non-interacting
         Green's function. `params.V` will be updated.
+    out_dict : dict
+        Dictionary into which the outputs are written:
+        'n': occupation, 'V': potential and 'Gf': local Green's function
 
     Returns
     -------
@@ -156,10 +161,9 @@ def update_potential(V_start, i_omega, params):
         warnings.warn("Only non-interacting case is considered.\n"
                       "Optimize occupation to at least include Hartree term.")
     params.V[:] = V_start
-    gf_iw = params.gf0(i_omega)
-    n = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
-    update_potential.check_n.append(n.copy())
-    V = get_V(n.sum(axis=0) - np.average(n.sum(axis=0)))
+    out_dict['Gf'] = gf_iw = params.gf0(i_omega)
+    n = out_dict['n'] = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
+    V = out_dict['V'] = get_V(n.sum(axis=0) - np.average(n.sum(axis=0)))
     return V - V_start
 
 
@@ -173,9 +177,11 @@ def print_status(x, dx):
 
 print_status.itr = 0
 
+ChargeSelfconsistency = namedtuple('ChargeSelfconsistency', ['sol', 'n', 'V'])
+
 
 @verbose_print
-def broyden_self_consistency(parameters, accuracy, guess=None, kind='n'):
+def broyden_self_consistency(parameters, accuracy, V0=None, kind='auto'):
     """Charge self-consistency using root-finding algorithm.
 
     Parameters
@@ -185,44 +191,53 @@ def broyden_self_consistency(parameters, accuracy, guess=None, kind='n'):
     accuracy : float
         Target accuracy of the self-consistency. Iteration stops if it is
         achieved.
-    guess : ndarray, optional
+    V0 : ndarray, optional
         Starting value for the occupation or electrical potential.
-    kind : {'n', 'V'}
+    kind : {'auto', 'n', 'V'}
         Weather self-consistency is determined according to the charge 'n' or
         the electrical potential 'V'. In the magnetic case 'V' seems to
-        convergence better, there are half as many degrees of freedom.
+        convergence better, there are half as many degrees of freedom. 'n' on
+        the other hand can readily incorporate the Hartree term of the self-energy.
+        Per default ('auto') 'n' is used in the interacting and 'V' in the
+        non-interacting case.
 
     Returns
     -------
-    n_opt : OptimizedResult
+    sol : OptimizedResult
         The solution of the optimization routine, see `optimize.root`.
         `x` contains the actual values, and `success` states if convergence was
         achieved.
 
     """
-    # TODO: better to determine V_l self-consistently? We have a start guess
-    #       for V_l. On the other hand accuracy can easily be set from the
-    #       accuracy for `n_l` determined by CT-Cyb
-    #   -> Optimization of V_l takes for the magnetic case only have as many
-    #      steps, as we only have have the parameters
+    # TODO: check against given `n` if sum gives right result
     params = parameters
     iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
+    assert kind in set(('auto', 'n', 'V')), "Unknown kind: {}".format(kind)
+    if kind == 'auto':
+        if np.any(params.U != 0):  # interacting case
+            kind = 'n'  # use 'n', it can incorporate Hartree term
+        else:  # non-interacting case
+            kind = 'V'  # use 'V', has half as many parameters to optimize
+    if V0 is not None:
+        params.V[:] = V0
+    output = {}
     if kind == 'n':
-        if guess is None:
-            gf_iw = params.gf0(iw_array)
-            n_initial = gf.density(gf_iw, params.onsite_energy(),
-                                   beta=params.beta)
-        else:
-            n_initial = guess
+        gf_iw = params.gf0(iw_array)
+        x0 = gf.density(gf_iw, params.onsite_energy(),
+                        beta=params.beta)
+        optimizer = partial(update_occupation, i_omega=iw_array, params=params,
+                            out_dict=output)
     elif kind == 'V':
-        if guess is None:
-            guess = np.zeros_like(parameters.mu)
-        params.V[:] = guess
-    # use a partial instead of args?
+        if V0 is None:
+            V0 = np.zeros_like(parameters.mu)
+            params.V[:] = V0
+        x0 = V0
+        optimizer = partial(update_potential, i_omega=iw_array, params=params,
+                            out_dict=output)
+
     vprint('optimize'.center(SMALL_WIDTH, '='))
-    n_opt = optimize.root(fun=update_occupation if kind == 'n' else update_potential,
-                          x0=n_initial if kind == 'n' else guess,
-                          args=(iw_array, params),
+    sol = optimize.root(fun=optimizer,
+                          x0=x0,
                           method='broyden1',
                           # method='anderson',
                           # method='linearmixing',
@@ -232,14 +247,14 @@ def broyden_self_consistency(parameters, accuracy, guess=None, kind='n'):
                           # options={'nit': 3},
                           )
     vprint("".center(SMALL_WIDTH, '='))
-    vprint("Success: {opt.success} after {opt.nit} iterations.".format(opt=n_opt))
+    vprint("Success: {opt.success} after {opt.nit} iterations.".format(opt=sol))
     vprint('optimized paramter'.center(SMALL_WIDTH, '-'))
-    vprint(n_opt.x)
+    vprint(sol.x)
     vprint('final potential'.center(SMALL_WIDTH, '-'))
     vprint(params.V)
     vprint("".center(SMALL_WIDTH, '='))
-    vprint(n_opt.message)
-    return n_opt
+    vprint(sol.message)
+    return ChargeSelfconsistency(sol=sol, n=output['n'], V=output['V'])
 
 
 # def main():
@@ -256,7 +271,7 @@ if __name__ == '__main__':
     prm.h = np.zeros(N)
     prm.h[N//2] = 0.9
     prm.U = np.zeros(N)
-    # prm.U[0] = 0.8
+    # prm.U[N//2] = 0.8
 
     t = 0.2
     prm.t_mat = np.zeros((N, N))
@@ -266,5 +281,4 @@ if __name__ == '__main__':
 
     prm.assert_valid()
 
-    opt_param = broyden_self_consistency(prm, accuracy=2e-3, kind='V')
-    # return update_occupation.check_V
+    opt_param = broyden_self_consistency(prm, accuracy=1e-6)
