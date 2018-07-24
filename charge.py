@@ -19,9 +19,6 @@ import gftools.matrix as gfmatrix
 
 from model import prm, sigma, SpinResolvedArray, spins
 
-# V_DATA = 'loop/Vsteps.dat'
-# DMFT_PARAM = 'layer_hb_param.init'
-# OUTPUT = 'output.txt'
 
 
 # FIXME
@@ -30,58 +27,6 @@ layers = np.arange(40)
 e_schot = np.ones_like(layers) * 0.4
 get_V = partial(capacitor_formula.potential_energy_vector,
                 e_schot=e_schot, layer_labels=layers)
-
-
-def invert_gf_0(omega, gf_0_inv, half_bandwidth):
-    """Return the diagonal elements of the Green's function in real space.
-
-    Parameters
-    ----------
-    omega : array(complex)
-        Frequencies at which the Green's function is evaluated.
-    gf_0_inv : array(complex, complex)
-        Square matrix containing the inverse elements of the Green's function
-        :math:`G(ω, ϵ)` with ω and ϵ split off.
-    half_bandwidth : float
-        Half bandwidth of the semi circular Bethe DOS.
-
-    Returns
-    -------
-    gf_diag : array(complex)
-        The diagonal elements of the real space Green's function.
-
-    """
-    gf_0_inv = gf_0_inv.copy()
-    diag = np.diag_indices_from(gf_0_inv)
-    gf_0_inv_diag = np.diag(gf_0_inv).copy()
-    omega = np.asarray(omega, dtype=np.complex256)
-    gf_diag = np.zeros((len(gf_0_inv), len(omega)), dtype=np.complex256)
-    for i, wi in enumerate(omega):
-        gf_0_inv[diag] = gf_0_inv_diag + wi
-        rv_inv, h, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
-        h_bar = gf.bethe_hilbert_transfrom(h, half_bandwidth=half_bandwidth)
-        gf_mat = gfmatrix.construct_gf_omega(rv_inv=rv_inv, diag_inv=h_bar, rv=rv)
-        gf_diag[:, i] = np.diag(gf_mat)
-    return gf_diag
-
-
-def get_gf_0_loc_deprecated(omega, params=None):
-    r"""Old version, only diagonalizing in \epsilon.
-
-    Might be necessary later to include self-energy.
-    """
-    # TODO: implement option do give back only unique layers
-    prm = params
-    diag = np.diag_indices_from(prm.t_mat)
-    gf_0_inv_up = np.array(prm.t_mat, dtype=np.complex256, copy=True)
-    gf_0_inv_up[diag] += prm.onsite_energy(sigma=sigma.up)
-
-    gf_0_inv_dn = np.array(prm.t_mat, dtype=np.complex256, copy=True)
-    gf_0_inv_dn[diag] += prm.onsite_energy(sigma=sigma.dn)
-
-    gf_diag_up = invert_gf_0(omega, gf_0_inv_up, half_bandwidth=prm.D)
-    gf_diag_dn = invert_gf_0(omega, gf_0_inv_dn, half_bandwidth=prm.D)
-    return gf_diag_up, gf_diag_dn
 
 
 def self_consistency(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
@@ -282,8 +227,6 @@ if __name__ == '__main__':
     prm.t_mat[sdiag+1, sdiag] = prm.t_mat[sdiag, sdiag+1] = t
 
     prm.assert_valid()
-    # self_consistency(prm, accuracy=2e-3, n_max=30)
-    update_occupation.check_V = []
-    update_potential.check_n = []
+
     opt_param = broyden_self_consistency(prm, accuracy=2e-3, kind='V')
     # return update_occupation.check_V
