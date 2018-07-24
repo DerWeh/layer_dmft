@@ -5,7 +5,7 @@ from __future__ import (absolute_import, division, print_function,
 
 from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
                       next, oct, open, pow, range, round, str, super, zip)
-from functools import partial
+from functools import partial, wraps
 import warnings
 
 import numpy as np
@@ -19,6 +19,43 @@ import gftools.matrix as gfmatrix
 
 from model import prm, sigma, SpinResolvedArray, spins
 
+
+VERBOSE = True
+SMALL_WIDTH = 50
+
+
+class _vprint(object):
+    __slots__ = ('__call__')
+
+
+vprint = _vprint()
+
+
+def verbose_print(func):
+    """Decorate `func` to print, only if `func.verbose` or `VERBOSE` if not set.
+
+    The `vprint` in `func` will be executed if `func.verbose` has been set to `True`.
+    If `func.verbose` is set to `False` the function is silenced.
+    If no attribute `verbose` has been set, the global variable `VERBOSE` is
+    used as default.
+    """
+    def silent_print(*args, **kwargs):
+        pass
+    print_choice = {
+        True: print,
+        False: silent_print,
+    }
+
+    @wraps(func)
+    def wrapper(*args, **kwds):
+        try:
+            verbose = wrapper.verbose
+        except AttributeError as attr:  # no attribute func.verbose
+            verbose = VERBOSE
+        vprint.__call__ = print_choice[verbose]
+        return func(*args, **kwds)
+        del vprint.__call__
+    return wrapper
 
 
 # FIXME
@@ -137,6 +174,7 @@ def print_status(x, dx):
 print_status.itr = 0
 
 
+@verbose_print
 def broyden_self_consistency(parameters, accuracy, guess=None, kind='n'):
     """Charge self-consistency using root-finding algorithm.
 
@@ -181,7 +219,7 @@ def broyden_self_consistency(parameters, accuracy, guess=None, kind='n'):
             guess = np.zeros_like(parameters.mu)
         params.V[:] = guess
     # use a partial instead of args?
-    print('======== optimize =======')
+    vprint('optimize'.center(SMALL_WIDTH, '='))
     n_opt = optimize.root(fun=update_occupation if kind == 'n' else update_potential,
                           x0=n_initial if kind == 'n' else guess,
                           args=(iw_array, params),
@@ -192,15 +230,15 @@ def broyden_self_consistency(parameters, accuracy, guess=None, kind='n'):
                           # method='df-sane',
                           tol=accuracy,
                           # options={'nit': 3},
-                          callback=print_status)
-    print("=====================")
-    print(n_opt.success)
-    print('Optimized paramter:')
-    print(n_opt.x)
-    print('Final potential')
-    print(params.V)
-    print('***************')
-    print(n_opt.message)
+                          )
+    vprint("".center(SMALL_WIDTH, '='))
+    vprint("Success: {opt.success} after {opt.nit} iterations.".format(opt=n_opt))
+    vprint('optimized paramter'.center(SMALL_WIDTH, '-'))
+    vprint(n_opt.x)
+    vprint('final potential'.center(SMALL_WIDTH, '-'))
+    vprint(params.V)
+    vprint("".center(SMALL_WIDTH, '='))
+    vprint(n_opt.message)
     return n_opt
 
 
