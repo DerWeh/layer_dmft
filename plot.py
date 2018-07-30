@@ -99,13 +99,13 @@ def V(param, layer_max=None, axis=None,
 
     # TODO: do more sophisticated algorithm, checking for homogeneous regions
     if layers.size > 10:
-        layers = layers[::layers.size//10]
+        labeled_layers = layers[::layers.size//10]
     if label_short is None:
-        labels = [label_str.format(i=i).format(param=param) for i in layers]
+        labels = [label_str.format(i=i).format(param=param) for i in labeled_layers]
     else:
-        labels = [label_short.format(i=i).format(param=param) for i in layers[1:]]
+        labels = [label_short.format(i=i).format(param=param) for i in labeled_layers[1:]]
         labels.insert(0, label_str.format(i=layers[0]).format(param=param))
-    axis.set_xticks(layers)
+    axis.set_xticks(labeled_layers)
     axis.set_xticklabels(labels)
     axis.set_xlim(left=layers[0]-.5, right=layers[-1]+.5)
     axis.yaxis.set_minor_locator(AutoMinorLocator())
