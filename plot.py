@@ -7,12 +7,12 @@ from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
 from itertools import cycle
 
 import numpy as np
-
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.ticker import AutoMinorLocator
 
 from wrapt import decorator
+from matplotlib.colors import LogNorm
+from matplotlib.ticker import AutoMinorLocator
 
 FILLED_MARKERS = cycle(('o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X'))
 DEFAULT_MARKER = 'x'
@@ -190,3 +190,65 @@ def magnetisation_data(n_l, axis=None, **mpl_args):
 
     axis.set_ylabel(r'$n_{l\uparrow} - n_{l\downarrow}$')
     axis.set_xlabel('layer')
+
+
+@default_axis
+def hopping_matrix(t_mat, axis=None, log=False, **mpl_args):
+    """Plot color representation of the hopping_matrix `t_mat`.
+
+    The values are shown as color and the values are indexed.
+
+    Parameters
+    ----------
+    t_mat : ndarray(float)
+        The matrix containing the hopping elements.
+    axis : matplotlib axis, optional
+        Axis on which the plot will be drawn. If `None` current one is used.
+    log : bool, optional
+        Weather the values are represented using a logarithmic scaling.
+        Default is `False`.
+    **mpl_args :
+        Arguments passed to `mpl.plot`
+
+    """
+    if log:  # logarithmic plot
+        norm = LogNorm(vmin=t_mat[t_mat > 0].min(), vmax=t_mat.max())
+        imag = axis.matshow(t_mat, norm=norm, **mpl_args)
+    else:
+        imag = axis.matshow(t_mat, **mpl_args)
+    cbar = axis.figure.colorbar(imag, ax=axis)
+
+    # make white grid between matrix elements
+    axis.set_xticks(np.arange(t_mat.shape[1]+1)-.5, minor=True)
+    axis.set_yticks(np.arange(t_mat.shape[0]+1)-.5, minor=True)
+    axis.grid(which="minor", color="w", linestyle='-')
+    axis.tick_params(which="minor", top=False, left=False, bottom=False, right=False)
+
+    # mark unique elements of t_mat at colorbar
+    values, mapping = np.unique(t_mat, return_inverse=True)
+    mapping = mapping.reshape(t_mat.shape)
+    cbar.ax.yaxis.set_ticks(imag.norm(values), minor=True)
+    cbar.ax.yaxis.set_ticklabels(np.arange(values.size), minor=True)
+    cbar.ax.tick_params(axis='y', which='minor', direction='inout',
+                        left='on', labelleft='on', labelright='off',
+                        labelsize='x-large')
+
+    threshold = None
+    # Normalize the threshold to the images color range.
+    if threshold is not None:
+        threshold = imag.norm(threshold)
+    else:  # default to the half range
+        threshold = imag.norm(t_mat.max())/2.
+
+    # Set alignment to center
+    kw = dict(horizontalalignment="center",
+              verticalalignment="center")
+
+    # Loop over the data and create a `Text` for each "pixel".
+    # Change the text's color depending on the data.
+    color_index = (imag.norm(values) > threshold).view(np.ndarray)
+    textcolors = ["white", "black"]
+    for i, row in enumerate(mapping):
+        for j, t_ij in enumerate(row):
+            kw.update(color=textcolors[color_index[t_ij]])
+            axis.text(j, i, str(t_ij), **kw)
