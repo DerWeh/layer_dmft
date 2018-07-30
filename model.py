@@ -183,7 +183,7 @@ class _Hubbard_Parameters(object):
             onsite_energy -= hartree * self.U
         return onsite_energy
 
-    def gf0(self, omega, hartree=False):
+    def gf0(self, omega, hartree=False, diagonal=True):
         """Return local (diagonal) elements of the non-interacting Green's function.
 
         Parameters
@@ -194,6 +194,9 @@ class _Hubbard_Parameters(object):
             If Hartree Green's function is returned. If it is `False` (default),
             non-interacting Green's function is returned. If it is the electron
             density, the (one-shot) Hartree Green's function is returned.
+        diagonal : bool, optional
+            Returns only array of diagonal elements if `diagonal` (default).
+            Else the whole matrix is returned.
 
         Returns
         -------
@@ -201,6 +204,7 @@ class _Hubbard_Parameters(object):
             The Green's function for spin up and down.
 
         """
+        sum_str = 'ij, ...j, ji -> i...' if diagonal else 'ij, ...j, jk -> ik...'
         diag = np.diag_indices_from(self.t_mat)
         if hartree is False:  # for common loop
             hartree = (False, False)
@@ -213,11 +217,11 @@ class _Hubbard_Parameters(object):
             rv_inv, xi, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
             xi_bar = gf.bethe_hilbert_transfrom(omega[..., np.newaxis] + xi,
                                                 half_bandwidth=self.D)
-            gf_0[sp] = np.einsum('ij, ...j, ji -> i...', rv, xi_bar, rv_inv)
+            gf_0[sp] = np.einsum(sum_str, rv, xi_bar, rv_inv)
 
         return SpinResolvedArray(**gf_0)
 
-    def gf_dmft(self, z, self_z):
+    def gf_dmft(self, z, self_z, diagonal=True):
         """Return local Green's function for a diagonal self-energy.
         
         This corresponds to the dynamical mean-field theory.
@@ -231,6 +235,9 @@ class _Hubbard_Parameters(object):
             It's last axis corresponds to the frequencies `z`. The first axis
             contains the spin components and the second the diagonal matrix
             elements.
+        diagonal : bool, optional
+            Returns only array of diagonal elements if `diagonal` (default).
+            Else the whole matrix is returned.
 
         Returns
         -------
@@ -241,7 +248,8 @@ class _Hubbard_Parameters(object):
         assert z.size == self_z.shape[-1], "Same number of frequencies"
         assert len(spins) == self_z.shape[0], "Two spin components"
         diag = np.diag_indices_from(self.t_mat)
-        gf_out = SpinResolvedArray(np.zeros_like(self_z))
+        gf_out = SpinResolvedArray(np.zeros((self_z.size, self_z.size),
+                                            dtype=np.complex256))
         for sp, self_sp_z, gf_out_sp in zip(spins, self_z, gf_out):
             gf_0_inv = np.array(self.t_mat, dtype=np.complex256, copy=True)
             gf_0_inv[diag] += self.onsite_energy(sigma=sigma[sp])
@@ -251,7 +259,7 @@ class _Hubbard_Parameters(object):
                 rv_inv, h, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
                 h_bar = gf.bethe_hilbert_transfrom(h, half_bandwidth=self.D)
                 gf_mat = gfmatrix.construct_gf_omega(rv_inv=rv_inv, diag_inv=h_bar, rv=rv)
-                gf_out_sp[..., i] = np.diagonal(gf_mat)
+                gf_out_sp[..., i] = np.diagonal(gf_mat) if diagonal else gf_mat
         return gf_out
 
     def assert_valid(self):
