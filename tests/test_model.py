@@ -1,5 +1,11 @@
-# coding: utf8
-"""Tests for the Hubbards model related building blocks"""
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# File              : tests/test_model.py
+# Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
+# Date              : 01.08.2018
+# Last Modified Date: 01.08.2018
+# Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
+"""Tests for the Hubbards model related building blocks."""
 from __future__ import absolute_import, unicode_literals
 
 import pytest
@@ -59,6 +65,7 @@ def test_compare_greensfunction():
     prm.h = np.zeros(N)
     prm.h[N//2] = 0.9
     prm.U = np.zeros(N)
+    prm.hilbert_transform = model.hilbert_transform['bethe']
     t = 0.2
     prm.t_mat = np.zeros((N, N))
     diag, _ = np.diag_indices_from(prm.t_mat)
@@ -69,3 +76,45 @@ def test_compare_greensfunction():
     gf0 = prm.gf0(iw)
     gf_dmft = prm.gf_dmft(iw, np.zeros_like(gf0))
     assert np.allclose(gf0, gf_dmft)
+
+
+def test_2x2_matrix():
+    """Compare with analytic inversion of (2, 2) matrix.
+    
+    Done for the 1D chain of sites.
+    """
+    prm = model.prm
+
+    def gf_2x2(omega, t_mat, onsite_energys):
+        assert np.all(np.diag(t_mat) == 0.), \
+            "No diagonal elements for t_mat allowed"
+        assert t_mat.shape == (2, 2)
+        assert onsite_energys.shape == (2, )
+        diag =  omega + onsite_energys
+        norm = 1. / (np.prod(diag) - t_mat[0, 1]*t_mat[1, 0])
+        gf = np.zeros_like(t_mat, dtype=np.complex)
+        gf[0, 0] = diag[1]
+        gf[1, 1] = diag[0]
+        gf[0, 1] = -t_mat[0, 1]
+        gf[1, 0] = -t_mat[1, 0]
+        return norm*gf
+
+    prm.T = 0.0137
+    prm.t_mat = np.zeros((2, 2))
+    prm.t_mat[0, 1] = prm.t_mat[1, 0] = 1.3
+    prm.mu = np.array([0, 1.73])
+    prm.h = np.array([0, -0.3])
+    prm.U = 0
+    prm.V = 0
+    prm.hilbert_transform = model.hilbert_transform['chain']
+
+    omegas = gftools.matsubara_frequencies(np.arange(100), prm.beta)
+    gf_prm = prm.gf0(omegas, diagonal=False)
+    gf_2x2_up = np.array([gf_2x2(iw, prm.t_mat, prm.onsite_energy(sigma=model.sigma.up))
+                          for iw in omegas])
+    gf_2x2_up = gf_2x2_up.transpose(1, 2, 0)  # adjuste axis order (2, 2, omegas)
+    assert np.allclose(gf_2x2_up, gf_prm.up)
+    gf_2x2_dn = np.array([gf_2x2(iw, prm.t_mat, prm.onsite_energy(sigma=model.sigma.dn))
+                          for iw in omegas])
+    gf_2x2_dn = gf_2x2_dn.transpose(1, 2, 0)  # adjuste axis order (2, 2, omegas)
+    assert np.allclose(gf_2x2_dn, gf_prm.dn)

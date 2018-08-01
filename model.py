@@ -150,7 +150,7 @@ class _Hubbard_Parameters(object):
 
     """
 
-    __slots__ = ('T', 'D', 'mu', 'V', 'h', 'U', 't_mat')
+    __slots__ = ('T', 'D', 'mu', 'V', 'h', 'U', 't_mat', 'hilbert_transform')
 
     @property
     def beta(self):
@@ -221,8 +221,8 @@ class _Hubbard_Parameters(object):
             gf_0_inv = np.array(self.t_mat, dtype=np.complex256, copy=True)
             gf_0_inv[diag] += self.onsite_energy(sigma=sigma[sp], hartree=n)
             rv_inv, xi, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
-            xi_bar = gf.bethe_hilbert_transfrom(omega[..., np.newaxis] + xi,
-                                                half_bandwidth=self.D)
+            xi_bar = self.hilbert_transform(omega[..., np.newaxis] + xi,
+                                            half_bandwidth=self.D)
             gf_0[sp] = np.einsum(sum_str, rv, xi_bar, rv_inv)
 
         return SpinResolvedArray(**gf_0)
@@ -268,7 +268,7 @@ class _Hubbard_Parameters(object):
             for i, zi in enumerate(z):
                 gf_0_inv[diag] = constant + zi - self_sp_z[..., i]
                 rv_inv, h, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
-                h_bar = gf.bethe_hilbert_transfrom(h, half_bandwidth=self.D)
+                h_bar = self.bethe_hilbert_transfrom(h, half_bandwidth=self.D)
                 gf_mat = gfmatrix.construct_gf_omega(rv_inv=rv_inv, diag_inv=h_bar, rv=rv)
                 gf_out_sp[..., i] = np.diagonal(gf_mat) if diagonal else gf_mat
         return gf_out
@@ -308,5 +308,15 @@ class _Hubbard_Parameters(object):
         _str += ",\n ".join(('{}={}'.format(prm, _save_get(prm))
                              for prm in self.__slots__))
         return _str
+
+
+def chain_hilbert_transform(xi, half_bandwidth=None):
+    """Hilbert transform for the isolated 1D chain."""
+    return 1./xi
+
+hilbert_transform = {
+    'bethe': gf.bethe_hilbert_transfrom,
+    'chain': chain_hilbert_transform,
+}
 
 prm = _Hubbard_Parameters()
