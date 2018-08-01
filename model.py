@@ -1,4 +1,10 @@
-# encoding: utf-8
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# File              : model.py
+# Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
+# Date              : 01.08.2018
+# Last Modified Date: 01.08.2018
+# Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Module to define the layered Hubbard model in use.
 
 The main constituents are:
@@ -248,8 +254,13 @@ class _Hubbard_Parameters(object):
         assert z.size == self_z.shape[-1], "Same number of frequencies"
         assert len(spins) == self_z.shape[0], "Two spin components"
         diag = np.diag_indices_from(self.t_mat)
-        gf_out = SpinResolvedArray(np.zeros((self_z.size, self_z.size),
-                                            dtype=np.complex256))
+        if diagonal:
+            gf_out = SpinResolvedArray(np.zeros_like(self_z, dtype=np.complex))
+        else:
+            gf_out = SpinResolvedArray(
+                np.zeros((self_z.shape[0], self_z.shape[0], self_z.shape[1]),
+                         dtype=np.complex256)
+            )
         for sp, self_sp_z, gf_out_sp in zip(spins, self_z, gf_out):
             gf_0_inv = np.array(self.t_mat, dtype=np.complex256, copy=True)
             gf_0_inv[diag] += self.onsite_energy(sigma=sigma[sp])
