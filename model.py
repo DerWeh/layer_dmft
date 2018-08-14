@@ -305,7 +305,7 @@ class _Hubbard_Parameters(object):
             for i, zi in enumerate(z):
                 gf_0_inv[diag] = constant + zi - self_sp_z[..., i]
                 rv_inv, h, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
-                h_bar = self.bethe_hilbert_transfrom(h, half_bandwidth=self.D)
+                h_bar = self.hilbert_transform(h, half_bandwidth=self.D)
                 gf_mat = gfmatrix.construct_gf_omega(rv_inv=rv_inv, diag_inv=h_bar, rv=rv)
                 gf_out_sp[..., i] = np.diagonal(gf_mat) if diagonal else gf_mat
         return gf_out
