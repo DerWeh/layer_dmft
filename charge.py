@@ -78,8 +78,11 @@ get_V = partial(capacitor_formula.potential_energy_vector,
                 e_schot=e_schot, layer_labels=layers)
 
 
-def self_consistency(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
+def self_consistency_plain(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
     """Naive self-consistency loop using simple mixing."""
+    warnings.warn("Don't use plain self-consistency. "
+                  "`self_consistency` can also be used with simple mixing",
+                  DeprecationWarning)
     params = parameter
     iw_array = gt.matsubara_frequencies(np.arange(int(2**12)), beta=params.beta)
 
