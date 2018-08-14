@@ -19,9 +19,11 @@ from functools import partial, wraps
 from collections import namedtuple
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from scipy import optimize
 
+import plot
 import gftools as gt
 import capacitor_formula
 
@@ -346,6 +348,15 @@ def charge_self_consistency(parameters, accuracy, V0=None, kind='auto'):
     vprint("".center(SMALL_WIDTH, '='))
     vprint(sol.message)
     return ChargeSelfconsistency(sol=sol, occ=output['occ'], V=output['V'])
+
+
+def plot_results(occ, prm):
+    """Helper for quick visualization of the results of charge self_consistency."""
+    fig, axes = plt.subplots(num='occ + V', nrows=3, ncols=1, sharex=True)
+    plot.occ(occ, spin='both', axis=axes[0])
+    plot.magnetization(occ, axis=axes[1])
+    plot.V(prm, axis=axes[2])
+    plt.show()
 
 
 # def main():
