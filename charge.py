@@ -32,7 +32,10 @@ SMALL_WIDTH = 50
 
 
 class _vprint(object):
-    __slots__ = ('__call__')
+    __slots__ = ('_printer', )
+
+    def __call__(self, *args, **kwds):
+        self._printer(*args, **kwds)
 
 
 vprint = _vprint()
@@ -46,8 +49,9 @@ def verbose_print(func):
     If no attribute `verbose` has been set, the global variable `VERBOSE` is
     used as default.
     """
-    def silent_print(*args, **kwargs):
+    def silent_print(*_, **__):
         pass
+
     print_choice = {
         True: print,
         False: silent_print,
@@ -57,11 +61,12 @@ def verbose_print(func):
     def wrapper(*args, **kwds):
         try:
             verbose = wrapper.verbose
-        except AttributeError as attr:  # no attribute func.verbose
+        except AttributeError:  # no attribute func.verbose
             verbose = VERBOSE
-        vprint.__call__ = print_choice[verbose]
-        return func(*args, **kwds)
-        del vprint.__call__
+        vprint._printer = print_choice[verbose]
+        result = func(*args, **kwds)
+        del vprint._printer
+        return result
     return wrapper
 
 
