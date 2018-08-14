@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# File              : plot.py
+# Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
+# Date              : 02.08.2018
+# Last Modified Date: 02.08.2018
+# Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Collection of standard plotting functions for this module."""
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
@@ -55,17 +62,15 @@ def V_data(V_l, axis=None, **mpl_args):
 
 @default_axis
 def V(param, layer_max=None, axis=None,
-           label_str='{i}\n'
-                     '$h={{param.h[{i}]:+.2f}}$\n'
-                     '$\\mu={{param.mu[{i}]:+.2f}}$\n'
-                     # '$V={{param.V[{i}]:+.2f}}$\n'
-                     '$U={{param.U[{i}]:+.2f}}$',
-           label_short='{i}\n'
-                       '{{param.h[{i}]:+.2f}}\n'
-                       '{{param.mu[{i}]:+.2f}}\n'
-                       # '{{param.V[{i}]:+.2f}}\n'
-                       '{{param.U[{i}]:+.2f}}',
-           **mpl_args):
+      label_str='{i}\n'
+                '$h={{param.h[{i}]:+.2f}}$\n'
+                '$\\mu={{param.mu[{i}]:+.2f}}$\n'
+                '$U={{param.U[{i}]:+.2f}}$',
+      label_short='{i}\n'
+                  '{{param.h[{i}]:+.2f}}\n'
+                  '{{param.mu[{i}]:+.2f}}\n'
+                  '{{param.U[{i}]:+.2f}}',
+      **mpl_args):
     """Plot the Coulomb potential of the `param`.
 
     Parameters
@@ -78,15 +83,20 @@ def V(param, layer_max=None, axis=None,
     label_str : str
         The template string for the y-labels. **i** is replaced with the layer
         number. **param** can be used to print parameters of the calculation.
-        If **label_str** is not `None`, this will be just printed for the first
-        layer and consecutive layers will use **label_str** instead.
+        If `label_str` is not `None`, this will be just printed for the first
+        layer and consecutive layers will use `label_str` instead.
     label_short : str, None
         If `label_short` is not none, it will be used for all labels from the
-        second layer on. See **label_str**.
+        second layer on. See `label_str`.
+
+    Raises
+    ------
+    TypeError
+        If `layer_max` is **not** `int` or `slice`.
 
     """
     V_l = param.V
-    layers = np.arange(V_l.size)  # FIXME: not used
+    layers = np.arange(V_l.size)
     if isinstance(layer_max, int):
         layers = layers[:layer_max]
     elif isinstance(layer_max, slice):
@@ -119,15 +129,15 @@ def V(param, layer_max=None, axis=None,
 
 
 @default_axis
-def n_data(n_l, spin='both', axis=None, **mpl_args):
-    """Plot default graph for occupation `n_l`.
+def occ_data(occ, spin='both', axis=None, **mpl_args):
+    """Plot default graph for occupation `occ`.
 
     Parameters
     ----------
-    n_l : ndarray(float)
+    occ : ndarray(float)
         The data of the occupation. The expected shape is (2, layers).
     spin : {'up', 'dn', 'both', 'sum'}
-        Which spin channel to plot. `n_l[0]` corresponds to up and `n_l[1]` to
+        Which spin channel to plot. `occ[0]` corresponds to up and `occ[1]` to
         down.
     axis : matplotlib axis, optional
         Axis on which the plot will be drawn. If `None` current one is used.
@@ -146,9 +156,9 @@ def n_data(n_l, spin='both', axis=None, **mpl_args):
         'linestyle': '--',
     }
     data = {
-        'up': n_l[0],
-        'dn': n_l[1],
-        'sum': n_l.sum(axis=0),
+        'up': occ[0],
+        'dn': occ[1],
+        'sum': occ.sum(axis=0),
     }
 
     def _plot_spin(spin):
@@ -167,12 +177,12 @@ def n_data(n_l, spin='both', axis=None, **mpl_args):
 
 
 @default_axis
-def magnetisation_data(n_l, axis=None, **mpl_args):
+def magnetisation_data(occ, axis=None, **mpl_args):
     """Plot default graph for the magnetization :math:`n_↑ - n_↓`.
 
     Parameters
     ----------
-    n_l : ndarray(float)
+    occ : ndarray(float)
         The data of the occupation. The expected shape is (2, layers).
     axis : matplotlib axis, optional
         Axis on which the plot will be drawn. If `None` current one is used.
@@ -186,7 +196,7 @@ def magnetisation_data(n_l, axis=None, **mpl_args):
         'marker': DEFAULT_MARKER,
     }
     default_style.update(mpl_args)
-    axis.plot(n_l[0] - n_l[1], **default_style)
+    axis.plot(occ[0] - occ[1], **default_style)
 
     axis.set_ylabel(r'$n_{l\uparrow} - n_{l\downarrow}$')
     axis.set_xlabel('layer')

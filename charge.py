@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# File              : charge.py
+# Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
+# Date              : 02.08.2018
+# Last Modified Date: 09.08.2018
+# Last Modified By  : weh andreas <andreas.weh@physik.uni-augsburg.de>
 # encoding: utf-8
 """Handles the charge self-consistency loop of the combined scheme."""
 from __future__ import (absolute_import, division, print_function,
@@ -15,7 +22,7 @@ import numpy as np
 
 from scipy import optimize
 
-import gftools as gf
+import gftools as gt
 import capacitor_formula
 
 from model import prm, sigma, SpinResolvedArray, spins
@@ -69,7 +76,7 @@ get_V = partial(capacitor_formula.potential_energy_vector,
 def self_consistency(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
     """Naive self-consistency loop using simple mixing."""
     params = parameter
-    iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
+    iw_array = gt.matsubara_frequencies(np.arange(int(2**12)), beta=params.beta)
 
     # start loop paramters
     i, n, n_old = 0, 0, np.infty
@@ -78,7 +85,7 @@ def self_consistency(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
         print(np.linalg.norm(n - n_old))
         n_old = n
         gf_iw = params.gf0(iw_array)
-        n = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
+        n = gt.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
         print('<n>: ', n)
         V_l = get_V(n.up + n.dn - np.average(n))  # FIXME: better dimension checks!!!
         print('V_l: ', V_l)
@@ -115,7 +122,7 @@ def update_occupation(n_start, i_omega, params, out_dict):
         Green's function. `params.V` will be updated.
     out_dict : dict
         Dictionary into which the outputs are written:
-        'n': occupation, 'V': potential and 'Gf': local Green's function
+        'occ': occupation, 'V': potential and 'Gf': local Green's function
 
     Returns
     -------
@@ -127,7 +134,7 @@ def update_occupation(n_start, i_omega, params, out_dict):
     assert n_start.shape[0] == 2
     params.V[:] = out_dict['V'] = get_V(n_start.sum(axis=0) - np.average(n_start.sum(axis=0)))
     gf_iw = out_dict['Gf'] = params.gf0(i_omega, hartree=n_start)
-    n = out_dict['n'] = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
+    n = out_dict['occ'] = gt.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)[0]
     return n - n_start
 
 
@@ -149,7 +156,7 @@ def update_potential(V_start, i_omega, params, out_dict):
         Green's function. `params.V` will be updated.
     out_dict : dict
         Dictionary into which the outputs are written:
-        'n': occupation, 'V': potential and 'Gf': local Green's function
+        'occ': occupation, 'V': potential and 'Gf': local Green's function
 
     Returns
     -------
@@ -162,26 +169,80 @@ def update_potential(V_start, i_omega, params, out_dict):
                       "Optimize occupation to at least include Hartree term.")
     params.V[:] = V_start
     out_dict['Gf'] = gf_iw = params.gf0(i_omega)
-    n = out_dict['n'] = gf.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
+    n = out_dict['occ'] = gt.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)[0]
     V = out_dict['V'] = get_V(n.sum(axis=0) - np.average(n.sum(axis=0)))
     return V - V_start
 
 
+@counter
 def print_status(x, dx):
     """Intermediate print output for `optimize.root`."""
-    print_status.itr += 1
-    print("======== " + str(print_status.itr) + " =============")
+    print("======== " + str(print_status.count) + " =============")
     # print(x)
     print("--- " + str(np.linalg.norm(dx)) + " ---")
 
 
-print_status.itr = 0
+def _occ_root(fun, occ0, tol, verbose=True):
+    """Wrapper for root finding for occupation.
+    
+    From a few test cases `krylov` performs best by far. `broyden1` and
+    `df-sane` seem to also be decent options.
+    """
+    sol = optimize.root(fun=fun, x0=occ0,
+                        # method='broyden1',
+                        method='krylov',
+                        # method='df-sane',
+                        tol=tol,
+                        # options={'nit': 3},
+                        callback=print_status if verbose else None,
+                        )
+    return sol
 
-ChargeSelfconsistency = namedtuple('ChargeSelfconsistency', ['sol', 'n', 'V'])
+
+def _occ_least_square(fun, occ0, tol, verbose=2):
+    """Wrapper for least square optimization of occupation.
+    
+    Least square allows boundaries on the possible values of the occupation.
+    It seems to perform more stable, even for hard problems the number of
+    function evaluations does not increase too much.
+    For simple problems root finding seems to be more efficient.
+
+    To test: use least square for initial estimate (low accuracy) than switch to
+    root finding algorithm.
+    """
+    occ0 = np.asarray(occ0)
+    shape = occ0.shape
+
+    def wrapped(x):
+        """Accept 1D arrays for compatibility with `least_squares`."""
+        x = x.reshape(shape)
+        res = (fun(x).reshape(-1))
+        return res
+
+    sol = optimize.least_squares(wrapped, x0=occ0.reshape(-1), bounds=(0., 1.),
+                                 xtol=tol, method='dogbox', loss='cauchy',
+                                 verbose=verbose,)
+    return sol
+
+
+def _pot_root(fun, pot0, tol, verbose=True):
+    """Wrapper for root finding of potential."""
+    sol = optimize.root(fun=fun, x0=pot0,
+                        # method='broyden1',
+                        method='krylov',
+                        # method='df-sane',
+                        tol=tol,
+                        # options={'nit': 3},
+                        callback=print_status if verbose else None,
+                        )
+    return sol
+
+
+ChargeSelfconsistency = namedtuple('ChargeSelfconsistency', ['sol', 'occ', 'V'])
 
 
 @verbose_print
-def broyden_self_consistency(parameters, accuracy, V0=None, kind='auto'):
+def charge_self_consistency(parameters, accuracy, V0=None, kind='auto'):
     """Charge self-consistency using root-finding algorithm.
 
     Parameters
@@ -193,12 +254,12 @@ def broyden_self_consistency(parameters, accuracy, V0=None, kind='auto'):
         achieved.
     V0 : ndarray, optional
         Starting value for the occupation or electrical potential.
-    kind : {'auto', 'n', 'V'}
-        Weather self-consistency is determined according to the charge 'n' or
+    kind : {'auto', 'occ', 'V'}
+        Weather self-consistency is determined according to the charge 'occ' or
         the electrical potential 'V'. In the magnetic case 'V' seems to
-        convergence better, there are half as many degrees of freedom. 'n' on
+        convergence better, there are half as many degrees of freedom. 'occ' on
         the other hand can readily incorporate the Hartree term of the self-energy.
-        Per default ('auto') 'n' is used in the interacting and 'V' in the
+        Per default ('auto') 'occ' is used in the interacting and 'V' in the
         non-interacting case.
 
     Returns
@@ -211,19 +272,19 @@ def broyden_self_consistency(parameters, accuracy, V0=None, kind='auto'):
     """
     # TODO: check against given `n` if sum gives right result
     params = parameters
-    iw_array = gf.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
-    assert kind in set(('auto', 'n', 'V')), "Unknown kind: {}".format(kind)
+    iw_array = gt.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
+    assert kind in set(('auto', 'occ', 'V')), "Unknown kind: {}".format(kind)
     if kind == 'auto':
         if np.any(params.U != 0):  # interacting case
-            kind = 'n'  # use 'n', it can incorporate Hartree term
+            kind = 'occ'  # use 'occ', it can incorporate Hartree term
         else:  # non-interacting case
             kind = 'V'  # use 'V', has half as many parameters to optimize
     if V0 is not None:
         params.V[:] = V0
     output = {}
-    if kind == 'n':
+    if kind == 'occ':
         gf_iw = params.gf0(iw_array)
-        x0 = gf.density(gf_iw, params.onsite_energy(),
+        x0 = gt.density(gf_iw, params.onsite_energy(),
                         beta=params.beta)
         optimizer = partial(update_occupation, i_omega=iw_array, params=params,
                             out_dict=output)
@@ -254,7 +315,7 @@ def broyden_self_consistency(parameters, accuracy, V0=None, kind='auto'):
     vprint(params.V)
     vprint("".center(SMALL_WIDTH, '='))
     vprint(sol.message)
-    return ChargeSelfconsistency(sol=sol, n=output['n'], V=output['V'])
+    return ChargeSelfconsistency(sol=sol, occ=output['occ'], V=output['V'])
 
 
 # def main():
