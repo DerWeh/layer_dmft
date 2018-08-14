@@ -215,8 +215,8 @@ def _occ_least_square(fun, occ0, tol, verbose=2):
     function evaluations does not increase too much.
     For simple problems root finding seems to be more efficient.
 
-    To test: use least square for initial estimate (low accuracy) than switch to
-    root finding algorithm.
+    To test: use least square for initial estimate (low accuracy) than switch 
+    to root finding algorithm.
     """
     occ0 = np.asarray(occ0)
     shape = occ0.shape
@@ -262,13 +262,16 @@ def charge_self_consistency(parameters, accuracy, V0=None, kind='auto'):
         achieved.
     V0 : ndarray, optional
         Starting value for the occupation or electrical potential.
-    kind : {'auto', 'occ', 'V'}
+    kind : {'auto', 'occ', 'occ_lsq' 'V'}, optional
         Weather self-consistency is determined according to the charge 'occ' or
         the electrical potential 'V'. In the magnetic case 'V' seems to
         convergence better, there are half as many degrees of freedom. 'occ' on
         the other hand can readily incorporate the Hartree term of the self-energy.
         Per default ('auto') 'occ' is used in the interacting and 'V' in the
         non-interacting case.
+        Additionally a constrained (:math:`0 ≤ n_{lσ} ≤ 1`) least-square
+        algorithm can be used. If the root-finding algorithms do not converge,
+        this `kind` might help.
 
     Returns
     -------
@@ -276,47 +279,52 @@ def charge_self_consistency(parameters, accuracy, V0=None, kind='auto'):
         The solution of the optimization routine, see `optimize.root`.
         `x` contains the actual values, and `success` states if convergence was
         achieved.
+    occ : SpinResolvedArray
+        The final occupation of the converged result.
+    V : ndarray
+        The final potential of the converged result.
 
     """
     # TODO: check against given `n` if sum gives right result
+    assert kind in set(('auto', 'occ', 'occ_lsq', 'V')), "Unknown kind: {}".format(kind)
     params = parameters
     iw_array = gt.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
-    assert kind in set(('auto', 'occ', 'V')), "Unknown kind: {}".format(kind)
+
     if kind == 'auto':
         if np.any(params.U != 0):  # interacting case
             kind = 'occ'  # use 'occ', it can incorporate Hartree term
         else:  # non-interacting case
             kind = 'V'  # use 'V', has half as many parameters to optimize
+
     if V0 is not None:
         params.V[:] = V0
     output = {}
+
+    vprint('optimize'.center(SMALL_WIDTH, '='))
+    # TODO: check accuracy of density for target accuracy
     if kind == 'occ':
         gf_iw = params.gf0(iw_array)
-        x0 = gt.density(gf_iw, params.onsite_energy(),
-                        beta=params.beta)
+        x0, __ = gt.density(gf_iw, params.onsite_energy(),
+                            beta=params.beta)
         optimizer = partial(update_occupation, i_omega=iw_array, params=params,
                             out_dict=output)
+        sol = _occ_root(optimizer, occ0=x0, tol=accuracy, verbose=True)
+    elif kind == 'occ_lsq':
+        gf_iw = params.gf0(iw_array)
+        x0, __ = gt.density(gf_iw, params.onsite_energy(),
+                            beta=params.beta)
+        optimizer = partial(update_occupation, i_omega=iw_array, params=params,
+                            out_dict=output)
+        sol = _occ_least_square(optimizer, occ0=x0, tol=accuracy, verbose=2)
     elif kind == 'V':
         if V0 is None:
             V0 = np.zeros_like(parameters.mu)
             params.V[:] = V0
-        x0 = V0
         optimizer = partial(update_potential, i_omega=iw_array, params=params,
                             out_dict=output)
-
-    vprint('optimize'.center(SMALL_WIDTH, '='))
-    sol = optimize.root(fun=optimizer,
-                          x0=x0,
-                          method='broyden1',
-                          # method='anderson',
-                          # method='linearmixing',
-                          # method='excitingmixing',
-                          # method='df-sane',
-                          tol=accuracy,
-                          # options={'nit': 3},
-                          )
+        sol = _pot_root(optimizer, pot0=V0, tol=accuracy, verbose=True)
     vprint("".center(SMALL_WIDTH, '='))
-    vprint("Success: {opt.success} after {opt.nit} iterations.".format(opt=sol))
+    vprint("Success: {opt.success}".format(opt=sol))
     vprint('optimized paramter'.center(SMALL_WIDTH, '-'))
     vprint(sol.x)
     vprint('final potential'.center(SMALL_WIDTH, '-'))
