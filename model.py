@@ -3,7 +3,7 @@
 # File              : model.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 01.08.2018
-# Last Modified Date: 01.08.2018
+# Last Modified Date: 02.08.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Module to define the layered Hubbard model in use.
 
@@ -151,6 +151,19 @@ class _Hubbard_Parameters(object):
     """
 
     __slots__ = ('T', 'D', 'mu', 'V', 'h', 'U', 't_mat', 'hilbert_transform')
+
+    def __init__(self):
+        """Empty initialization. The assignments are just to help linters."""
+        self.T = float
+        self.D = float
+        self.mu = np.ndarray
+        self.V = np.ndarray
+        self.h = np.ndarray
+        self.U = np.ndarray
+        self.t_mat = np.ndarray
+        self.hilbert_transform = callable
+        for attribute in self.__slots__:
+            self.__delattr__(attribute)
 
     @property
     def beta(self):
