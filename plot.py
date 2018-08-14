@@ -3,7 +3,7 @@
 # File              : plot.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 02.08.2018
-# Last Modified Date: 02.08.2018
+# Last Modified Date: 14.08.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Collection of standard plotting functions for this module."""
 from __future__ import (absolute_import, division, print_function,
@@ -128,14 +128,40 @@ def V(param, layer_max=None, axis=None,
         axis.set_ylim(top=0.)
 
 
+def _contains_error(occ):
+    """Checks if `occ` is only the occupation or contains the corresponding error."""
+    if isinstance(occ, tuple):
+        assert len(occ) == 2, "Must be tuple (values, errors)"
+        assert occ[0].shape[0] == 2, "Values must be ndarray(up, dn)"
+        error = True
+    else:
+        assert occ.shape[0] == 2, "Values must be ndarray(up, dn)"
+        error = False
+    return error
+
+
+@default_axis
+def occ(occ, spin='both', axis=None, **mpl_args):
+    assert spin in set(('up', 'dn', 'both', 'sum'))
+    error = _contains_error(occ)
+    if error:
+        occ_data_err(occ[0], occ_err=occ[1], spin=spin, axis=axis, **mpl_args)
+    else:
+        occ_data(occ, spin=spin, axis=axis, **mpl_args)
+
+
 @default_axis
 def occ_data(occ, spin='both', axis=None, **mpl_args):
     """Plot default graph for occupation `occ`.
+    
+    This graph is designed to work with the output of `gftools.density`.
 
     Parameters
     ----------
     occ : ndarray(float)
         The data of the occupation. The expected shape is (2, layers).
+        Alternative a tuple of two corresponding arrays can be given, were the
+        second element is the error estimate.
     spin : {'up', 'dn', 'both', 'sum'}
         Which spin channel to plot. `occ[0]` corresponds to up and `occ[1]` to
         down.
@@ -155,6 +181,7 @@ def occ_data(occ, spin='both', axis=None, **mpl_args):
         # 'color': 'black',
         'linestyle': '--',
     }
+
     data = {
         'up': occ[0],
         'dn': occ[1],
@@ -163,12 +190,14 @@ def occ_data(occ, spin='both', axis=None, **mpl_args):
 
     def _plot_spin(spin):
         default_style['marker'] = marker[spin]
+        default_style['label'] = 'n_' + spin
         default_style.update(mpl_args)
         axis.plot(data[spin], **default_style)
 
     if spin == 'both':
         for sp in ('up', 'dn'):
             _plot_spin(sp)
+        axis.legend()
     else:
         _plot_spin(spin)
 
@@ -177,7 +206,75 @@ def occ_data(occ, spin='both', axis=None, **mpl_args):
 
 
 @default_axis
-def magnetisation_data(occ, axis=None, **mpl_args):
+def occ_data_err(occ, occ_err, spin='both', axis=None, **mpl_args):
+    """Plot default graph for occupation `occ`.
+
+    This graph is designed to work with the output of `gftools.density`.
+
+    Parameters
+    ----------
+    occ : ndarray(float)
+        The data of the occupation. The expected shape is (2, layers).
+        Alternative a tuple of two corresponding arrays can be given, were the
+        second element is the error estimate.
+    spin : {'up', 'dn', 'both', 'sum'}
+        Which spin channel to plot. `occ[0]` corresponds to up and `occ[1]` to
+        down.
+    axis : matplotlib axis, optional
+        Axis on which the plot will be drawn. If `None` current one is used.
+    **mpl_args :
+        Arguments passed to `mpl.plot`
+
+    """
+    assert spin in set(('up', 'dn', 'both', 'sum'))
+    layers = np.arange(occ[0].size)
+    marker = {
+        'up': '^',
+        'dn': 'v',
+        'sum': DEFAULT_MARKER,
+    }
+    default_style = {
+        # 'color': 'black',
+        'linestyle': '--',
+    }
+
+    def _plot_dict(occ, occ_err):
+        return {'y': occ, 'yerr': occ_err}
+
+    data = {
+        'up': _plot_dict(occ[0], occ_err[0]),
+        'dn': _plot_dict(occ[1], occ_err[1]),
+        'sum': _plot_dict(occ.sum(axis=0), occ_err.sum(axis=0)),
+    }
+
+    def _plot_spin(spin):
+        default_style['marker'] = marker[spin]
+        default_style['label'] = 'n_' + (spin)
+        default_style.update(mpl_args)
+        axis.errorbar(x=layers, **data[spin], **default_style)
+
+    if spin == 'both':
+        for sp in ('up', 'dn'):
+            _plot_spin(sp)
+        axis.legend()
+    else:
+        _plot_spin(spin)
+
+    axis.set_ylabel(r'$n_l$')
+    axis.set_xlabel('layer')
+
+
+@default_axis
+def magnetization(occ, axis=None, **mpl_args):
+    error = _contains_error(occ)
+    if error:
+        magnetization_data_error(occ[0], occ_err=occ[1], axis=axis, **mpl_args)
+    else:
+        magnetization_data(occ, axis=axis, **mpl_args)
+
+
+@default_axis
+def magnetization_data(occ, axis=None, **mpl_args):
     """Plot default graph for the magnetization :math:`n_↑ - n_↓`.
 
     Parameters
@@ -197,6 +294,34 @@ def magnetisation_data(occ, axis=None, **mpl_args):
     }
     default_style.update(mpl_args)
     axis.plot(occ[0] - occ[1], **default_style)
+
+    axis.set_ylabel(r'$n_{l\uparrow} - n_{l\downarrow}$')
+    axis.set_xlabel('layer')
+
+
+@default_axis
+def magnetization_data_error(occ, occ_err, axis=None, **mpl_args):
+    """Plot default graph for the magnetization :math:`n_↑ - n_↓`.
+
+    Parameters
+    ----------
+    occ : ndarray(float)
+        The data of the occupation. The expected shape is (2, layers).
+    axis : matplotlib axis, optional
+        Axis on which the plot will be drawn. If `None` current one is used.
+    **mpl_args :
+        Arguments passed to `mpl.plot`
+
+    """
+    layers = np.arange(occ[0].size)
+    default_style = {
+        'color': 'black',
+        'linestyle': '--',
+        'marker': DEFAULT_MARKER,
+    }
+    default_style.update(mpl_args)
+    axis.plot(x=layers, y=occ[0] - occ[1], yerr=occ_err[0] + occ_err[1],
+              **default_style)
 
     axis.set_ylabel(r'$n_{l\uparrow} - n_{l\downarrow}$')
     axis.set_xlabel('layer')
