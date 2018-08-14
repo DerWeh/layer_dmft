@@ -202,6 +202,30 @@ class _Hubbard_Parameters(object):
             onsite_energy -= hartree * self.U
         return onsite_energy
 
+    def hamiltonian(self, sigma=sigma, hartree=False):
+        """Return the matrix form of the non-interacting Hamiltonian.
+
+        Parameters
+        ----------
+        sigma : {-.5, +5, sigma}
+            The value of :math:`σ∈{↑,↓}` which is needed to determine the
+            Zeeman energy contribution :math:`σh`.
+        hartree : False or ndarray(float)
+            If Hartree term is included. If it is `False` (default) Hartree is
+            not included. Else it needs to be the electron density necessary
+            to calculate the mean-field term.
+
+        Returns
+        -------
+        hamiltonian : ndarray(float), shape (N, N) or (2, N, N) 
+            The Hamiltonian matrix
+
+        """
+        ham = -self.onsite_energy(sigma=sigma, hartree=hartree)[..., np.newaxis] \
+            * np.eye(*self.t_mat.shape) \
+            - self.t_mat
+        return ham
+
     def gf0(self, omega, hartree=False, diagonal=True):
         """Return local (diagonal) elements of the non-interacting Green's function.
 
@@ -296,6 +320,12 @@ class _Hubbard_Parameters(object):
                 "all parameter arrays need to have the same shape - "
                 "mu: {self.mu.size}, h: {self.h.size}, "
                 "U:{self.U.size}, V: {self.V.size}".format(self=self)
+            )
+        if np.any(self.t_mat.conj().T != self.t_mat):
+            raise ValueError(
+                "Hamiltonian must be hermitian. "
+                "`t_mat`^† = `t_mat` must be fulfilled.\n"
+                "t_mat: {t_mat}".format(t_mat=self.t_mat)
             )
 
     def __repr__(self):
