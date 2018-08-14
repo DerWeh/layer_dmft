@@ -152,6 +152,7 @@ def update_occupation(n_start, i_omega, params, out_dict):
 
     """
     assert n_start.shape[0] == 2
+    assert len(n_start.shape) == 2
     params.V[:] = out_dict['V'] = get_V(n_start.sum(axis=0) - np.average(n_start.sum(axis=0)))
     gf_iw = out_dict['Gf'] = params.gf0(i_omega, hartree=n_start)
     n = out_dict['occ'] = gt.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)[0]
