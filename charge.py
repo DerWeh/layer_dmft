@@ -70,6 +70,17 @@ def verbose_print(func):
     return wrapper
 
 
+def counter(func):
+    """Counts how many times function gets executed."""
+    @wraps(func)
+    def wrapper(*args, **kwds):
+        wrapper.count += 1
+        return func(*args, **kwds)
+
+    wrapper.count = 0
+    return wrapper
+
+
 # FIXME
 layers = np.arange(40)
 # define get_V
@@ -112,6 +123,7 @@ def self_consistency_plain(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
     print(np.linalg.norm(prm.V - V_l))
 
 
+@counter
 def update_occupation(n_start, i_omega, params, out_dict):
     r"""Calculate new occupation by setting :math:`V_l` from the method `get_V`.
 
@@ -146,6 +158,7 @@ def update_occupation(n_start, i_omega, params, out_dict):
     return n - n_start
 
 
+@counter
 def update_potential(V_start, i_omega, params, out_dict):
     r"""Calculate new potential by setting :math:`V_l` from the method `get_V`.
 
