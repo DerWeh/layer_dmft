@@ -264,6 +264,52 @@ class _Hubbard_Parameters(object):
 
         return SpinResolvedArray(**gf_0)
 
+    def occ0(self, gf_iw, hartree=False, return_err=True):
+        """Return occupation for the non-interacting (mean-field) model.
+
+        This is a wrapper around `gf.density`.
+
+        Parameters
+        ----------
+        gf_iw : SpinResolvedArray, shape (2, N, N_matsubara)
+            The Matsubara frequency Green's function for positive frequencies
+            :math:`iω_n`.  The shape corresponds to the result of `self.gf_0`
+            and `self.gf_dmft`.  The last axis corresponds to the Matsubara
+            frequencies.
+        hartree : False or SpinResolvedArray
+            If Hartree term is included. If it is `False` (default) Hartree is
+            not included. Else it needs to be the electron density necessary
+            to calculate the mean-field term.
+        return_err : bool or float, optional
+            If `True` (default), the error estimate will be returned along
+            with the density.  If `return_err` is a float, a warning will
+            Warning will be issued if the error estimate is larger than
+            `return_err`. If `False`, no error estimate is calculated.
+
+        Returns
+        -------
+        occ0 : SpinResolvedArray, shape (2, N)
+            The occupation per layer and spin
+
+        """
+        occ0 = {}
+        occ0_err = {}
+        if hartree is False:
+            hartree = (False, False)
+        for sp, hartree_sp in zip(spins, hartree):
+            ham = self.hamiltonian(sigma=sigma[sp], hartree=hartree_sp)
+            occ0_ = gf.density(gf_iw[sp], potential=-ham, beta=self.beta,
+                               return_err=return_err, matrix=True)
+            if return_err is True:
+                occ0[sp], occ0_err[sp] = occ0_
+            else:
+                occ0[sp] = occ0_
+
+        if return_err is True:
+            return SpinResolvedArray(**occ0), SpinResolvedArray(**occ0_err)
+        else:
+            return SpinResolvedArray(**occ0)
+
     def gf_dmft(self, z, self_z, diagonal=True):
         """Return local Green's function for a diagonal self-energy.
         

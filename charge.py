@@ -157,7 +157,7 @@ def update_occupation(n_start, i_omega, params, out_dict):
     assert len(n_start.shape) == 2
     params.V[:] = out_dict['V'] = get_V(n_start.sum(axis=0) - np.average(n_start.sum(axis=0)))
     gf_iw = out_dict['Gf'] = params.gf0(i_omega, hartree=n_start)
-    n = out_dict['occ'] = gt.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)[0]
+    n = out_dict['occ'] = params.occ0(gf_iw, return_err=False)
     return n - n_start
 
 
@@ -193,7 +193,7 @@ def update_potential(V_start, i_omega, params, out_dict):
                       "Optimize occupation to at least include Hartree term.")
     params.V[:] = V_start
     out_dict['Gf'] = gf_iw = params.gf0(i_omega)
-    n = out_dict['occ'] = gt.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)[0]
+    n = out_dict['occ'] = params.occ0(gf_iw, return_err=False)
     V = out_dict['V'] = get_V(n.sum(axis=0) - np.average(n.sum(axis=0)))
     return V - V_start
 
