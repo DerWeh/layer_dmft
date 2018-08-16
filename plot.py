@@ -3,7 +3,7 @@
 # File              : plot.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 02.08.2018
-# Last Modified Date: 14.08.2018
+# Last Modified Date: 16.08.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Collection of standard plotting functions for this module."""
 from __future__ import (absolute_import, division, print_function,
@@ -23,6 +23,7 @@ from matplotlib.ticker import AutoMinorLocator
 
 FILLED_MARKERS = cycle(('o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X'))
 DEFAULT_MARKER = 'x'
+ERR_CAPSIZE = 2
 
 
 @decorator
@@ -236,6 +237,7 @@ def occ_data_err(occ, occ_err, spin='both', axis=None, **mpl_args):
     default_style = {
         # 'color': 'black',
         'linestyle': '--',
+        'capsize': ERR_CAPSIZE,
     }
 
     def _plot_dict(occ, occ_err):
@@ -318,6 +320,7 @@ def magnetization_data_error(occ, occ_err, axis=None, **mpl_args):
         'color': 'black',
         'linestyle': '--',
         'marker': DEFAULT_MARKER,
+        'capsize': ERR_CAPSIZE,
     }
     default_style.update(mpl_args)
     axis.plot(x=layers, y=occ[0] - occ[1], yerr=occ_err[0] + occ_err[1],

@@ -3,8 +3,8 @@
 # File              : charge.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 02.08.2018
-# Last Modified Date: 09.08.2018
-# Last Modified By  : weh andreas <andreas.weh@physik.uni-augsburg.de>
+# Last Modified Date: 16.08.2018
+# Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # encoding: utf-8
 """Handles the charge self-consistency loop of the combined scheme."""
 from __future__ import (absolute_import, division, print_function,
@@ -356,6 +356,7 @@ def plot_results(occ, prm):
     plot.occ(occ, spin='both', axis=axes[0])
     plot.magnetization(occ, axis=axes[1])
     plot.V(prm, axis=axes[2])
+    plt.tight_layout()
     plt.show()
 
 
