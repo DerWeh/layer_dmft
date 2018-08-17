@@ -30,7 +30,10 @@ import numpy as np
 import gftools as gf
 import gftools.matrix as gfmatrix
 
+from weakref import proxy
+
 spins = ('up', 'dn')
+spin_dict = {'up': 0, 'dn': 1}
 
 
 class SpinResolved(namedtuple('Spin', spins)):
@@ -38,7 +41,6 @@ class SpinResolved(namedtuple('Spin', spins)):
     
     It is a `namedtuple` which can also be accessed like a `dict`
     """
-
     __slots__ = ()
 
     def __getitem__(self, element):
@@ -64,6 +66,7 @@ class SpinResolvedArray(np.ndarray):
         The down spin component, equal to self[1]
 
     """
+    __slots__ = ('up', 'dn')
 
     def __new__(cls, *args, **kwargs):
         """Create the object using `np.array` function.
@@ -102,26 +105,23 @@ class SpinResolvedArray(np.ndarray):
         except IndexError as idx_error:  # if element is just ('up'/'dn') use the attribute
             try:
                 try:
-                    return getattr(self, element)
-                except TypeError:  # convert string to index and use numpy slicing
+                    return super().__getitem__(spin_dict[element])
+                except KeyError:  # convert string to index and use numpy slicing
                     element = (spins.index(element[0]), ) + element[1:]
                     return super().__getitem__(element)
             except:  # important to raise original error to raise out of range
                 raise idx_error
 
     def __getattr__(self, name):
-        """Lazily add the attribute `up`/`dn` and return it."""
-        spin_dict = {'up': 0, 'dn': 1}
-        if name in spin_dict:  # special cases
-            setattr(self, name, self[spin_dict[name]].view(type=np.ndarray))
-            return getattr(self, name)
-        else:  # default behavior
-            raise AttributeError
+        """Return the attribute `up`/`dn`."""
+        if name in spins:  # special cases
+            return self[spin_dict[name]].view(type=np.ndarray)
+        raise AttributeError  # default behavior
 
     @property
     def total(self):
         """Sum of up and down spin."""
-        return self.up + self.dn
+        return self.sum(axis=0)
 
 
 sigma = SpinResolvedArray(up=0.5, dn=-0.5)
