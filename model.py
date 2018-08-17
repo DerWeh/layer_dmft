@@ -182,7 +182,7 @@ class _Hubbard_Parameters(object):
 
         Parameters
         ----------
-        sigma : {-.5, +5, sigma}
+        sigma : {-0.5, +0.5, sigma}
             The value of :math:`σ∈{↑,↓}` which is needed to determine the
             Zeeman energy contribution :math:`σh`.
         hartree : False or ndarray(float)
@@ -200,6 +200,10 @@ class _Hubbard_Parameters(object):
         onsite_energy = np.multiply.outer(sigma, self.h)
         onsite_energy += self.mu + 0.5*self.U - self.V
         if hartree is not False:
+            assert (len(hartree.shape) == 1
+                    if isinstance(sigma, float) else
+                    len(hartree.shape[0]) == 2 == len(hartree.shape)), \
+                "hartree as no matching shape: {}".format(hartree.shape)
             onsite_energy -= hartree * self.U
         return onsite_energy
 
@@ -208,7 +212,7 @@ class _Hubbard_Parameters(object):
 
         Parameters
         ----------
-        sigma : {-.5, +5, sigma}
+        sigma : {-0.5, +0.5, sigma}
             The value of :math:`σ∈{↑,↓}` which is needed to determine the
             Zeeman energy contribution :math:`σh`.
         hartree : False or ndarray(float)
