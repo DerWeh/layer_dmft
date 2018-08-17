@@ -188,7 +188,8 @@ class _Hubbard_Parameters(object):
         hartree : False or ndarray(float)
             If Hartree term is included. If it is `False` (default) Hartree is
             not included. Else it needs to be the electron density necessary
-            to calculate the mean-field term.
+            to calculate the mean-field term. Mind that for the Hartree term
+            the spins have to be interchanged.
 
         Returns
         -------
@@ -254,10 +255,9 @@ class _Hubbard_Parameters(object):
         else:  # first axis needs to be spin such that loop is possible
             assert hartree.shape[0] == 2
         gf_0 = {}
-        for sp, n in zip(spins, hartree[::-1]):
-            gf_0_inv = np.array(self.t_mat, dtype=np.complex256, copy=True)
-            gf_0_inv[diag] += self.onsite_energy(sigma=sigma[sp], hartree=n)
-            rv_inv, xi, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
+        for sp, occ in zip(spins, hartree):
+            gf_0_inv = -self.hamiltonian(sigma=sigma[sp], hartree=occ)
+            rv_inv, xi, rv = gfmatrix.decompose_hamiltonian(gf_0_inv)
             xi_bar = self.hilbert_transform(omega[..., np.newaxis] + xi,
                                             half_bandwidth=self.D)
             gf_0[sp] = np.einsum(sum_str, rv, xi_bar, rv_inv)
@@ -345,8 +345,7 @@ class _Hubbard_Parameters(object):
                          dtype=np.complex256)
             )
         for sp, self_sp_z, gf_out_sp in zip(spins, self_z, gf_out):
-            gf_0_inv = np.array(self.t_mat, dtype=np.complex256, copy=True)
-            gf_0_inv[diag] += self.onsite_energy(sigma=sigma[sp])
+            gf_0_inv = -self.hamiltonian(sigma=sigma[sp]).astype(np.complex256)
             constant = np.diagonal(gf_0_inv).copy()
             for i, zi in enumerate(z):
                 gf_0_inv[diag] = constant + zi - self_sp_z[..., i]
