@@ -222,6 +222,7 @@ def _occ_root(fun, occ0, tol, verbose=True):
                         # options={'nit': 3},
                         callback=print_status if verbose else None,
                         )
+    print_status.count = 0 
     return sol
 
 
@@ -261,6 +262,7 @@ def _pot_root(fun, pot0, tol, verbose=True):
                         # options={'nit': 3},
                         callback=print_status if verbose else None,
                         )
+    print_status.count = 0
     return sol
 
 
@@ -268,7 +270,7 @@ ChargeSelfconsistency = namedtuple('ChargeSelfconsistency', ['sol', 'occ', 'V'])
 
 
 @verbose_print
-def charge_self_consistency(parameters, tol, V0=None, kind='auto',
+def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
                             n_points=2**11):
     """Charge self-consistency using root-finding algorithm.
 
@@ -309,6 +311,7 @@ def charge_self_consistency(parameters, tol, V0=None, kind='auto',
     """
     # TODO: check against given `n` if sum gives right result
     assert kind in set(('auto', 'occ', 'occ_lsq', 'V')), "Unknown kind: {}".format(kind)
+    assert V0 is None or occ0 is None
     params = parameters
     iw_array = gt.matsubara_frequencies(np.arange(n_points), beta=params.beta)
 
@@ -324,36 +327,46 @@ def charge_self_consistency(parameters, tol, V0=None, kind='auto',
 
     vprint('optimize'.center(SMALL_WIDTH, '='))
     # TODO: check tol of density for target tol
-    if kind == 'occ':
-        gf_iw = params.gf0(iw_array)
-        x0, __ = gt.density(gf_iw, params.onsite_energy(),
-                            beta=params.beta)
-        optimizer = partial(update_occupation, i_omega=iw_array, params=params,
-                            out_dict=output)
-        sol = _occ_root(optimizer, occ0=x0, tol=tol, verbose=True)
-    elif kind == 'occ_lsq':
-        gf_iw = params.gf0(iw_array)
-        x0, __ = gt.density(gf_iw, params.onsite_energy(),
-                            beta=params.beta)
-        optimizer = partial(update_occupation, i_omega=iw_array, params=params,
-                            out_dict=output)
-        sol = _occ_least_square(optimizer, occ0=x0, tol=tol, verbose=2)
-    elif kind == 'V':
-        if V0 is None:
-            V0 = np.zeros_like(parameters.mu)
-            params.V[:] = V0
-        optimizer = partial(update_potential, i_omega=iw_array, params=params,
-                            out_dict=output)
-        sol = _pot_root(optimizer, pot0=V0, tol=tol, verbose=True)
+    try:
+        if kind == 'occ':
+            if occ0 is None:
+                gf_iw = params.gf0(iw_array)
+                occ0 = params.occ0(gf_iw, return_err=False)
+            optimizer = partial(update_occupation, i_omega=iw_array, params=params,
+                                out_dict=output)
+            sol = _occ_root(optimizer, occ0=occ0, tol=tol, verbose=True)
+        elif kind == 'occ_lsq':
+            if occ0 is None:
+                gf_iw = params.gf0(iw_array)
+                occ0 = params.occ0(gf_iw, return_err=False)
+            optimizer = partial(update_occupation, i_omega=iw_array, params=params,
+                                out_dict=output)
+            sol = _occ_least_square(optimizer, occ0=occ0, tol=tol, verbose=2)
+        elif kind == 'V':
+            optimizer = partial(update_potential, i_omega=iw_array, params=params,
+                                out_dict=output)
+            sol = _pot_root(optimizer, pot0=params.V[:], tol=tol, verbose=True)
+    except KeyboardInterrupt as key_err:
+        print('Optimization canceled -- trying to continue')
+        try:
+            hartree_occ = output['occ'][::-1]
+        except KeyError:
+            print('Failed! No occupation so far.')
+            raise key_err
+        sol = optimize.OptimizeResult()
+        sol.x = output['occ' if kind in ('occ', 'occ_lsq') else 'V']
+        sol.success = False
+        sol.message = 'Optimization interrupted by user, not terminated.'
+    else:
+        hartree_occ = output['occ'][::-1]
+    # finalize
+    gf_iw = params.gf0(iw_array, hartree=hartree_occ)
+    occ = params.occ0(gf_iw, hartree=hartree_occ, return_err=True)
     vprint("".center(SMALL_WIDTH, '='))
     vprint("Success: {opt.success}".format(opt=sol))
-    vprint('optimized paramter'.center(SMALL_WIDTH, '-'))
-    vprint(sol.x)
-    vprint('final potential'.center(SMALL_WIDTH, '-'))
-    vprint(params.V)
-    vprint("".center(SMALL_WIDTH, '='))
     vprint(sol.message)
-    return ChargeSelfconsistency(sol=sol, occ=output['occ'], V=output['V'])
+    vprint("".center(SMALL_WIDTH, '='))
+    return ChargeSelfconsistency(sol=sol, occ=occ, V=params.V)
 
 
 def plot_results(occ, prm):
