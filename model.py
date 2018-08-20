@@ -3,19 +3,19 @@
 # File              : model.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 01.08.2018
-# Last Modified Date: 02.08.2018
+# Last Modified Date: 17.08.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Module to define the layered Hubbard model in use.
 
 The main constituents are:
 * The `prm` class which defines the Hamiltonian
   (the layer density of states DOS still needs to be supplemented).
-* Spin *objects*: `spins`, `SpinResolved`, `sigma`
+* Spin *objects*: `Spins`, `SpinResolved`, `sigma`
   They allow to handle the spin dependence σ=↑=+1/2, σ=↓=−1/2
 
 Most likely you want to import this module like::
 
-    from model import prm, sigma, SpinResolvedArray, spins
+    from model import prm, sigma, Spins
 
 """
 from __future__ import (absolute_import, division, print_function,
@@ -24,16 +24,21 @@ from __future__ import (absolute_import, division, print_function,
 from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
                       next, oct, open, pow, range, round, str, super, zip)
 from collections import namedtuple
+from enum import IntEnum
 
 import numpy as np
 
 import gftools as gf
 import gftools.matrix as gfmatrix
 
-from weakref import proxy
-
 spins = ('up', 'dn')
-spin_dict = {'up': 0, 'dn': 1}
+
+
+class Spins(IntEnum):
+    """Spins 'up'/'dn' with their corresponding index."""
+    __slots__ = ()
+    up = 0
+    dn = 1
 
 
 class SpinResolved(namedtuple('Spin', spins)):
@@ -105,9 +110,9 @@ class SpinResolvedArray(np.ndarray):
         except IndexError as idx_error:  # if element is just ('up'/'dn') use the attribute
             try:
                 try:
-                    return super().__getitem__(spin_dict[element])
+                    return super().__getitem__(Spins[element])
                 except KeyError:  # convert string to index and use numpy slicing
-                    element = (spins.index(element[0]), ) + element[1:]
+                    element = (Spins[0], ) + element[1:]
                     return super().__getitem__(element)
             except:  # important to raise original error to raise out of range
                 raise idx_error
@@ -115,7 +120,7 @@ class SpinResolvedArray(np.ndarray):
     def __getattr__(self, name):
         """Return the attribute `up`/`dn`."""
         if name in spins:  # special cases
-            return self[spin_dict[name]].view(type=np.ndarray)
+            return self[Spins[name]].view(type=np.ndarray)
         raise AttributeError  # default behavior
 
     @property
@@ -339,7 +344,7 @@ class _Hubbard_Parameters(object):
 
         """
         assert z.size == self_z.shape[-1], "Same number of frequencies"
-        assert len(spins) == self_z.shape[0], "Two spin components"
+        assert len(Spins) == self_z.shape[0], "Two spin components"
         diag = np.diag_indices_from(self.t_mat)
         if diagonal:
             gf_out = SpinResolvedArray(np.zeros_like(self_z, dtype=np.complex))
@@ -348,7 +353,7 @@ class _Hubbard_Parameters(object):
                 np.zeros((self_z.shape[0], self_z.shape[0], self_z.shape[1]),
                          dtype=np.complex256)
             )
-        for sp, self_sp_z, gf_out_sp in zip(spins, self_z, gf_out):
+        for sp, self_sp_z, gf_out_sp in zip(Spins, self_z, gf_out):
             gf_0_inv = -self.hamiltonian(sigma=sigma[sp]).astype(np.complex256)
             constant = np.diagonal(gf_0_inv).copy()
             for i, zi in enumerate(z):
