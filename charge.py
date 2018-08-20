@@ -268,7 +268,7 @@ ChargeSelfconsistency = namedtuple('ChargeSelfconsistency', ['sol', 'occ', 'V'])
 
 
 @verbose_print
-def charge_self_consistency(parameters, accuracy, V0=None, kind='auto',
+def charge_self_consistency(parameters, tol, V0=None, kind='auto',
                             n_points=2**11):
     """Charge self-consistency using root-finding algorithm.
 
@@ -276,8 +276,8 @@ def charge_self_consistency(parameters, accuracy, V0=None, kind='auto',
     ----------
     parameters : prm
         `prm` object with the parameters set, determining Hamiltonian.
-    accuracy : float
-        Target accuracy of the self-consistency. Iteration stops if it is
+    tol : float
+        Target tol of the self-consistency. Iteration stops if it is
         achieved.
     V0 : ndarray, optional
         Starting value for the occupation or electrical potential.
@@ -323,28 +323,28 @@ def charge_self_consistency(parameters, accuracy, V0=None, kind='auto',
     output = {}
 
     vprint('optimize'.center(SMALL_WIDTH, '='))
-    # TODO: check accuracy of density for target accuracy
+    # TODO: check tol of density for target tol
     if kind == 'occ':
         gf_iw = params.gf0(iw_array)
         x0, __ = gt.density(gf_iw, params.onsite_energy(),
                             beta=params.beta)
         optimizer = partial(update_occupation, i_omega=iw_array, params=params,
                             out_dict=output)
-        sol = _occ_root(optimizer, occ0=x0, tol=accuracy, verbose=True)
+        sol = _occ_root(optimizer, occ0=x0, tol=tol, verbose=True)
     elif kind == 'occ_lsq':
         gf_iw = params.gf0(iw_array)
         x0, __ = gt.density(gf_iw, params.onsite_energy(),
                             beta=params.beta)
         optimizer = partial(update_occupation, i_omega=iw_array, params=params,
                             out_dict=output)
-        sol = _occ_least_square(optimizer, occ0=x0, tol=accuracy, verbose=2)
+        sol = _occ_least_square(optimizer, occ0=x0, tol=tol, verbose=2)
     elif kind == 'V':
         if V0 is None:
             V0 = np.zeros_like(parameters.mu)
             params.V[:] = V0
         optimizer = partial(update_potential, i_omega=iw_array, params=params,
                             out_dict=output)
-        sol = _pot_root(optimizer, pot0=V0, tol=accuracy, verbose=True)
+        sol = _pot_root(optimizer, pot0=V0, tol=tol, verbose=True)
     vprint("".center(SMALL_WIDTH, '='))
     vprint("Success: {opt.success}".format(opt=sol))
     vprint('optimized paramter'.center(SMALL_WIDTH, '-'))
@@ -390,4 +390,4 @@ if __name__ == '__main__':
 
     prm.assert_valid()
 
-    opt_param = broyden_self_consistency(prm, accuracy=1e-6)
+    opt_param = broyden_self_consistency(prm, tol=1e-6)
