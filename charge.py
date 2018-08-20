@@ -268,7 +268,8 @@ ChargeSelfconsistency = namedtuple('ChargeSelfconsistency', ['sol', 'occ', 'V'])
 
 
 @verbose_print
-def charge_self_consistency(parameters, accuracy, V0=None, kind='auto'):
+def charge_self_consistency(parameters, accuracy, V0=None, kind='auto',
+                            n_points=2**11):
     """Charge self-consistency using root-finding algorithm.
 
     Parameters
@@ -290,6 +291,9 @@ def charge_self_consistency(parameters, accuracy, V0=None, kind='auto'):
         Additionally a constrained (:math:`0 ≤ n_{lσ} ≤ 1`) least-square
         algorithm can be used. If the root-finding algorithms do not converge,
         this `kind` might help.
+    n_points : int, optional
+        Number of Matsubara frequencies taken into account to calculate the
+        charge.
 
     Returns
     -------
@@ -306,7 +310,7 @@ def charge_self_consistency(parameters, accuracy, V0=None, kind='auto'):
     # TODO: check against given `n` if sum gives right result
     assert kind in set(('auto', 'occ', 'occ_lsq', 'V')), "Unknown kind: {}".format(kind)
     params = parameters
-    iw_array = gt.matsubara_frequencies(np.arange(int(2**10)), beta=params.beta)
+    iw_array = gt.matsubara_frequencies(np.arange(n_points), beta=params.beta)
 
     if kind == 'auto':
         if np.any(params.U != 0):  # interacting case
