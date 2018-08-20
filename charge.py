@@ -201,9 +201,11 @@ def update_potential(V_start, i_omega, params, out_dict):
 @counter
 def print_status(x, dx):
     """Intermediate print output for `optimize.root`."""
-    print("======== " + str(print_status.count) + " =============")
-    # print(x)
-    print("--- " + str(np.linalg.norm(dx)) + " ---")
+    if print_status.count == 1:  # print heading in first iteration
+        print('_____________________')
+        print('| iteration | change ')
+    print('| {: >{width}} | {}'.format(print_status.count, np.linalg.norm(dx),
+                                       width=len('iteration')))
 
 
 def _occ_root(fun, occ0, tol, verbose=True):
