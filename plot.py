@@ -323,7 +323,7 @@ def magnetization_data_error(occ, occ_err, axis=None, **mpl_args):
         'capsize': ERR_CAPSIZE,
     }
     default_style.update(mpl_args)
-    axis.plot(x=layers, y=occ[0] - occ[1], yerr=occ_err[0] + occ_err[1],
+    axis.errorbar(x=layers, y=occ[0] - occ[1], yerr=occ_err[0] + occ_err[1],
               **default_style)
 
     axis.set_ylabel(r'$n_{l\uparrow} - n_{l\downarrow}$')
