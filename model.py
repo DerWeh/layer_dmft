@@ -202,12 +202,12 @@ class _Hubbard_Parameters(object):
             The (layer dependent) on-site energy :math:`μ + U/2 - V - σh`.
 
         """
-        onsite_energy = np.multiply.outer(sigma, self.h)
+        onsite_energy = -np.multiply.outer(sigma, self.h)
         onsite_energy += self.mu + 0.5*self.U - self.V
         if hartree is not False:
             assert (len(hartree.shape) == 1
                     if isinstance(sigma, float) else
-                    len(hartree.shape[0]) == 2 == len(hartree.shape)), \
+                    hartree.shape[0] == 2 == len(hartree.shape)), \
                 "hartree as no matching shape: {}".format(hartree.shape)
             onsite_energy -= hartree * self.U
         return onsite_energy
