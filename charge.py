@@ -126,14 +126,14 @@ def self_consistency_plain(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
 
 
 @counter
-def update_occupation(n_start, i_omega, params, out_dict):
+def update_occupation(occ_init, i_omega, params, out_dict):
     r"""Calculate new occupation by setting :math:`V_l` from the method `get_V`.
 
     This methods modifies `params.V`.
 
     Parameters
     ----------
-    n_start : SpinResolvedArray(float, float)
+    occ_init : SpinResolvedArray(float, float)
         Start occupation used to calculate new occupation. The expected shape
         is (#spins=2, #layers).
     i_omega : array(complex)
@@ -150,26 +150,26 @@ def update_occupation(n_start, i_omega, params, out_dict):
     -------
     update_occupation : array(float, float)
         The change in occupation caused by the potential obtained via `get_V`.
-        Has the same shape as `n_start`.
+        Has the same shape as `occ_init`.
 
     """
-    assert n_start.shape[0] == 2
-    assert len(n_start.shape) == 2
-    params.V[:] = out_dict['V'] = get_V(n_start.sum(axis=0) - np.average(n_start.sum(axis=0)))
-    gf_iw = out_dict['Gf'] = params.gf0(i_omega, hartree=n_start)
-    n = out_dict['occ'] = params.occ0(gf_iw, return_err=False)
-    return n - n_start
+    assert occ_init.shape[0] == 2
+    assert len(occ_init.shape) == 2
+    params.V[:] = out_dict['V'] = get_V(occ_init.sum(axis=0) - np.average(occ_init.sum(axis=0)))
+    out_dict['Gf'] = gf_iw = params.gf0(i_omega, hartree=occ_init[::-1])
+    occ = out_dict['occ'] = params.occ0(gf_iw, hartree=occ_init[::-1], return_err=False)
+    return occ - occ_init
 
 
 @counter
-def update_potential(V_start, i_omega, params, out_dict):
+def update_potential(V_init, i_omega, params, out_dict):
     r"""Calculate new potential by setting :math:`V_l` from the method `get_V`.
 
     This methods modifies `params.V`.
 
     Parameters
     ----------
-    V_start : array(float)
+    V_init : array(float)
             Starting potential used to calculate the occupation and
             subsequently the new potential.
     i_omega : array(complex)
@@ -191,11 +191,11 @@ def update_potential(V_start, i_omega, params, out_dict):
     if np.any(params.U != 0):
         warnings.warn("Only non-interacting case is considered.\n"
                       "Optimize occupation to at least include Hartree term.")
-    params.V[:] = V_start
+    params.V[:] = V_init
     out_dict['Gf'] = gf_iw = params.gf0(i_omega)
-    n = out_dict['occ'] = params.occ0(gf_iw, return_err=False)
-    V = out_dict['V'] = get_V(n.sum(axis=0) - np.average(n.sum(axis=0)))
-    return V - V_start
+    occ = out_dict['occ'] = params.occ0(gf_iw, return_err=False)
+    V = out_dict['V'] = get_V(occ.sum(axis=0) - np.average(occ.sum(axis=0)))
+    return V - V_init
 
 
 @counter
