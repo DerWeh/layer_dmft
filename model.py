@@ -321,7 +321,8 @@ class _Hubbard_Parameters(object):
                 occ0[sp.name] = occ0_
 
         if return_err is True:
-            return SpinResolvedArray(**occ0), SpinResolvedArray(**occ0_err)
+            return gf.Result(x=SpinResolvedArray(**occ0),
+                             err=SpinResolvedArray(**occ0_err))
         else:
             return SpinResolvedArray(**occ0)
 
@@ -407,7 +408,7 @@ class _Hubbard_Parameters(object):
             except AttributeError:
                 return '<not assigned>'
 
-        _str = "Hubbard model parameters:\n"
+        _str = "Hubbard model parameters:\n "
         _str += ",\n ".join(('{}={}'.format(prm, _save_get(prm))
                              for prm in self.__slots__))
         return _str
