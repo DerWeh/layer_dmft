@@ -41,7 +41,7 @@ class Spins(IntEnum):
     dn = 1
 
 
-class SpinResolved(namedtuple('Spin', spins)):
+class SpinResolved(namedtuple('Spin', ('up', 'dn'))):
     """Container class for spin resolved quantities.
     
     It is a `namedtuple` which can also be accessed like a `dict`
@@ -233,7 +233,7 @@ class Hubbard_Parameters(object):
 
         Returns
         -------
-        hamiltonian : ndarray(float), shape (N, N) or (2, N, N) 
+        hamiltonian : ndarray(float), shape (N, N) or (2, N, N)
             The Hamiltonian matrix
 
         """
@@ -264,7 +264,6 @@ class Hubbard_Parameters(object):
 
         """
         sum_str = 'ij, ...j, ji -> i...' if diagonal else 'ij, ...j, jk -> ik...'
-        diag = np.diag_indices_from(self.t_mat)
         if hartree is False:  # for common loop
             hartree = (False, False)
         else:  # first axis needs to be spin such that loop is possible

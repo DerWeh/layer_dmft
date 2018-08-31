@@ -222,7 +222,7 @@ def _occ_root(fun, occ0, tol, verbose=True):
                         # options={'nit': 3},
                         callback=print_status if verbose else None,
                         )
-    print_status.count = 0 
+    print_status.count = 0
     return sol
 
 
@@ -234,7 +234,7 @@ def _occ_least_square(fun, occ0, tol, verbose=2):
     function evaluations does not increase too much.
     For simple problems root finding seems to be more efficient.
 
-    To test: use least square for initial estimate (low accuracy) than switch 
+    To test: use least square for initial estimate (low accuracy) than switch
     to root finding algorithm.
     """
     occ0 = np.asarray(occ0)
@@ -282,7 +282,9 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
         Target tol of the self-consistency. Iteration stops if it is
         achieved.
     V0 : ndarray, optional
-        Starting value for the occupation or electrical potential.
+        Starting value for the electrical potential.
+    occ: ndarray, optional
+        Starting value for the occupation.
     kind : {'auto', 'occ', 'occ_lsq' 'V'}, optional
         Weather self-consistency is determined according to the charge 'occ' or
         the electrical potential 'V'. In the magnetic case 'V' seems to
