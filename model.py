@@ -88,9 +88,15 @@ class SpinResolvedArray(np.ndarray):
         """
         try:  # standard initialization via `np.array`
             obj = np.array(*args, **kwargs).view(cls)
-        except TypeError:  # alternative: use SpinResolvedArray(up=..., dn=...)
-            obj = np.array(object=(kwargs.pop('up'), kwargs.pop('dn')),
-                           **kwargs).view(cls)
+        except TypeError as type_err:  # alternative: use SpinResolvedArray(up=..., dn=...)
+            if {'up', 'dn'} <= kwargs.keys():
+                obj = np.array(object=(kwargs.pop('up'), kwargs.pop('dn')),
+                               **kwargs).view(cls)
+            elif set(Spins) <= kwargs.keys():
+                obj = np.array(object=(kwargs.pop(Spins.up), kwargs.pop(Spins.dn)),
+                               **kwargs).view(cls)
+            else:
+                raise TypeError("Invalid construction: " + str(type_err))
         assert obj.shape[0] == 2
         return obj
 
@@ -264,12 +270,12 @@ class _Hubbard_Parameters(object):
         else:  # first axis needs to be spin such that loop is possible
             assert hartree.shape[0] == 2
         gf_0 = {}
-        for sp, occ in zip(spins, hartree):
+        for sp, occ in zip(Spins, hartree):
             gf_0_inv = -self.hamiltonian(sigma=sigma[sp], hartree=occ)
             rv_inv, xi, rv = gfmatrix.decompose_hamiltonian(gf_0_inv)
             xi_bar = self.hilbert_transform(omega[..., np.newaxis] + xi,
                                             half_bandwidth=self.D)
-            gf_0[sp] = np.einsum(sum_str, rv, xi_bar, rv_inv)
+            gf_0[sp.name] = np.einsum(sum_str, rv, xi_bar, rv_inv)
 
         return SpinResolvedArray(**gf_0)
 
@@ -305,14 +311,14 @@ class _Hubbard_Parameters(object):
         occ0_err = {}
         if hartree is False:
             hartree = (False, False)
-        for sp, hartree_sp in zip(spins, hartree):
+        for sp, hartree_sp in zip(Spins, hartree):
             ham = self.hamiltonian(sigma=sigma[sp], hartree=hartree_sp)
             occ0_ = gf.density(gf_iw[sp], potential=-ham, beta=self.beta,
                                return_err=return_err, matrix=True)
             if return_err is True:
-                occ0[sp], occ0_err[sp] = occ0_
+                occ0[sp.name], occ0_err[sp.name] = occ0_
             else:
-                occ0[sp] = occ0_
+                occ0[sp.name] = occ0_
 
         if return_err is True:
             return SpinResolvedArray(**occ0), SpinResolvedArray(**occ0_err)
