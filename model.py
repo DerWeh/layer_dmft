@@ -139,7 +139,7 @@ sigma = SpinResolvedArray(up=0.5, dn=-0.5)
 sigma.flags.writeable = False
 
 
-class _Hubbard_Parameters(object):
+class Hubbard_Parameters(object):
     """Parameters of the (layered) Hubbard model.
     
     Attributes
@@ -423,4 +423,4 @@ hilbert_transform = {
     'chain': chain_hilbert_transform,
 }
 
-prm = _Hubbard_Parameters()
+prm = Hubbard_Parameters()
