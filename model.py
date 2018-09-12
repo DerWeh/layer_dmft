@@ -3,7 +3,7 @@
 # File              : model.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 01.08.2018
-# Last Modified Date: 17.08.2018
+# Last Modified Date: 12.09.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Module to define the layered Hubbard model in use.
 
@@ -138,6 +138,7 @@ class SpinResolvedArray(np.ndarray):
 sigma = SpinResolvedArray(up=0.5, dn=-0.5)
 sigma.flags.writeable = False
 
+diag_dic = {True: 'diag', False: 'full'}
 
 class Hubbard_Parameters(object):
     """Parameters of the (layered) Hubbard model.
@@ -263,7 +264,6 @@ class Hubbard_Parameters(object):
             The Green's function for spin up and down.
 
         """
-        sum_str = 'ij, ...j, ji -> i...' if diagonal else 'ij, ...j, jk -> ik...'
         if hartree is False:  # for common loop
             hartree = (False, False)
         else:  # first axis needs to be spin such that loop is possible
@@ -271,10 +271,10 @@ class Hubbard_Parameters(object):
         gf_0 = {}
         for sp, occ in zip(Spins, hartree):
             gf_0_inv = -self.hamiltonian(sigma=sigma[sp], hartree=occ)
-            rv_inv, xi, rv = gfmatrix.decompose_hamiltonian(gf_0_inv)
-            xi_bar = self.hilbert_transform(omega[..., np.newaxis] + xi,
+            gf_decomp = gfmatrix.decompose_hamiltonian(gf_0_inv)
+            xi_bar = self.hilbert_transform(np.add.outer(gf_decomp.xi,  omega),
                                             half_bandwidth=self.D)
-            gf_0[sp.name] = np.einsum(sum_str, rv, xi_bar, rv_inv)
+            gf_0[sp.name] = gf_decomp.reconstruct(xi_bar, kind=diag_dic[diagonal])
 
         return SpinResolvedArray(**gf_0)
 
@@ -325,16 +325,17 @@ class Hubbard_Parameters(object):
         else:
             return SpinResolvedArray(**occ0)
 
-    def gf_dmft(self, z, self_z, diagonal=True):
-        """Return local Green's function for a diagonal self-energy.
+    def gf_dmft_s(self, z, self_z, diagonal=True):
+        """Calculate the local Green's function from the self-energy `self_z`.
         
-        This corresponds to the dynamical mean-field theory.
+        This function is written for the dynamical mean-field theory, where
+        the self-energy is diagonal.
 
         Parameters
         ----------
-        z : ndarray(complex)
+        z : (N, ) ndarray(complex)
             Frequencies at which the Green's function is evaluated.
-        self_z : ndarray(complex)
+        self_z : (2, N) ndarray(complex)
             Self-energy of the green's function. The self-energy is diagonal.
             It's last axis corresponds to the frequencies `z`. The first axis
             contains the spin components and the second the diagonal matrix
@@ -364,10 +365,10 @@ class Hubbard_Parameters(object):
             constant = np.diagonal(gf_0_inv).copy()
             for i, zi in enumerate(z):
                 gf_0_inv[diag] = constant + zi - self_sp_z[..., i]
-                rv_inv, h, rv = gfmatrix.decompose_gf_omega(gf_0_inv)
-                h_bar = self.hilbert_transform(h, half_bandwidth=self.D)
-                gf_mat = gfmatrix.construct_gf_omega(rv_inv=rv_inv, diag_inv=h_bar, rv=rv)
-                gf_out_sp[..., i] = np.diagonal(gf_mat) if diagonal else gf_mat
+                gf_dec = gfmatrix.decompose_gf_omega(gf_0_inv)
+                gf_dec.apply(self.hilbert_transform, half_bandwidth=self.D)
+                gf_out_sp[..., i] = gf_dec.reconstruct(kind=diag_dic[diagonal])
+        return gf_out
         return gf_out
 
     def assert_valid(self):

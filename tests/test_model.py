@@ -74,7 +74,7 @@ def test_compare_greensfunction():
 
     iw = gftools.matsubara_frequencies(np.arange(100), beta=prm.beta)
     gf0 = prm.gf0(iw)
-    gf_dmft = prm.gf_dmft(iw, np.zeros_like(gf0))
+    gf_dmft = prm.gf_dmft_s(iw, np.zeros_like(gf0))
     assert np.allclose(gf0, gf_dmft)
 
 
