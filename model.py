@@ -115,11 +115,14 @@ class SpinResolvedArray(np.ndarray):
             return super().__getitem__(element)
         except IndexError as idx_error:  # if element is just ('up'/'dn') use the attribute
             try:
-                try:
-                    return super().__getitem__(Spins[element])
-                except KeyError:  # convert string to index and use numpy slicing
-                    element = (Spins[0], ) + element[1:]
-                    return super().__getitem__(element)
+                if isinstance(element, str):
+                    item = super().__getitem__(Spins[element])
+                elif isinstance(element, tuple):
+                    element = (Spins[element[0]], ) + element[1:]
+                    item = super().__getitem__(element)
+                else:
+                    raise IndexError("Invalid index: ", element)
+                return item.view(type=np.ndarray)
             except:  # important to raise original error to raise out of range
                 raise idx_error
 
