@@ -374,6 +374,56 @@ class Hubbard_Parameters(object):
                 gf_dec.apply(self.hilbert_transform, half_bandwidth=self.D)
                 gf_out_sp[..., i] = gf_dec.reconstruct(kind=diag_dic[diagonal])
         return gf_out
+
+    def gf_dmft_f(self, eff_atom_gf, diagonal=True):
+        """Calculate the local Green's function from the effective atomic Gf.
+        
+        This function is written for the dynamical mean-field theory, where
+        the self-energy is diagonal.
+
+        Parameters
+        ----------
+        eff_atom_gf : (2, M, N) ndarray(complex)
+            The effective atomic Green's function of the impurity problem.
+            The first axis corresponds to the spin indices, the second to the
+            layers and the last the frequencies `z`.
+        diagonal : bool, optional
+            Returns only array of diagonal elements if `diagonal` (default).
+            Else the whole matrix is returned.
+
+        Returns
+        -------
+        gf_dmft : SpinResolvedArray
+            The Green's function.
+
+        Notes
+        -----
+        The effective atomic Green's function :math:`F` is defined as
+
+        .. math:: F(z) = [z - ϵ_f - Σ(z)]^{-1},
+
+        where :math:`ϵ_f` is the onsite energy and :math:`Σ` the self-energy of
+        the impurity problem.
+
+        """
+        assert len(Spins) == eff_atom_gf.shape[0], "Two spin components"
+        diag = np.diag_indices_from(self.t_mat)
+        if diagonal:
+            gf_out = SpinResolvedArray(np.zeros_like(eff_atom_gf, dtype=np.complex))
+        else:
+            shape = eff_atom_gf.shape
+            assert len(shape) == 3  # Spin, Layer, iw
+            gf_out = SpinResolvedArray(
+                np.zeros((shape[0], shape[1], shape[1], shape[2]),
+                         dtype=np.complex256)
+            )
+        gf_0_inv = -self.t_mat.astype(np.complex)
+        for eff_atom_sp, gf_out_sp in zip(eff_atom_gf, gf_out):
+            for ii in range(eff_atom_gf.shape[-1]):
+                gf_0_inv[diag] = 1./eff_atom_sp[:, ii]
+                gf_dec = gfmatrix.decompose_gf_omega(gf_0_inv)
+                gf_dec.apply(self.hilbert_transform, half_bandwidth=self.D)
+                gf_out_sp[..., ii] = gf_dec.reconstruct(kind=diag_dic[diagonal])
         return gf_out
 
     def assert_valid(self):
