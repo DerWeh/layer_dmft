@@ -214,7 +214,7 @@ class Hubbard_Parameters(object):
         if hartree is not False:
             assert (len(hartree.shape) == 1
                     if isinstance(sigma, float) else
-                    hartree.shape[0] == 2 == len(hartree.shape)), \
+                    len(hartree) == 2 == len(hartree.shape)), \
                 "hartree as no matching shape: {}".format(hartree.shape)
             onsite_energy -= hartree * self.U
         return onsite_energy
