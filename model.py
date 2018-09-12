@@ -217,6 +217,8 @@ class Hubbard_Parameters(object):
                     len(hartree) == 2 == len(hartree.shape)), \
                 "hartree as no matching shape: {}".format(hartree.shape)
             onsite_energy -= hartree * self.U
+        if isinstance(sigma, SpinResolvedArray):
+            return onsite_energy.view(type=SpinResolvedArray)
         return onsite_energy
 
     def hamiltonian(self, sigma=sigma, hartree=False):
