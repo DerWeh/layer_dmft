@@ -445,28 +445,23 @@ class Hubbard_Parameters(object):
             )
 
     def __repr__(self):
-        def _save_get(attribue):
-            try:
-                return getattr(self, attribue)
-            except AttributeError:
-                return '<not assigned>'
-
         _str = "Hubbard model parameters: "
-        _str += ", ".join(('{}={!r}'.format(prm, _save_get(prm))
+        _str += ", ".join(('{}={!r}'.format(prm, _save_get(self, prm))
                            for prm in self.__slots__))
         return _str
 
     def __str__(self):
-        def _save_get(attribue):
-            try:
-                return getattr(self, attribue)
-            except AttributeError:
-                return '<not assigned>'
-
         _str = "Hubbard model parameters:\n "
-        _str += ",\n ".join(('{}={}'.format(prm, _save_get(prm))
+        _str += ",\n ".join(('{}={}'.format(prm, _save_get(self, prm))
                              for prm in self.__slots__))
         return _str
+
+
+def _save_get(object, attribue):
+    try:
+        return getattr(object, attribue)
+    except AttributeError:
+        return '<not assigned>'
 
 
 def chain_hilbert_transform(xi, half_bandwidth=None):
