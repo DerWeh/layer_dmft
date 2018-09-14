@@ -395,6 +395,55 @@ class Hubbard_Parameters(object):
         assert len(Spins) == eff_atom_gf.shape[0], "Two spin components"
         return self._z_dep_inversion(1./eff_atom_gf, diagonal=diagonal)
 
+    def gf_dmft_eps_s(self, eps, z, self_z, diagonal=True):
+        """Calculate the ϵ-dependent Gf from the self-energy `self_z`.
+
+        This function is written for the dynamical mean-field theory, where
+        the self-energy is diagonal.
+
+        Parameters
+        ----------
+        eps : (N_e, ) float ndarray
+            Energies :math:`ϵ` at which the Green's function is evaluated.
+        z : (N_z, ) complex ndarray
+            Frequencies at which the Green's function is evaluated.
+        self_z : (2, N_l, N_z) complex ndarray
+            Self-energy of the green's function. The self-energy is diagonal.
+            It's last axis corresponds to the frequencies `z`. The first axis
+            contains the spin components and the second the diagonal matrix
+            elements.
+        diagonal : bool, optional
+            Returns only array of diagonal elements if `diagonal` (default).
+            Else the whole matrix is returned.
+
+        Returns
+        -------
+        gf_dmft : SpinResolvedArray
+            The Green's function. If `diagonal` the shape is (2, N_l, N_e, N_z),
+            else (2, N_l, N_l, N_e, N_z).
+
+        """
+        eps = np.asarray(eps)
+        assert eps.ndim <= 1
+        assert len(self_z.shape) == 3
+        assert z.size == self_z.shape[-1]
+        kind = 'ij, je, ji -> ie' if diagonal else 'ij, je, jk -> ike'
+        shape = self_z.shape
+        if diagonal:
+            gf_out = SpinResolvedArray(
+                np.zeros((shape[0], shape[1], eps.size, shape[2]), dtype=np.complex)
+            )
+        diag_z = z + self.onsite_energy()[:, :, newaxis] - self_z
+        gf_bare_inv = -self.t_mat.astype(np.complex256)
+        diag = np.diag_indices_from(gf_bare_inv)
+        for diag_z_sp, gf_out_sp in zip(diag_z, gf_out):  # iterate spins
+            for ii in range(shape[-1]):  # iterate z-values
+                gf_bare_inv[diag] = diag_z_sp[:, ii]
+                gf_dec = gfmatrix.decompose_gf_omega(gf_bare_inv)
+                gf_dec.xi = 1./(gf_dec.xi[..., newaxis] - eps)
+                gf_out_sp[..., ii] = gf_dec.reconstruct(kind=kind)
+        return gf_out
+
     def _z_dep_inversion(self, diag_z, diagonal):
         """Calculate Gf from known inverse with diagonal elements `diag_z`.
 
