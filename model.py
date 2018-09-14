@@ -3,7 +3,7 @@
 # File              : model.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 01.08.2018
-# Last Modified Date: 12.09.2018
+# Last Modified Date: 14.09.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Module to define the layered Hubbard model in use.
 
@@ -27,6 +27,7 @@ from collections import namedtuple
 from enum import IntEnum
 
 import numpy as np
+from numpy import newaxis
 
 import gftools as gf
 import gftools.matrix as gfmatrix
@@ -243,7 +244,7 @@ class Hubbard_Parameters(object):
             The Hamiltonian matrix
 
         """
-        ham = -self.onsite_energy(sigma=sigma, hartree=hartree)[..., np.newaxis] \
+        ham = -self.onsite_energy(sigma=sigma, hartree=hartree)[..., newaxis] \
             * np.eye(*self.t_mat.shape) \
             - self.t_mat
         return ham
@@ -357,23 +358,8 @@ class Hubbard_Parameters(object):
         """
         assert z.size == self_z.shape[-1], "Same number of frequencies"
         assert len(Spins) == self_z.shape[0], "Two spin components"
-        diag = np.diag_indices_from(self.t_mat)
-        if diagonal:
-            gf_out = SpinResolvedArray(np.zeros_like(self_z, dtype=np.complex))
-        else:
-            gf_out = SpinResolvedArray(
-                np.zeros((self_z.shape[0], self_z.shape[0], self_z.shape[1]),
-                         dtype=np.complex256)
-            )
-        for sp, self_sp_z, gf_out_sp in zip(Spins, self_z, gf_out):
-            gf_0_inv = -self.hamiltonian(sigma=sigma[sp]).astype(np.complex256)
-            constant = np.diagonal(gf_0_inv).copy()
-            for i, zi in enumerate(z):
-                gf_0_inv[diag] = constant + zi - self_sp_z[..., i]
-                gf_dec = gfmatrix.decompose_gf_omega(gf_0_inv)
-                gf_dec.apply(self.hilbert_transform, half_bandwidth=self.D)
-                gf_out_sp[..., i] = gf_dec.reconstruct(kind=diag_dic[diagonal])
-        return gf_out
+        gf_inv_diag = z + self.onsite_energy()[:, :, newaxis] - self_z
+        return self._z_dep_inversion(gf_inv_diag, diagonal=diagonal)
 
     def gf_dmft_f(self, eff_atom_gf, diagonal=True):
         """Calculate the local Green's function from the effective atomic Gf.
@@ -407,21 +393,46 @@ class Hubbard_Parameters(object):
 
         """
         assert len(Spins) == eff_atom_gf.shape[0], "Two spin components"
-        diag = np.diag_indices_from(self.t_mat)
+        return self._z_dep_inversion(1./eff_atom_gf, diagonal=diagonal)
+
+    def _z_dep_inversion(self, diag_z, diagonal):
+        """Calculate Gf from known inverse with diagonal elements `diag_z`.
+
+        The inverse Green's function is given by the diagonal elements `diag_z`
+        and the off-diagonal elements `self.t_mat`. The :math:`1*ϵ` part of
+        the diagonal is not included and treated separately.
+
+        Parameters
+        ----------
+        diag_z : (2, M, N) complex ndarray
+            The diagonal elements of the inverse Green's function, with the
+            :math:`ϵ` part stripped. The dimensions are
+            (# Spins, # layers, # frequencies).
+        diagonal : bool, optional
+            Returns only array of diagonal elements if `diagonal` (default).
+            Else the whole matrix is returned.
+
+        Returns
+        -------
+        gf_out : SpinResolvedArray
+            The Green's function.
+        
+        """
+        shape = diag_z.shape
+        assert len(shape) == 3  # (# Spin, # Layer, # z)
         if diagonal:
-            gf_out = SpinResolvedArray(np.zeros_like(eff_atom_gf, dtype=np.complex))
+            gf_out = SpinResolvedArray(np.zeros_like(diag_z, dtype=np.complex))
         else:
-            shape = eff_atom_gf.shape
-            assert len(shape) == 3  # Spin, Layer, iw
             gf_out = SpinResolvedArray(
                 np.zeros((shape[0], shape[1], shape[1], shape[2]),
                          dtype=np.complex256)
             )
-        gf_0_inv = -self.t_mat.astype(np.complex)
-        for eff_atom_sp, gf_out_sp in zip(eff_atom_gf, gf_out):
-            for ii in range(eff_atom_gf.shape[-1]):
-                gf_0_inv[diag] = 1./eff_atom_sp[:, ii]
-                gf_dec = gfmatrix.decompose_gf_omega(gf_0_inv)
+        gf_bare_inv = -self.t_mat.astype(np.complex256)
+        diag = np.diag_indices_from(gf_bare_inv)
+        for diag_z_sp, gf_out_sp in zip(diag_z, gf_out):  # iterate spins
+            for ii in range(shape[-1]):  # iterate z-values
+                gf_bare_inv[diag] = diag_z_sp[:, ii]
+                gf_dec = gfmatrix.decompose_gf_omega(gf_bare_inv)
                 gf_dec.apply(self.hilbert_transform, half_bandwidth=self.D)
                 gf_out_sp[..., ii] = gf_dec.reconstruct(kind=diag_dic[diagonal])
         return gf_out
