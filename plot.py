@@ -12,6 +12,7 @@ from __future__ import (absolute_import, division, print_function,
 from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
                       next, oct, open, pow, range, round, str, super, zip)
 from itertools import cycle
+from contextlib import contextmanager
 
 import numpy as np
 import matplotlib as mpl
@@ -20,6 +21,7 @@ import matplotlib.pyplot as plt
 from wrapt import decorator
 from matplotlib.colors import LogNorm
 from matplotlib.ticker import AutoMinorLocator
+from matplotlib.backends.backend_pdf import PdfPages
 
 FILLED_MARKERS = cycle(('o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X'))
 DEFAULT_MARKER = 'x'
@@ -34,6 +36,25 @@ def default_axis(wrapped, instance, args, kwargs):
             axis = plt.gca()
         return wrapped(*args, axis=axis, **kwargs)
     return _wrapper(*args, **kwargs)
+
+
+@contextmanager
+def print_param(filename, param, **kwds):
+    with PdfPages(filename, **kwds) as pdf:
+        yield pdf
+        pdf.savefig()
+        plt.close()
+
+        fig, ax = plt.subplots()
+        ax.set_title('Hubbard parameters')
+        ax.axison = False
+        ax.text(0.05, 0.95, str(param),
+                verticalalignment='top', horizontalalignment='left',
+                transform=ax.transAxes)
+        fig.tight_layout()
+        pdf.attach_note("Hubbard model parameters")
+        pdf.savefig(fig)
+        plt.close(fig)
 
 
 @default_axis
