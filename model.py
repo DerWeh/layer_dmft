@@ -136,7 +136,7 @@ class SpinResolvedArray(np.ndarray):
     @property
     def total(self):
         """Sum of up and down spin."""
-        return self.sum(axis=0)
+        return np.sum(self.view(type=np.ndarray), axis=0)
 
 
 sigma = SpinResolvedArray(up=0.5, dn=-0.5)
