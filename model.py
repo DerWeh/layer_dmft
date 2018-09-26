@@ -291,12 +291,12 @@ class Hubbard_Parameters(object):
 
         Parameters
         ----------
-        gf_iw : SpinResolvedArray, shape (2, N, N_matsubara)
+        gf_iw : (2, N, N_matsubara) SpinResolvedArray
             The Matsubara frequency Green's function for positive frequencies
             :math:`iω_n`.  The shape corresponds to the result of `self.gf_0`
             and `self.gf_dmft`.  The last axis corresponds to the Matsubara
             frequencies.
-        hartree : False or SpinResolvedArray
+        hartree : False or (2, N) SpinResolvedArray
             If Hartree term is included. If it is `False` (default) Hartree is
             not included. Else it needs to be the electron density necessary
             to calculate the mean-field term.
@@ -341,7 +341,7 @@ class Hubbard_Parameters(object):
         ----------
         z : (N, ) ndarray(complex)
             Frequencies at which the Green's function is evaluated.
-        self_z : (2, N) ndarray(complex)
+        self_z : (2, N_l, N) ndarray(complex)
             Self-energy of the green's function. The self-energy is diagonal.
             It's last axis corresponds to the frequencies `z`. The first axis
             contains the spin components and the second the diagonal matrix
