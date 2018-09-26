@@ -516,6 +516,21 @@ class Hubbard_Parameters(object):
                              for prm in self.__slots__))
         return _str
 
+    def __copy__(self):
+        copy = self.__class__()  # create new object
+        for attr in self.__slots__:
+            attr_val = getattr(self, attr)
+            try:  # copy the attribute if it provides a copy method
+                attr_val = attr_val.copy()
+            except AttributeError:  # if not just use it as it is
+                pass
+            setattr(copy, attr, attr_val)
+        return copy
+
+    def copy(self):
+        "Return a copy of the Hubbard_Parameters object."
+        return self.__copy__()
+
 
 def _save_get(object, attribue):
     try:
