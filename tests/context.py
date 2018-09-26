@@ -9,3 +9,4 @@ path.insert(0, os.path.join(PATH, os.pardir, os.pardir))
 
 import model
 import gftools
+import scatter
