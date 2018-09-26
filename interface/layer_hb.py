@@ -217,6 +217,11 @@ def expand_layers(axis, dir_):
     return [slice(None, None), ]*axis + [imp_labels, ]
 
 
+def reduce_layers(axis, dir_):
+    imp_labels = read_imp_labels(dir_)
+    __, indices = np.unique(imp_labels, return_index=True)
+    return [slice(None, None), ]*axis + [indices, ]
+
 
 def read_gf_iw(dir_='.', expand=False):
     """Return the local Green's function from file in `dir_`.
