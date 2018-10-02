@@ -14,15 +14,42 @@ from __future__ import (absolute_import, division, print_function,
 from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
                       next, oct, open, pow, range, round, str, super, zip)
 
+import inspect
+
 import numpy as np
-from numpy import newaxis
 import scipy.linalg as la
+
+from numpy import newaxis
+from wrapt import decorator
 
 import gftools as gt
 
 from model import SpinResolvedArray, Spins
 
 
+@decorator
+def spin_resolved(wrapped, instance, args, kwds):
+    kwargs = inspect.getcallargs(wrapped, *args, **kwds)
+    spin_kwargs = {key: arg for key, arg in kwargs.items() if isinstance(arg, SpinResolvedArray)}
+    if spin_kwargs:
+        bare_args = {key: kwargs[key] for key in set(kwargs) - set(spin_kwargs)}
+        res_dict = {sp.name: wrapped(**bare_args, **{key: arg[sp] for key, arg in spin_kwargs.items()})
+                    for sp in Spins}
+        res_up = res_dict[Spins.up.name]
+        if isinstance(res_up, (tuple, list)):
+            # if multiple arguments are returned, do SpinResolvedArray for each
+            tuple_kind = type(res_up)
+            res_dn = res_dict[Spins.dn.name]
+            res = tuple_kind(SpinResolvedArray(up=res_up_i, dn=res_dn_i) for
+                             res_up_i, res_dn_i in zip(res_up, res_dn))
+            return res
+        else:
+            return SpinResolvedArray(**res_dict)
+    else:
+        return wrapped(**kwargs)
+
+
+@spin_resolved
 def t_matrix(g_hom, potential):
     r"""Calculate T-matrix from homogeneous Gf and the dynamical potential V.
 
