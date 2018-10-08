@@ -286,7 +286,7 @@ def read_self_energy_iw(dir_='.', expand=False):
     )
     prm = load_param(dir_)
     if expand:
-        return self[expand_layers(axis=1, dir_=dir_)]
+        self = self[expand_layers(axis=1, dir_=dir_)]
     self += .5 * prm.U[:, np.newaxis]
     return self
 
