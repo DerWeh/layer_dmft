@@ -3,7 +3,7 @@
 # File              : layer_hb.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 31.08.2018
-# Last Modified Date: 14.09.2018
+# Last Modified Date: 04.10.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Utilities to interact with Junya's **layer_hb** code for R-DMFT.
 
@@ -221,6 +221,14 @@ def reduce_layers(axis, dir_):
     imp_labels = read_imp_labels(dir_)
     __, indices = np.unique(imp_labels, return_index=True)
     return [slice(None, None), ]*axis + [indices, ]
+
+
+def read_iw(dir_='.'):
+    """Return the Matsubara frequencies."""
+    prm = load_param(dir_)
+    out_dir = output_dir(dir_)
+    iw_output = np.loadtxt(out_dir / GF_FILE, unpack=True)
+    return gt.matsubara_frequencies(iw_output[0], beta=prm.beta)
 
 
 def read_gf_iw(dir_='.', expand=False):
