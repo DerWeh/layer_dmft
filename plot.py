@@ -28,6 +28,46 @@ DEFAULT_MARKER = 'x'
 ERR_CAPSIZE = 2
 
 
+def err_plot(x, y, yerr, axis: mpl.axes.Axes = None, **mpl_args):
+    """Wrapper for plotting with error bars.
+
+    Decided weather to plot points with error bars or lines with shaded areas
+    depending on the number of plotted points.
+
+    Parameters
+    ----------
+    x, y : array_like
+        x and y coordinates of the data to plot.
+    yerr : array_like
+        The corresponding error of the data. Has same shape `x` and `y`.
+    axis : mpl.axes.Axes, optional
+        `mpl.axes.Axes` object used for plotting.
+    mpl_args :
+        Arguments for plotting passed to `axis.errorbar` or `axis.plot`.
+
+    """
+    axis = plt.gca() if axis is None else axis
+    x = np.asarray(x)
+    if x.size > 50:  # continuous plot
+        try:
+            ecolor = mpl_args.pop('ecolor')
+        except KeyError:  # no color defined -> try color else default
+            ecolor = mpl_args.get('color', None)
+        try:
+            fmt = mpl_args.pop('fmt')
+        except KeyError:
+            baseline, = axis.plot(x, y, **mpl_args)
+        else:
+            baseline, = axis.plot(x, y, fmt, **mpl_args)
+        if ecolor is None:
+            ecolor = baseline.get_color()
+        axis.fill_between(x, y-yerr, y+yerr, color=ecolor, alpha=.3, zorder=1)
+    else:
+        default_args = {'capsize': 2.5, 'elinewidth': .3}
+        default_args.update(mpl_args)
+        axis.errorbar(x, y, yerr=yerr, **default_args)
+
+
 @contextmanager
 def print_param(filename, param, **kwds):
     with PdfPages(filename, **kwds) as pdf:
