@@ -70,6 +70,12 @@ def err_plot(x, y, yerr, axis: mpl.axes.Axes = None, **mpl_args):
 
 @contextmanager
 def print_param(filename, param, **kwds):
+    """Context manager to save plots with the used parameters on a separate page.
+
+    `PdfPages.savefig` is used to write a multi page PDF, on the last page
+    the parameters `param` are printed.
+    """
+    # add git SHA <- version
     with PdfPages(filename, **kwds) as pdf:
         yield pdf
         pdf.savefig()
@@ -94,9 +100,9 @@ def V_data(V_l, axis=None, **mpl_args):
     ----------
     V_l : ndarray(float)
         The data of the Coulomb potential.
-    axis : matplotlib axis, optional
-        Axis on which the plot will be drawn. If `None` current one is used.
-    **mpl_args :
+    axis : mpl.axes.Axes, optional
+        `mpl.axes.Axes` object used for plotting.
+    mpl_args :
         Arguments passed to `mpl.plot`
 
     """
@@ -131,6 +137,8 @@ def V(param, layer_max=None, axis=None,
     layer_max : int or slice, optional
         The maximum layer number, up to which the occupation is plotted.
         Or slice specifying the range of plotted layers.
+    axis : mpl.axes.Axes, optional
+        `mpl.axes.Axes` object used for plotting.
     label_str : str
         The template string for the y-labels. **i** is replaced with the layer
         number. **param** can be used to print parameters of the calculation.
@@ -193,6 +201,26 @@ def _contains_error(occ):
 
 
 def occ(occ, spin='both', axis=None, **mpl_args):
+    """Plot default graph for occupation `occ`, possibly with errorbars.
+    
+    This graph is designed to work with the output of `gftools.density`.
+    If `occ` is a tuple, it is assumed that `occ[1]` contains the error.
+
+    Parameters
+    ----------
+    occ : float ndarray or tuple of ndarray
+        The data of the occupation. The expected shape is (2, layers).
+        Alternative a tuple of two corresponding arrays can be given, were the
+        second element is the error estimate.
+    spin : {'up', 'dn', 'both', 'sum'}
+        Which spin channel to plot. `occ[0]` corresponds to up and `occ[1]` to
+        down.
+    axis : mpl.axes.Axes, optional
+        `mpl.axes.Axes` object used for plotting.
+    mpl_args :
+        Arguments passed to `mpl.plot`
+
+    """
     axis = plt.gca() if axis is None else axis
     assert spin in set(('up', 'dn', 'both', 'sum'))
     error = _contains_error(occ)
@@ -203,22 +231,21 @@ def occ(occ, spin='both', axis=None, **mpl_args):
 
 
 def occ_data(occ, spin='both', axis=None, **mpl_args):
-    """Plot default graph for occupation `occ`.
+    """Plot default graph for occupation `occ` data.
     
-    This graph is designed to work with the output of `gftools.density`.
+    This graph is designed to work with the output of `gftools.density` without
+    errors.
 
     Parameters
     ----------
     occ : ndarray(float)
         The data of the occupation. The expected shape is (2, layers).
-        Alternative a tuple of two corresponding arrays can be given, were the
-        second element is the error estimate.
     spin : {'up', 'dn', 'both', 'sum'}
         Which spin channel to plot. `occ[0]` corresponds to up and `occ[1]` to
         down.
-    axis : matplotlib axis, optional
-        Axis on which the plot will be drawn. If `None` current one is used.
-    **mpl_args :
+    axis : mpl.axes.Axes, optional
+        `mpl.axes.Axes` object used for plotting.
+    mpl_args :
         Arguments passed to `mpl.plot`
 
     """
@@ -258,22 +285,21 @@ def occ_data(occ, spin='both', axis=None, **mpl_args):
 
 
 def occ_data_err(occ, occ_err, spin='both', axis=None, **mpl_args):
-    """Plot default graph for occupation `occ`.
+    """Plot default graph for occupation `occ` data with error.
 
-    This graph is designed to work with the output of `gftools.density`.
+    This graph is designed to work with the output of `gftools.density` with
+    errors.
 
     Parameters
     ----------
-    occ : ndarray(float)
-        The data of the occupation. The expected shape is (2, layers).
-        Alternative a tuple of two corresponding arrays can be given, were the
-        second element is the error estimate.
+    occ, occ_err : (2, #layers) float np.ndarray
+        The data and error of the occupation.
     spin : {'up', 'dn', 'both', 'sum'}
         Which spin channel to plot. `occ[0]` corresponds to up and `occ[1]` to
         down.
-    axis : matplotlib axis, optional
-        Axis on which the plot will be drawn. If `None` current one is used.
-    **mpl_args :
+    axis : mpl.axes.Axes, optional
+        `mpl.axes.Axes` object used for plotting.
+    mpl_args :
         Arguments passed to `mpl.plot`
 
     """
@@ -291,8 +317,8 @@ def occ_data_err(occ, occ_err, spin='both', axis=None, **mpl_args):
         'capsize': ERR_CAPSIZE,
     }
 
-    def _plot_dict(occ, occ_err):
-        return {'y': occ, 'yerr': occ_err}
+    def _plot_dict(_occ, _occ_err):
+        return {'y': _occ, 'yerr': _occ_err}
 
     data = {
         'up': _plot_dict(occ[0], occ_err[0]),
@@ -318,6 +344,20 @@ def occ_data_err(occ, occ_err, spin='both', axis=None, **mpl_args):
 
 
 def magnetization(occ, axis=None, **mpl_args):
+    """Plot the magnetization :math:`n_↑ - n_↓`, possibly with errorbars.
+
+    Parameters
+    ----------
+    occ : float ndarray or tuple of ndarray
+        The data of the occupation. The expected shape is (2, layers).
+        Alternative a tuple of two corresponding arrays can be given, were the
+        second element is the error estimate.
+    axis : mpl.axes.Axes, optional
+        `mpl.axes.Axes` object used for plotting.
+    mpl_args :
+        Arguments passed to `mpl.plot`
+
+    """
     axis = plt.gca() if axis is None else axis
     error = _contains_error(occ)
     if error:
@@ -331,12 +371,10 @@ def magnetization_data(occ, axis=None, **mpl_args):
 
     Parameters
     ----------
-    occ : ndarray(float)
-        The data of the occupation. The expected shape is (2, layers).
-    axis : matplotlib axis, optional
-        Axis on which the plot will be drawn. If `None` current one is used.
-    **mpl_args :
-        Arguments passed to `mpl.plot`
+    occ : (2, layers) float ndarray
+        The data of the occupation.
+    axis : mpl.axes.Axes, optional
+        `mpl.axes.Axes` object used for plotting.
 
     """
     axis = plt.gca() if axis is None else axis
@@ -357,11 +395,11 @@ def magnetization_data_error(occ, occ_err, axis=None, **mpl_args):
 
     Parameters
     ----------
-    occ : ndarray(float)
-        The data of the occupation. The expected shape is (2, layers).
-    axis : matplotlib axis, optional
-        Axis on which the plot will be drawn. If `None` current one is used.
-    **mpl_args :
+    occ, occ_err : (2, layers) float ndarray
+        The data of the occupation and its error.
+    axis : mpl.axes.Axes, optional
+        `mpl.axes.Axes` object used for plotting.
+    mpl_args :
         Arguments passed to `mpl.plot`
 
     """
@@ -375,7 +413,7 @@ def magnetization_data_error(occ, occ_err, axis=None, **mpl_args):
     }
     default_style.update(mpl_args)
     axis.errorbar(x=layers, y=occ[0] - occ[1], yerr=occ_err[0] + occ_err[1],
-              **default_style)
+                  **default_style)
 
     axis.set_ylabel(r'$n_{l\uparrow} - n_{l\downarrow}$')
     axis.set_xlabel('layer')
@@ -388,14 +426,14 @@ def hopping_matrix(t_mat, axis=None, log=False, **mpl_args):
 
     Parameters
     ----------
-    t_mat : ndarray(float)
+    t_mat : float ndarray
         The matrix containing the hopping elements.
-    axis : matplotlib axis, optional
-        Axis on which the plot will be drawn. If `None` current one is used.
+    axis : mpl.axes.Axes, optional
+        `mpl.axes.Axes` object used for plotting.
     log : bool, optional
         Weather the values are represented using a logarithmic scaling.
         Default is `False`.
-    **mpl_args :
+    mpl_args :
         Arguments passed to `mpl.plot`
 
     """
