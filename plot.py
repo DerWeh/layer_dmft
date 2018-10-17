@@ -28,16 +28,6 @@ DEFAULT_MARKER = 'x'
 ERR_CAPSIZE = 2
 
 
-@decorator
-def default_axis(wrapped, instance, args, kwargs):
-    """Use current axis if axis is not explicitly given."""
-    def _wrapper(*args, axis=None, **kwargs):
-        if axis is None:
-            axis = plt.gca()
-        return wrapped(*args, axis=axis, **kwargs)
-    return _wrapper(*args, **kwargs)
-
-
 @contextmanager
 def print_param(filename, param, **kwds):
     with PdfPages(filename, **kwds) as pdf:
@@ -57,7 +47,6 @@ def print_param(filename, param, **kwds):
         plt.close(fig)
 
 
-@default_axis
 def V_data(V_l, axis=None, **mpl_args):
     """Plot default graph for potential `V_l`.
 
@@ -71,6 +60,7 @@ def V_data(V_l, axis=None, **mpl_args):
         Arguments passed to `mpl.plot`
 
     """
+    axis = plt.gca() if axis is None else axis
     default_style = {
         'marker': DEFAULT_MARKER,
         'color': 'black',
@@ -82,7 +72,6 @@ def V_data(V_l, axis=None, **mpl_args):
     axis.set_xlabel('layer')
 
 
-@default_axis
 def V(param, layer_max=None, axis=None,
       label_str='{i}\n'
                 '$h={{param.h[{i}]:+.2f}}$\n'
@@ -117,6 +106,7 @@ def V(param, layer_max=None, axis=None,
         If `layer_max` is **not** `int` or `slice`.
 
     """
+    axis = plt.gca() if axis is None else axis
     V_l = param.V
     layers = np.arange(V_l.size)
     if isinstance(layer_max, int):
@@ -162,8 +152,8 @@ def _contains_error(occ):
     return error
 
 
-@default_axis
 def occ(occ, spin='both', axis=None, **mpl_args):
+    axis = plt.gca() if axis is None else axis
     assert spin in set(('up', 'dn', 'both', 'sum'))
     error = _contains_error(occ)
     if error:
@@ -172,7 +162,6 @@ def occ(occ, spin='both', axis=None, **mpl_args):
         occ_data(occ, spin=spin, axis=axis, **mpl_args)
 
 
-@default_axis
 def occ_data(occ, spin='both', axis=None, **mpl_args):
     """Plot default graph for occupation `occ`.
     
@@ -194,6 +183,7 @@ def occ_data(occ, spin='both', axis=None, **mpl_args):
 
     """
     assert spin in set(('up', 'dn', 'both', 'sum'))
+    axis = plt.gca() if axis is None else axis
     marker = {
         'up': '^',
         'dn': 'v',
@@ -227,7 +217,6 @@ def occ_data(occ, spin='both', axis=None, **mpl_args):
     axis.set_xlabel('layer')
 
 
-@default_axis
 def occ_data_err(occ, occ_err, spin='both', axis=None, **mpl_args):
     """Plot default graph for occupation `occ`.
 
@@ -249,6 +238,7 @@ def occ_data_err(occ, occ_err, spin='both', axis=None, **mpl_args):
 
     """
     assert spin in set(('up', 'dn', 'both', 'sum'))
+    axis = plt.gca() if axis is None else axis
     layers = np.arange(occ[0].size)
     marker = {
         'up': '^',
@@ -287,8 +277,8 @@ def occ_data_err(occ, occ_err, spin='both', axis=None, **mpl_args):
     axis.set_xlabel('layer')
 
 
-@default_axis
 def magnetization(occ, axis=None, **mpl_args):
+    axis = plt.gca() if axis is None else axis
     error = _contains_error(occ)
     if error:
         magnetization_data_error(occ[0], occ_err=occ[1], axis=axis, **mpl_args)
@@ -296,7 +286,6 @@ def magnetization(occ, axis=None, **mpl_args):
         magnetization_data(occ, axis=axis, **mpl_args)
 
 
-@default_axis
 def magnetization_data(occ, axis=None, **mpl_args):
     """Plot default graph for the magnetization :math:`n_↑ - n_↓`.
 
@@ -310,6 +299,7 @@ def magnetization_data(occ, axis=None, **mpl_args):
         Arguments passed to `mpl.plot`
 
     """
+    axis = plt.gca() if axis is None else axis
     default_style = {
         'color': 'black',
         'linestyle': '--',
@@ -322,7 +312,6 @@ def magnetization_data(occ, axis=None, **mpl_args):
     axis.set_xlabel('layer')
 
 
-@default_axis
 def magnetization_data_error(occ, occ_err, axis=None, **mpl_args):
     """Plot default graph for the magnetization :math:`n_↑ - n_↓`.
 
@@ -336,6 +325,7 @@ def magnetization_data_error(occ, occ_err, axis=None, **mpl_args):
         Arguments passed to `mpl.plot`
 
     """
+    axis = plt.gca() if axis is None else axis
     layers = np.arange(occ[0].size)
     default_style = {
         'color': 'black',
@@ -351,7 +341,6 @@ def magnetization_data_error(occ, occ_err, axis=None, **mpl_args):
     axis.set_xlabel('layer')
 
 
-@default_axis
 def hopping_matrix(t_mat, axis=None, log=False, **mpl_args):
     """Plot color representation of the hopping_matrix `t_mat`.
 
@@ -370,6 +359,7 @@ def hopping_matrix(t_mat, axis=None, log=False, **mpl_args):
         Arguments passed to `mpl.plot`
 
     """
+    axis = plt.gca() if axis is None else axis
     if log:  # logarithmic plot
         norm = LogNorm(vmin=t_mat[t_mat > 0].min(), vmax=t_mat.max())
         imag = axis.matshow(t_mat, norm=norm, **mpl_args)
