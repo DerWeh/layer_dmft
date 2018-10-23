@@ -3,7 +3,7 @@
 # File              : model.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 01.08.2018
-# Last Modified Date: 14.09.2018
+# Last Modified Date: 23.10.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Module to define the layered Hubbard model in use.
 
@@ -436,7 +436,6 @@ class Hubbard_Parameters(object):
         assert eps.ndim <= 1
         assert len(self_z.shape) == 3
         assert z.size == self_z.shape[-1]
-        kind = 'ij, je, ji -> ie' if diagonal else 'ij, je, jk -> ike'
         shape = self_z.shape
         if diagonal:
             gf_out = SpinResolvedArray(
@@ -450,7 +449,7 @@ class Hubbard_Parameters(object):
                 gf_bare_inv[diag] = diag_z_sp[:, ii]
                 gf_dec = gfmatrix.decompose_gf_omega(gf_bare_inv)
                 gf_dec.xi = 1./(gf_dec.xi[..., newaxis] - eps)
-                gf_out_sp[..., ii] = gf_dec.reconstruct(kind=kind)
+                gf_out_sp[..., ii] = gf_dec.reconstruct(kind=diag_dic[diagonal])
         return gf_out
 
     def _z_dep_inversion(self, diag_z, diagonal):
