@@ -479,3 +479,34 @@ def hopping_matrix(t_mat, axis=None, log=False, **mpl_args):
         for j, t_ij in enumerate(row):
             kw.update(color=textcolors[color_index[t_ij]])
             axis.text(j, i, str(t_ij), **kw)
+
+
+def matrix(mat, axis=None, log=False, **mpl_args):
+    """Plot color representation of a matrix `mat`.
+
+    Parameters
+    ----------
+    mat : float ndarray
+        The matrix containing the hopping elements.
+    axis : mpl.axes.Axes, optional
+        `mpl.axes.Axes` object used for plotting.
+    log : bool, optional
+        Weather the values are represented using a logarithmic scaling.
+        Default is `False`.
+    mpl_args :
+        Arguments passed to `mpl.plot`
+
+    """
+    axis = plt.gca() if axis is None else axis
+    if log:  # logarithmic plot
+        norm = LogNorm(vmin=mat[mat > 0].min(), vmax=mat.max())
+        imag = axis.matshow(mat, norm=norm, **mpl_args)
+    else:
+        imag = axis.matshow(mat, **mpl_args)
+    cbar = axis.figure.colorbar(imag, ax=axis)
+
+    # make white grid between matrix elements
+    axis.set_xticks(np.arange(mat.shape[1]+1)-.5, minor=True)
+    axis.set_yticks(np.arange(mat.shape[0]+1)-.5, minor=True)
+    axis.grid(which="minor", color="w", linestyle='-')
+    axis.tick_params(which="minor", top=False, left=False, bottom=False, right=False)

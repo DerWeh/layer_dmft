@@ -44,7 +44,7 @@ class Spins(IntEnum):
 
 class SpinResolved(namedtuple('Spin', ('up', 'dn'))):
     """Container class for spin resolved quantities.
-    
+
     It is a `namedtuple` which can also be accessed like a `dict`
     """
     __slots__ = ()
@@ -58,7 +58,7 @@ class SpinResolved(namedtuple('Spin', ('up', 'dn'))):
 
 class SpinResolvedArray(np.ndarray):
     """Container class for spin resolved quantities allowing array calculations.
-    
+
     It is a `ndarray` with syntactic sugar. The first axis represents spin and
     thus has to have the dimension 2.
     On top on the typical array manipulations it allows to access the first
@@ -85,6 +85,12 @@ class SpinResolvedArray(np.ndarray):
         -------
         obj : SpinResolvedArray
             The created `np.ndarray` instance
+
+        Raises
+        ------
+        TypeError
+            If the input is neither interpretable as `np.ndarray` nor as up and
+            dn spin.
 
         """
         try:  # standard initialization via `np.array`
@@ -144,9 +150,10 @@ sigma.flags.writeable = False
 
 diag_dic = {True: 'diag', False: 'full'}
 
+
 class Hubbard_Parameters(object):
     """Parameters of the (layered) Hubbard model.
-    
+
     Attributes
     ----------
     T : float
@@ -201,7 +208,7 @@ class Hubbard_Parameters(object):
         sigma : {-0.5, +0.5, sigma}
             The value of :math:`σ∈{↑,↓}` which is needed to determine the
             Zeeman energy contribution :math:`σh`.
-        hartree : False or ndarray(float)
+        hartree : False or float ndarray
             If Hartree term is included. If it is `False` (default) Hartree is
             not included. Else it needs to be the electron density necessary
             to calculate the mean-field term. Mind that for the Hartree term
@@ -209,7 +216,7 @@ class Hubbard_Parameters(object):
 
         Returns
         -------
-        onsite_energy : float or ndarray(float)
+        onsite_energy : float or float ndarray
             The (layer dependent) on-site energy :math:`μ + U/2 - V - σh`.
 
         """
@@ -233,14 +240,14 @@ class Hubbard_Parameters(object):
         sigma : {-0.5, +0.5, sigma}
             The value of :math:`σ∈{↑,↓}` which is needed to determine the
             Zeeman energy contribution :math:`σh`.
-        hartree : False or ndarray(float)
+        hartree : False or float ndarray
             If Hartree term is included. If it is `False` (default) Hartree is
             not included. Else it needs to be the electron density necessary
             to calculate the mean-field term.
 
         Returns
         -------
-        hamiltonian : ndarray(float), shape (N, N) or (2, N, N)
+        hamiltonian : (N, N) or (2, N, N) float ndarray
             The Hamiltonian matrix
 
         """
@@ -256,7 +263,7 @@ class Hubbard_Parameters(object):
         ----------
         omega : array(complex)
             Frequencies at which the Green's function is evaluated
-        hartree : False or ndarray(float)
+        hartree : False or float ndarray
             If Hartree Green's function is returned. If it is `False` (default),
             non-interacting Green's function is returned. If it is the electron
             density, the (one-shot) Hartree Green's function is returned.
@@ -278,7 +285,7 @@ class Hubbard_Parameters(object):
         for sp, occ in zip(Spins, hartree):
             gf_0_inv = -self.hamiltonian(sigma=sigma[sp], hartree=occ)
             gf_decomp = gfmatrix.decompose_hamiltonian(gf_0_inv)
-            xi_bar = self.hilbert_transform(np.add.outer(gf_decomp.xi,  omega),
+            xi_bar = self.hilbert_transform(np.add.outer(gf_decomp.xi, omega),
                                             half_bandwidth=self.D)
             gf_0[sp.name] = gf_decomp.reconstruct(xi_bar, kind=diag_dic[diagonal])
 
@@ -308,8 +315,10 @@ class Hubbard_Parameters(object):
 
         Returns
         -------
-        occ0 : SpinResolvedArray, shape (2, N)
+        occ0.x : (2, N) SpinResolvedArray
             The occupation per layer and spin
+        occ0.err : (2, N) SpinResolvedArray
+            If `return_err`, the truncation error of occupation
 
         """
         occ0 = {}
@@ -333,15 +342,15 @@ class Hubbard_Parameters(object):
 
     def gf_dmft_s(self, z, self_z, diagonal=True):
         """Calculate the local Green's function from the self-energy `self_z`.
-        
+
         This function is written for the dynamical mean-field theory, where
         the self-energy is diagonal.
 
         Parameters
         ----------
-        z : (N, ) ndarray(complex)
+        z : (N, ) complex ndarray
             Frequencies at which the Green's function is evaluated.
-        self_z : (2, N_l, N) ndarray(complex)
+        self_z : (2, N_l, N) complex ndarray
             Self-energy of the green's function. The self-energy is diagonal.
             It's last axis corresponds to the frequencies `z`. The first axis
             contains the spin components and the second the diagonal matrix
@@ -352,7 +361,7 @@ class Hubbard_Parameters(object):
 
         Returns
         -------
-        gf_dmft : SpinResolvedArray
+        gf_dmft : (2, N_l, N) SpinResolvedArray
             The Green's function.
 
         """
@@ -363,13 +372,13 @@ class Hubbard_Parameters(object):
 
     def gf_dmft_f(self, eff_atom_gf, diagonal=True):
         """Calculate the local Green's function from the effective atomic Gf.
-        
+
         This function is written for the dynamical mean-field theory, where
         the self-energy is diagonal.
 
         Parameters
         ----------
-        eff_atom_gf : (2, M, N) ndarray(complex)
+        eff_atom_gf : (2, N_l, N) complex ndarray
             The effective atomic Green's function of the impurity problem.
             The first axis corresponds to the spin indices, the second to the
             layers and the last the frequencies `z`.
@@ -379,7 +388,7 @@ class Hubbard_Parameters(object):
 
         Returns
         -------
-        gf_dmft : SpinResolvedArray
+        gf_dmft : (2, N_l, N) SpinResolvedArray
             The Green's function.
 
         Notes
@@ -453,7 +462,7 @@ class Hubbard_Parameters(object):
 
         Parameters
         ----------
-        diag_z : (2, M, N) complex ndarray
+        diag_z : (2, N_l, N) complex ndarray
             The diagonal elements of the inverse Green's function, with the
             :math:`ϵ` part stripped. The dimensions are
             (# Spins, # layers, # frequencies).
@@ -463,9 +472,9 @@ class Hubbard_Parameters(object):
 
         Returns
         -------
-        gf_out : SpinResolvedArray
+        gf_out : (2, N_l, N) SpinResolvedArray
             The Green's function.
-        
+
         """
         shape = diag_z.shape
         assert len(shape) == 3  # (# Spin, # Layer, # z)
@@ -488,7 +497,7 @@ class Hubbard_Parameters(object):
 
     def assert_valid(self):
         """Raise error if attributes are not valid.
-        
+
         Currently only the shape of the parameters is checked.
         """
         if not self.mu.size == self.h.size == self.U.size == self.V.size:
