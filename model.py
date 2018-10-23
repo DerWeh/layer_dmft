@@ -291,7 +291,7 @@ class Hubbard_Parameters(object):
 
         return SpinResolvedArray(**gf_0)
 
-    def occ0(self, gf_iw, hartree=False, return_err=True):
+    def occ0(self, gf_iw, hartree=False, return_err=True, total=False):
         """Return occupation for the non-interacting (mean-field) model.
 
         This is a wrapper around `gf.density`.
@@ -328,7 +328,7 @@ class Hubbard_Parameters(object):
         for sp, hartree_sp in zip(Spins, hartree):
             ham = self.hamiltonian(sigma=sigma[sp], hartree=hartree_sp)
             occ0_ = gf.density(gf_iw[sp], potential=-ham, beta=self.beta,
-                               return_err=return_err, matrix=True)
+                               return_err=return_err, matrix=True, total=total)
             if return_err is True:
                 occ0[sp.name], occ0_err[sp.name] = occ0_
             else:
