@@ -3,7 +3,7 @@
 # File              : layer_hb.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 31.08.2018
-# Last Modified Date: 04.10.2018
+# Last Modified Date: 23.10.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Utilities to interact with Junya's **layer_hb** code for R-DMFT.
 
@@ -218,6 +218,25 @@ def expand_layers(axis, dir_):
 
 
 def reduce_layers(axis, dir_):
+    """Reduces the `axis` corresponding to impurities to layers.
+
+    Symmetry related layers will be mapped to the same impurity, reducing the
+    size of the problem. This is the inverse of `expand_layers`.
+
+    Parameters
+    ----------
+    axis : int
+        The axis which will be expanded.
+    dir_ : str or Path
+        The directory containing the information of the mapping `imp_labels`.
+
+    Returns
+    -------
+    reduce_layers : slice
+        The slice which can be used on the data to reduce it
+        (data[`reduce_layers`]).
+
+    """
     imp_labels = read_imp_labels(dir_)
     __, indices = np.unique(imp_labels, return_index=True)
     return [slice(None, None), ]*axis + [indices, ]
@@ -238,6 +257,9 @@ def read_gf_iw(dir_='.', expand=False):
     ----------
     dir_ : str or Path
         The directory where the output of the **layer_hb** code is located.
+    expand : bool, optional
+        Performs the symmetry expansion to return data for all layers.
+        See `expand_layers`.
 
     Returns
     -------
@@ -267,6 +289,9 @@ def read_self_energy_iw(dir_='.', expand=False):
     ----------
     dir_ : str or Path
         The directory where the output of the **layer_hb** code is located.
+    expand : bool, optional
+        Performs the symmetry expansion to return data for all layers.
+        See `expand_layers`.
 
     Returns
     -------
@@ -304,6 +329,9 @@ def read_effective_gf_iw(dir_='.', expand=False):
     ----------
     dir_ : str or Path
         The directory where the output of the **layer_hb** code is located.
+    expand : bool, optional
+        Performs the symmetry expansion to return data for all layers.
+        See `expand_layers`.
 
     Returns
     -------
