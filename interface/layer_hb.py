@@ -23,6 +23,7 @@ syspath.insert(1, str(_PATH.parents[1]))
 
 import model
 import gftools as gt
+from gftools import pade as gtpade
 
 # from .. import model
 
@@ -41,6 +42,122 @@ DOS_DICT = {
     -1: model.hilbert_transform['chain'],
     1: model.hilbert_transform['bethe']
 }
+
+
+class SelfEnergy(model.SpinResolvedArray):
+    """`ndarray` wrapper for self-energies for the Hubbard model within DMFT."""
+    def __new__(cls, input_array, occupation, interaction):
+        """Create `SelfEnergy` from existing array_like input.
+
+        Adds capabilities to separate the static Hartree part from the self-
+        energy.
+
+        Parameters
+        ----------
+        input_array : (N_s, N_l, [N_w]) array_like
+            Date points for the self-energy, N_s is the number of spins,
+            N_l the number of layers and N_w the number of frequencies.
+        occupation : (N_s, N_l) array_like
+            The corresponding occupation numbers, to calculate the moments.
+        interaction : (N_l, ) array_like
+            The interaction strength Hubbard :math:`U`.
+
+        """
+        obj = np.asarray(input_array).view(cls)
+        obj._N_s, obj._N_l = obj.shape[:2]  # #Spins, #Layers
+        obj.occupation = np.asanyarray(occupation)
+        assert obj.occupation.shape == (obj._N_s, obj._N_l)
+        obj.interaction = np.asarray(interaction)
+        assert obj.interaction.shape == (obj._N_l, )
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None:
+            return
+        self.occupation = getattr(obj, 'occupation', None)
+        self.interaction = getattr(obj, 'interaction', None)
+        self._N_s = getattr(obj, '_N_s', None)
+        self._N_l = getattr(obj, '_N_l', None)
+
+    def dynamic(self):
+        """Return the dynamic part of the self-energy.
+
+        The static mean-field part is stripped.
+
+        Returns
+        -------
+        dynamic : (N_s, N_l, [N_w]) ndarray
+            The dynamic part of the self-energy
+
+        Raises
+        ------
+        IndexError
+            If the shape of the data doesn't match `occupation` and `interaction`
+            shape.
+
+        """
+        self: np.ndarray
+        if self.shape[:2] != (self._N_s, self._N_l):
+            raise IndexError(f"Mismatch of data shape {self.shape} and "
+                             f"additional information ({self._N_s}, {self._N_l})"
+                             "\n Slicing is not implemented to work with the methods")
+        static = self.static(expand=True)
+        dynamic = self.view(type=np.ndarray) - static
+        # try:
+        #     return self - static[..., np.newaxis]
+        # except ValueError as val_err:  # if N_w axis doesn't exist
+        #     if len(self.shape) != 2:
+        #         raise val_err
+        #     return self - static
+        return dynamic
+
+    def static(self, expand=False):
+        """Returns the static (Hartree mean-field) part of the self-energy.
+
+        If `expand`, the dimension for `N_w` is added"""
+        static = self.occupation[::-1] * self.interaction
+        if expand and len(self.shape) == 3:
+            static = static[..., np.newaxis]
+        return static
+
+    def pade(self, z_out, z_in, n_min: int, n_max: int, valid_z, threshold=1e-8):
+        """Perform Pade analytic continuation on the self-energy.
+
+        Parameters
+        ----------
+        z_out : complex or array_like
+            Frequencies at which the continuation will be calculated.
+        z_in : complex ndarray
+            Frequencies corresponding to the input self-energy `self`.
+        n_min, n_max : int
+            Minimum/Maximum number of frequencies considered for the averaging.
+
+        Returns
+        -------
+        pade.x : (N_s, N_l, N_z_out) ndarray
+            Analytic continuation. N_s is the number of spins, N_l the number
+            of layer, and N_z_out correspond to `z_in.size`.
+        pade.err : (N_s, N_l, N_z_out) ndarray
+            The variance corresponding to `pade.x`.
+
+        """
+        z_out = np.asarray(z_out)
+        pade_fct = np.vectorize(
+            lambda self_sl:
+            gtpade.averaged(z_out, z_in, gf_iw=self_sl, n_min=n_min, n_max=n_max,
+                            valid_z=valid_z, threshold=threshold, kind='self'),
+            otypes=(np.complex, np.complex),
+            doc=gtpade.averaged.__doc__,
+            signature='(n)->(m),(m)'
+        )
+        # Pade performs better if static part is not stripped from self-energy
+        # # static part needs to be stripped as function is for Gf not self-energy
+        # self_pade, self_pade_err = pade_fct(self.dynamic())
+        self_pade, self_pade_err = pade_fct(self)
+        self_pade = self_pade.squeeze()
+        self_pade_err = self_pade_err.squeeze()
+        # return gt.Result(x=self_pade+self.static(expand=True), err=self_pade_err)
+        return gt.Result(x=self_pade, err=self_pade_err)
 
 
 def output_dir(dir_):
@@ -282,7 +399,7 @@ def read_gf_iw(dir_='.', expand=False):
     return gf_iw
 
 
-def read_self_energy_iw(dir_='.', expand=False):
+def read_self_energy_iw(dir_='.', expand=False) -> SelfEnergy:
     """Return the local self-energy from file in `dir_`.
 
     Parameters
@@ -310,10 +427,15 @@ def read_self_energy_iw(dir_='.', expand=False):
         dn=self[1::2]
     )
     prm = load_param(dir_)
+    occ, __ = read_occ(dir_)
     if expand:
         self = self[expand_layers(axis=1, dir_=dir_)]
+    #     self_static = occ[::-1] * prm.U
+    # else:
+    #     self_static = (occ[::-1] * prm.U)[reduce_layers(axis=1, dir_=dir_)]
+    # self += self_static[..., np.newaxis]
     self += .5 * prm.U[:, np.newaxis]
-    return self
+    return SelfEnergy(self, occupation=occ, interaction=prm.U)
 
 
 def read_effective_gf_iw(dir_='.', expand=False):
