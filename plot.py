@@ -3,7 +3,7 @@
 # File              : plot.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 02.08.2018
-# Last Modified Date: 16.08.2018
+# Last Modified Date: 23.10.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Collection of standard plotting functions for this module."""
 from __future__ import (absolute_import, division, print_function,
@@ -112,7 +112,7 @@ def V_data(V_l, axis=None, **mpl_args):
         'color': 'black',
         'linestyle': '--',
     }
-    # default_style.update(mpl_args)
+    default_style.update(mpl_args)
     axis.plot(V_l, **default_style)
     axis.set_ylabel(r'$V_l$')
     axis.set_xlabel('layer')
