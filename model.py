@@ -340,6 +340,107 @@ class Hubbard_Parameters(object):
         else:
             return SpinResolvedArray(**occ0)
 
+    def occ0_eps(self, eps, hartree=False):
+        r"""Return the :math:`ϵ`-resolved occupation for the non-interacting (mean-field) model.
+
+        `eps` is the dispersion coming from the use of the density of states
+        (DOS):
+
+        .. math:: \sum_k → \int dϵ δ(ϵ_k - ϵ)
+
+        This is a wrapper around `gf.density`, there is no error returned as
+        the result is exact.
+
+        Parameters
+        ----------
+        eps : (N_e) float ndarray
+            The dispersion parameter :math:`ϵ` at which the density will be
+            evaluated.
+        hartree : False or (2, N) SpinResolvedArray
+            If Hartree term is included. If it is `False` (default) Hartree is
+            not included. Else it needs to be the electron density necessary
+            to calculate the mean-field term.
+
+        Returns
+        -------
+        occ0_eps : (2, N, N_e) SpinResolvedArray
+            The occupation per layer and spin
+
+        """
+        occ0 = {}
+        if hartree is False:
+            hartree = (False, False)
+        for sp, hartree_sp in zip(Spins, hartree):
+            ham = self.hamiltonian(sigma=sigma[sp], hartree=hartree_sp)
+            ham_decomp = gfmatrix.decompose_hamiltonian(ham)
+            fermi = gf.fermi_fct(np.add.outer(ham_decomp.xi, eps), beta=self.beta)
+            occ0[sp.name] = ham_decomp.reconstruct(xi=fermi, kind='diag')
+
+        return SpinResolvedArray(**occ0)
+
+
+    # TODO: use spinresolved wrapper. Add option to reverse arguments
+    def occ_eps(self, eps, gf_eps_iw, hartree=False, return_err=True, total=False):
+        r"""Return the :math:`ϵ`-resolved occupation.
+
+        `eps` is the dispersion coming from the use of the density of states
+        (DOS):
+
+        .. math:: \sum_k → \int dϵ δ(ϵ_k - ϵ)
+
+        This is a wrapper around `gf.density`.
+
+        Parameters
+        ----------
+        eps : (N_e) float ndarray
+            The dispersion parameter :math:`ϵ` at which the density will be
+            evaluated.
+        gf_eps_iw : (2, N_l, N_e, N_iw) SpinResolvedArray
+            The Matsubara frequency Green's function for :math:`ϵ` and positive
+            frequencies :math:`iω_n`.  The last axis corresponds to the
+            Matsubara frequencies.
+        hartree : False or (2, N_l) SpinResolvedArray
+            If Hartree term is included. If it is `False` (default) Hartree is
+            not included. Else it needs to be the electron density necessary
+            to calculate the mean-field term.
+        return_err : bool or float, optional
+            If `True` (default), the error estimate will be returned along
+            with the density.  If `return_err` is a float, a warning will
+            Warning will be issued if the error estimate is larger than
+            `return_err`. If `False`, no error estimate is calculated.
+
+        Returns
+        -------
+        occ0.x : (2, N_l, N_e) SpinResolvedArray
+            The occupation per layer and spin
+        occ0.err : (2, N_l, N_e) SpinResolvedArray
+            If `return_err`, the truncation error of occupation
+
+        """
+        occ = np.zeros(gf_eps_iw.shape[:-1]).view(type=SpinResolvedArray)
+        if return_err is True:
+            occ_err = np.zeros(gf_eps_iw.shape[:-1]).view(type=SpinResolvedArray)
+        if hartree is False:
+            hartree = (False, False)
+        for sp, hartree_sp in zip(Spins, hartree):
+            ham = self.hamiltonian(sigma=sigma[sp], hartree=hartree_sp)
+            ham_decomp = gfmatrix.decompose_hamiltonian(-ham)
+            xi_base = ham_decomp.xi.copy()
+            for ii, eps_i in enumerate(eps):
+                ham_decomp.xi[:] = xi_base - eps_i
+                occ_ = gf.density(
+                    gf_eps_iw[sp, ii], potential=ham_decomp, beta=self.beta,
+                    matrix=True, return_err=return_err, total=total
+                )
+                if return_err is True:
+                    occ[sp, ..., ii], occ_err[sp, ..., ii] = occ_
+                else:
+                    occ[sp, ..., ii] = occ_
+        if return_err is True:
+            return gf.Result(x=occ, err=occ_err)
+        else:
+            return occ
+
     def gf_dmft_s(self, z, self_z, diagonal=True):
         """Calculate the local Green's function from the self-energy `self_z`.
 
