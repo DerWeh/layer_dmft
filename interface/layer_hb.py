@@ -428,14 +428,18 @@ def read_self_energy_iw(dir_='.', expand=False) -> SelfEnergy:
     )
     prm = load_param(dir_)
     occ, __ = read_occ(dir_)
+    U = prm.U
     if expand:
         self = self[expand_layers(axis=1, dir_=dir_)]
+    else:
+        U = U[reduce_layers(axis=0, dir_=dir_)]
+        occ = occ[reduce_layers(axis=1, dir_=dir_)]
+    self += .5 * U[:, np.newaxis]
     #     self_static = occ[::-1] * prm.U
     # else:
     #     self_static = (occ[::-1] * prm.U)[reduce_layers(axis=1, dir_=dir_)]
     # self += self_static[..., np.newaxis]
-    self += .5 * prm.U[:, np.newaxis]
-    return SelfEnergy(self, occupation=occ, interaction=prm.U)
+    return SelfEnergy(self, occupation=occ, interaction=U)
 
 
 def read_effective_gf_iw(dir_='.', expand=False):
