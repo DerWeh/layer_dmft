@@ -3,7 +3,7 @@
 # File              : layer_hb.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 31.08.2018
-# Last Modified Date: 23.10.2018
+# Last Modified Date: 30.10.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Utilities to interact with Junya's **layer_hb** code for R-DMFT.
 
@@ -160,7 +160,7 @@ class SelfEnergy(model.SpinResolvedArray):
         return gt.Result(x=self_pade, err=self_pade_err)
 
 
-def output_dir(dir_):
+def output_dir(dir_) -> Path:
     """Return the output directory of the **layer_hb** code.
 
     Parameters
@@ -241,7 +241,7 @@ def find_array(fb, word, dtype=np.float):
     return get_array(find(fb, word), dtype=dtype)
 
 
-def load_param(dir_='.'):
+def load_param(dir_='.') -> model.Hubbard_Parameters:
     """Generate `model.Hubbard_Parameters` from `OUTPUT_FILE`.
 
     This reads the `OUTPUT_FILE` in `dir_`, or its subdirectory `dir_`/output
@@ -367,7 +367,7 @@ def read_iw(dir_='.'):
     return gt.matsubara_frequencies(iw_output[0], beta=prm.beta)
 
 
-def read_gf_iw(dir_='.', expand=False):
+def read_gf_iw(dir_='.', expand=False) -> model.SpinResolvedArray:
     """Return the local Green's function from file in `dir_`.
 
     Parameters
@@ -442,7 +442,7 @@ def read_self_energy_iw(dir_='.', expand=False) -> SelfEnergy:
     return SelfEnergy(self, occupation=occ, interaction=U)
 
 
-def read_effective_gf_iw(dir_='.', expand=False):
+def read_effective_gf_iw(dir_='.', expand=False) -> model.SpinResolvedArray:
     """Return the effective atomic Green's function from file in `dir_`.
 
     The effective atomic Green's function is defined
@@ -480,7 +480,7 @@ def read_effective_gf_iw(dir_='.', expand=False):
     return effective_gf_iw
 
 
-def read_occ(dir_='.'):
+def read_occ(dir_='.') -> model.SpinResolvedArray:
     """Return the layer resolved occupation from file in `dir_`.
 
     Parameters
