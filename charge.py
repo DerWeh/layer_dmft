@@ -73,7 +73,7 @@ def verbose_print(func):
 
 
 def counter(func):
-    """Counts how many times function gets executed."""
+    """Count how many times function gets executed."""
     @wraps(func)
     def wrapper(*args, **kwds):
         wrapper.count += 1
@@ -209,8 +209,8 @@ def print_status(x, dx):
 
 
 def _occ_root(fun, occ0, tol, verbose=True):
-    """Wrapper for root finding for occupation.
-    
+    """Wrap root finding for occupation.
+
     From a few test cases `krylov` performs best by far. `broyden1` and
     `df-sane` seem to also be decent options.
     """
@@ -227,8 +227,8 @@ def _occ_root(fun, occ0, tol, verbose=True):
 
 
 def _occ_least_square(fun, occ0, tol, verbose=2):
-    """Wrapper for least square optimization of occupation.
-    
+    """Wrap least square optimization of occupation.
+
     Least square allows boundaries on the possible values of the occupation.
     It seems to perform more stable, even for hard problems the number of
     function evaluations does not increase too much.
@@ -253,7 +253,7 @@ def _occ_least_square(fun, occ0, tol, verbose=2):
 
 
 def _pot_root(fun, pot0, tol, verbose=True):
-    """Wrapper for root finding of potential."""
+    """Wrap root finding of potential."""
     sol = optimize.root(fun=fun, x0=pot0,
                         # method='broyden1',
                         method='krylov',
@@ -372,7 +372,7 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
 
 
 def plot_results(occ, prm):
-    """Helper for quick visualization of the results of charge self_consistency."""
+    """Visualize the results of charge self_consistency quickly."""
     fig, axes = plt.subplots(num='occ + V', nrows=3, ncols=1, sharex=True)
     plot.occ(occ, spin='both', axis=axes[0])
     plot.magnetization(occ, axis=axes[1])

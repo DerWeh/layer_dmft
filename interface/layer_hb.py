@@ -46,6 +46,7 @@ DOS_DICT = {
 
 class SelfEnergy(model.SpinResolvedArray):
     """`ndarray` wrapper for self-energies for the Hubbard model within DMFT."""
+
     def __new__(cls, input_array, occupation, interaction):
         """Create `SelfEnergy` from existing array_like input.
 
@@ -112,9 +113,10 @@ class SelfEnergy(model.SpinResolvedArray):
         return dynamic
 
     def static(self, expand=False):
-        """Returns the static (Hartree mean-field) part of the self-energy.
+        """Return the static (Hartree mean-field) part of the self-energy.
 
-        If `expand`, the dimension for `N_w` is added"""
+        If `expand`, the dimension for `N_w` is added.
+        """
         static = self.occupation[::-1] * self.interaction
         if expand and len(self.shape) == 3:
             static = static[..., np.newaxis]

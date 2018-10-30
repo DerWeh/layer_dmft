@@ -37,6 +37,7 @@ spins = ('up', 'dn')
 
 class Spins(IntEnum):
     """Spins 'up'/'dn' with their corresponding index."""
+
     __slots__ = ()
     up = 0
     dn = 1
@@ -47,6 +48,7 @@ class SpinResolved(namedtuple('Spin', ('up', 'dn'))):
 
     It is a `namedtuple` which can also be accessed like a `dict`
     """
+
     __slots__ = ()
 
     def __getitem__(self, element):
@@ -72,6 +74,7 @@ class SpinResolvedArray(np.ndarray):
         The down spin component, equal to self[1]
 
     """
+
     __slots__ = ('up', 'dn')
 
     def __new__(cls, *args, **kwargs):
@@ -637,7 +640,7 @@ class Hubbard_Parameters(object):
         return copy
 
     def copy(self):
-        "Return a copy of the Hubbard_Parameters object."
+        """Return a copy of the Hubbard_Parameters object."""
         return self.__copy__()
 
 

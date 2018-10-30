@@ -5,7 +5,7 @@
 # Date              : 01.08.2018
 # Last Modified Date: 01.08.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
-"""Tests for the Hubbards model related building blocks."""
+"""Tests for the Hubbard model related building blocks."""
 from __future__ import absolute_import, unicode_literals
 
 import pytest

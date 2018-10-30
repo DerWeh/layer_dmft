@@ -29,7 +29,7 @@ ERR_CAPSIZE = 2
 
 
 def err_plot(x, y, yerr, axis: mpl.axes.Axes = None, **mpl_args):
-    """Wrapper for plotting with error bars.
+    """Plot graph with error bars.
 
     Decided weather to plot points with error bars or lines with shaded areas
     depending on the number of plotted points.
@@ -189,7 +189,7 @@ def V(param, layer_max=None, axis=None,
 
 
 def _contains_error(occ):
-    """Checks if `occ` is only the occupation or contains the corresponding error."""
+    """Check if `occ` is only the occupation or contains the corresponding error."""
     if isinstance(occ, tuple):
         assert len(occ) == 2, "Must be tuple (values, errors)"
         assert occ[0].shape[0] == 2, "Values must be ndarray(up, dn)"
@@ -202,7 +202,7 @@ def _contains_error(occ):
 
 def occ(occ, spin='both', axis=None, **mpl_args):
     """Plot default graph for occupation `occ`, possibly with errorbars.
-    
+
     This graph is designed to work with the output of `gftools.density`.
     If `occ` is a tuple, it is assumed that `occ[1]` contains the error.
 
@@ -232,7 +232,7 @@ def occ(occ, spin='both', axis=None, **mpl_args):
 
 def occ_data(occ, spin='both', axis=None, **mpl_args):
     """Plot default graph for occupation `occ` data.
-    
+
     This graph is designed to work with the output of `gftools.density` without
     errors.
 

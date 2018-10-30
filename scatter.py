@@ -7,7 +7,8 @@
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Scattering formalism for inhomogeneous many-body problems.
 
-Formulas are mostly from the Byczuk paper on the Friedel sum rule."""
+Formulas are mostly from the Byczuk paper on the Friedel sum rule.
+"""
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
@@ -62,7 +63,7 @@ def t_matrix(g_hom, potential):
     ----------
     g_hom : (N, N) complex ndarray
         The homogeneous Green's function for a specific frequency :math:`ω`.
-    potential : (N, N) or (N,) complex ndarray
+    potential : (N, N) complex ndarray
         The `potential`. It is in the DMFT approximation diagonal, thus it can
         also be given as a 1-dim array.
 
@@ -77,7 +78,7 @@ def t_matrix(g_hom, potential):
 
 
 def phase_shift(g_hom, potential):
-    """Calculate the Friedel sum rule.
+    r"""Calculate the Friedel sum rule.
 
     The result is equals to the change in occupation due to potential for a
     Fermi liquid system.
@@ -167,12 +168,12 @@ class PhaseShiftEps(object):
 
 
 class PhaseShiftEps_alt(object):
-    r"""Calculate ϵ-resolved phase shift using alternative formulation:
-    
+    r"""Calculate ϵ-resolved phase shift using alternative formulation.
+
     .. math:: Φ(ω)
        = sum_i \arg(\frac{1}{ξ^{hom}_i(ω)-ϵ}) - sum_i \arg(\frac{1}{ξ_i(ω)-ϵ})
        = sum_i \arg(ξ_i(ω) - ϵ) - sum_i \arg(ξ^{hom}_i(ω) - ϵ)
-    
+
     """
 
     def __init__(self, gf_inv_bar_hom, gf_inv_bar_het):
