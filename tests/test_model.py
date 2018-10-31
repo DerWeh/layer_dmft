@@ -12,19 +12,21 @@ import pytest
 import numpy as np
 
 from .context import model
+from .context import util
+SpinResolvedArray = util.SpinResolvedArray
+# from .context.util import SpinResolvedArray
 from .context import gftools
 
 
 def test_SpinResolvedArray_creation():
-    assert np.all(model.SpinResolvedArray([1, 2]) == np.array([1, 2]))
-    assert np.all(model.SpinResolvedArray(up=1, dn=2) == np.array([1, 2]))
+    assert np.all(SpinResolvedArray([1, 2]) == np.array([1, 2]))
+    assert np.all(SpinResolvedArray(up=1, dn=2) == np.array([1, 2]))
 
 
 def test_SpinResolvedArray_access():
     updata = np.arange(0, 7)
     dndata = np.arange(0, 7)
-    test_array = model.SpinResolvedArray(up=updata,
-                                         dn=dndata)
+    test_array = SpinResolvedArray(up=updata, dn=dndata)
     assert np.all(test_array.up == updata)
     assert np.all(test_array[0] == updata)
     assert np.all(test_array['up'] == updata)
@@ -40,15 +42,17 @@ def test_SpinResolvedArray_access():
 
 def test_SpinResolvedArray_elements():
     """Assert that the elements of SpinResolvedArray are regular arrays."""
-    assert type(model.SpinResolvedArray([1, 2]).up) is not model.SpinResolvedArray
-    assert type(model.SpinResolvedArray(up=np.arange(9), dn=np.arange(9)).up) \
-        is not model.SpinResolvedArray
+    assert type(SpinResolvedArray([1, 2]).up) is not SpinResolvedArray
+    spin_array = SpinResolvedArray(up=np.arange(9), dn=np.arange(9))
+    assert type(spin_array.up) is not SpinResolvedArray
+    # assert type(spin_array[slice(1, None, 1)])\
+    #     is not SpinResolvedArray
 
 
 def test_SpinResolvedArray_iteration():
     """Assert that the array is iterable."""
-    test = model.SpinResolvedArray(up=np.arange(9).reshape(3, 3),
-                                   dn=np.arange(9).reshape(3, 3))
+    test = SpinResolvedArray(up=np.arange(9).reshape(3, 3),
+                             dn=np.arange(9).reshape(3, 3))
     for i, element in enumerate(test):
         pass
 

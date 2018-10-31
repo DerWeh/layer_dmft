@@ -3,7 +3,7 @@
 # File              : model.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 01.08.2018
-# Last Modified Date: 23.10.2018
+# Last Modified Date: 31.10.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Module to define the layered Hubbard model in use.
 
@@ -23,8 +23,6 @@ from __future__ import (absolute_import, division, print_function,
 
 from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
                       next, oct, open, pow, range, round, str, super, zip)
-from collections import namedtuple
-from enum import IntEnum
 
 import numpy as np
 from numpy import newaxis
@@ -32,120 +30,7 @@ from numpy import newaxis
 import gftools as gf
 import gftools.matrix as gfmatrix
 
-spins = ('up', 'dn')
-
-
-class Spins(IntEnum):
-    """Spins 'up'/'dn' with their corresponding index."""
-
-    __slots__ = ()
-    up = 0
-    dn = 1
-
-
-class SpinResolved(namedtuple('Spin', ('up', 'dn'))):
-    """Container class for spin resolved quantities.
-
-    It is a `namedtuple` which can also be accessed like a `dict`
-    """
-
-    __slots__ = ()
-
-    def __getitem__(self, element):
-        try:
-            return super().__getitem__(element)
-        except TypeError:
-            return getattr(self, element)
-
-
-class SpinResolvedArray(np.ndarray):
-    """Container class for spin resolved quantities allowing array calculations.
-
-    It is a `ndarray` with syntactic sugar. The first axis represents spin and
-    thus has to have the dimension 2.
-    On top on the typical array manipulations it allows to access the first
-    axis with the indices 'up' and 'dn'.
-
-    Attributes
-    ----------
-    up :
-        The up spin component, equal to self[0]
-    dn :
-        The down spin component, equal to self[1]
-
-    """
-
-    __slots__ = ('up', 'dn')
-
-    def __new__(cls, *args, **kwargs):
-        """Create the object using `np.array` function.
-
-        up, dn : (optional)
-            If the keywords `up` *and* `dn` are present, `numpy` uses these
-            two parameters to construct the array.
-
-        Returns
-        -------
-        obj : SpinResolvedArray
-            The created `np.ndarray` instance
-
-        Raises
-        ------
-        TypeError
-            If the input is neither interpretable as `np.ndarray` nor as up and
-            dn spin.
-
-        """
-        try:  # standard initialization via `np.array`
-            obj = np.array(*args, **kwargs).view(cls)
-        except TypeError as type_err:  # alternative: use SpinResolvedArray(up=..., dn=...)
-            if {'up', 'dn'} <= kwargs.keys():
-                obj = np.array(object=(kwargs.pop('up'), kwargs.pop('dn')),
-                               **kwargs).view(cls)
-            elif set(Spins) <= kwargs.keys():
-                obj = np.array(object=(kwargs.pop(Spins.up), kwargs.pop(Spins.dn)),
-                               **kwargs).view(cls)
-            else:
-                raise TypeError("Invalid construction: " + str(type_err))
-        assert obj.shape[0] == 2
-        return obj
-
-    def __getitem__(self, element):
-        """Expand `np.ndarray`'s version to handle string indices 'up'/'dn'.
-
-        Regular slices will be handle by `numpy`, additionally the following can
-        be handled:
-
-            1. If the element is in `spins` ('up', 'dn').
-            2. If the element's first index is in `spins` and the rest is a
-               regular slice. The usage of this is however discouraged.
-
-        """
-        try:  # use default np.ndarray method
-            return super().__getitem__(element)
-        except IndexError as idx_error:  # if element is just ('up'/'dn') use the attribute
-            try:
-                if isinstance(element, str):
-                    item = super().__getitem__(Spins[element])
-                elif isinstance(element, tuple):
-                    element = (Spins[element[0]], ) + element[1:]
-                    item = super().__getitem__(element)
-                else:
-                    raise IndexError("Invalid index: ", element)
-                return item.view(type=np.ndarray)
-            except:  # important to raise original error to raise out of range
-                raise idx_error
-
-    def __getattr__(self, name):
-        """Return the attribute `up`/`dn`."""
-        if name in spins:  # special cases
-            return self[Spins[name]].view(type=np.ndarray)
-        raise AttributeError  # default behavior
-
-    @property
-    def total(self):
-        """Sum of up and down spin."""
-        return np.sum(self.view(type=np.ndarray), axis=0)
+from .util import Spins, SpinResolvedArray
 
 
 sigma = SpinResolvedArray(up=0.5, dn=-0.5)

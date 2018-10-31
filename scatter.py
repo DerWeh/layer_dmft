@@ -25,7 +25,7 @@ from wrapt import decorator
 
 import gftools as gt
 
-from model import SpinResolvedArray, Spins
+from util import SpinResolvedArray, Spins
 
 
 @decorator

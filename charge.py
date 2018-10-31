@@ -27,7 +27,8 @@ import plot
 import gftools as gt
 import capacitor_formula
 
-from model import prm, sigma, SpinResolvedArray, spins
+import model
+from model import prm, sigma, Spins
 
 VERBOSE = True
 SMALL_WIDTH = 50

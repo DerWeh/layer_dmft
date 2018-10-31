@@ -3,7 +3,7 @@
 # File              : layer_hb.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 31.08.2018
-# Last Modified Date: 30.10.2018
+# Last Modified Date: 31.10.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Utilities to interact with Junya's **layer_hb** code for R-DMFT.
 
@@ -22,8 +22,8 @@ _PATH = Path(__file__).absolute()
 syspath.insert(1, str(_PATH.parents[1]))
 
 import model
+from util import SelfEnergy, SpinResolvedArray
 import gftools as gt
-from gftools import pade as gtpade
 
 # from .. import model
 
@@ -42,124 +42,6 @@ DOS_DICT = {
     -1: model.hilbert_transform['chain'],
     1: model.hilbert_transform['bethe']
 }
-
-
-class SelfEnergy(model.SpinResolvedArray):
-    """`ndarray` wrapper for self-energies for the Hubbard model within DMFT."""
-
-    def __new__(cls, input_array, occupation, interaction):
-        """Create `SelfEnergy` from existing array_like input.
-
-        Adds capabilities to separate the static Hartree part from the self-
-        energy.
-
-        Parameters
-        ----------
-        input_array : (N_s, N_l, [N_w]) array_like
-            Date points for the self-energy, N_s is the number of spins,
-            N_l the number of layers and N_w the number of frequencies.
-        occupation : (N_s, N_l) array_like
-            The corresponding occupation numbers, to calculate the moments.
-        interaction : (N_l, ) array_like
-            The interaction strength Hubbard :math:`U`.
-
-        """
-        obj = np.asarray(input_array).view(cls)
-        obj._N_s, obj._N_l = obj.shape[:2]  # #Spins, #Layers
-        obj.occupation = np.asanyarray(occupation)
-        assert obj.occupation.shape == (obj._N_s, obj._N_l)
-        obj.interaction = np.asarray(interaction)
-        assert obj.interaction.shape == (obj._N_l, )
-        return obj
-
-    def __array_finalize__(self, obj):
-        if obj is None:
-            return
-        self.occupation = getattr(obj, 'occupation', None)
-        self.interaction = getattr(obj, 'interaction', None)
-        self._N_s = getattr(obj, '_N_s', None)
-        self._N_l = getattr(obj, '_N_l', None)
-
-    def dynamic(self):
-        """Return the dynamic part of the self-energy.
-
-        The static mean-field part is stripped.
-
-        Returns
-        -------
-        dynamic : (N_s, N_l, [N_w]) ndarray
-            The dynamic part of the self-energy
-
-        Raises
-        ------
-        IndexError
-            If the shape of the data doesn't match `occupation` and `interaction`
-            shape.
-
-        """
-        self: np.ndarray
-        if self.shape[:2] != (self._N_s, self._N_l):
-            raise IndexError(f"Mismatch of data shape {self.shape} and "
-                             f"additional information ({self._N_s}, {self._N_l})"
-                             "\n Slicing is not implemented to work with the methods")
-        static = self.static(expand=True)
-        dynamic = self.view(type=np.ndarray) - static
-        # try:
-        #     return self - static[..., np.newaxis]
-        # except ValueError as val_err:  # if N_w axis doesn't exist
-        #     if len(self.shape) != 2:
-        #         raise val_err
-        #     return self - static
-        return dynamic
-
-    def static(self, expand=False):
-        """Return the static (Hartree mean-field) part of the self-energy.
-
-        If `expand`, the dimension for `N_w` is added.
-        """
-        static = self.occupation[::-1] * self.interaction
-        if expand and len(self.shape) == 3:
-            static = static[..., np.newaxis]
-        return static
-
-    def pade(self, z_out, z_in, n_min: int, n_max: int, valid_z, threshold=1e-8):
-        """Perform Pade analytic continuation on the self-energy.
-
-        Parameters
-        ----------
-        z_out : complex or array_like
-            Frequencies at which the continuation will be calculated.
-        z_in : complex ndarray
-            Frequencies corresponding to the input self-energy `self`.
-        n_min, n_max : int
-            Minimum/Maximum number of frequencies considered for the averaging.
-
-        Returns
-        -------
-        pade.x : (N_s, N_l, N_z_out) ndarray
-            Analytic continuation. N_s is the number of spins, N_l the number
-            of layer, and N_z_out correspond to `z_in.size`.
-        pade.err : (N_s, N_l, N_z_out) ndarray
-            The variance corresponding to `pade.x`.
-
-        """
-        z_out = np.asarray(z_out)
-        pade_fct = np.vectorize(
-            lambda self_sl:
-            gtpade.averaged(z_out, z_in, gf_iw=self_sl, n_min=n_min, n_max=n_max,
-                            valid_z=valid_z, threshold=threshold, kind='self'),
-            otypes=(np.complex, np.complex),
-            doc=gtpade.averaged.__doc__,
-            signature='(n)->(m),(m)'
-        )
-        # Pade performs better if static part is not stripped from self-energy
-        # # static part needs to be stripped as function is for Gf not self-energy
-        # self_pade, self_pade_err = pade_fct(self.dynamic())
-        self_pade, self_pade_err = pade_fct(self)
-        self_pade = self_pade.squeeze()
-        self_pade_err = self_pade_err.squeeze()
-        # return gt.Result(x=self_pade+self.static(expand=True), err=self_pade_err)
-        return gt.Result(x=self_pade, err=self_pade_err)
 
 
 def output_dir(dir_) -> Path:
@@ -369,7 +251,7 @@ def read_iw(dir_='.'):
     return gt.matsubara_frequencies(iw_output[0], beta=prm.beta)
 
 
-def read_gf_iw(dir_='.', expand=False) -> model.SpinResolvedArray:
+def read_gf_iw(dir_='.', expand=False) -> SpinResolvedArray:
     """Return the local Green's function from file in `dir_`.
 
     Parameters
@@ -382,7 +264,7 @@ def read_gf_iw(dir_='.', expand=False) -> model.SpinResolvedArray:
 
     Returns
     -------
-    gf_iw : (2, N_l, N_iw) model.SpinResolvedArray
+    gf_iw : (2, N_l, N_iw) util.SpinResolvedArray
         The local Green's function. The shape of the array is
         (#spins, #layers, #Matsubara frequencies).
 
@@ -392,7 +274,7 @@ def read_gf_iw(dir_='.', expand=False) -> model.SpinResolvedArray:
     gf_iw_real = gf_output[1::IM_STEP]
     gf_iw_imag = gf_output[2::IM_STEP]
     gf_iw = gf_iw_real + 1j*gf_iw_imag
-    gf_iw = model.SpinResolvedArray(
+    gf_iw = SpinResolvedArray(
         up=gf_iw[0::2],
         dn=gf_iw[1::2]
     )
@@ -414,7 +296,7 @@ def read_self_energy_iw(dir_='.', expand=False) -> SelfEnergy:
 
     Returns
     -------
-    self_iw : (2, N_l, N_iw) model.SpinResolvedArray
+    self_iw : (2, N_l, N_iw) util.SpinResolvedArray
         The self-energy. The shape of the array is
         (#spins, #layers, #Matsubara frequencies).
 
@@ -424,7 +306,7 @@ def read_self_energy_iw(dir_='.', expand=False) -> SelfEnergy:
     self_real = gf_output[1::IM_STEP]
     self_imag = gf_output[2::IM_STEP]
     self = self_real + 1j*self_imag
-    self = model.SpinResolvedArray(
+    self = SpinResolvedArray(
         up=self[0::2],
         dn=self[1::2]
     )
@@ -444,7 +326,7 @@ def read_self_energy_iw(dir_='.', expand=False) -> SelfEnergy:
     return SelfEnergy(self, occupation=occ, interaction=U)
 
 
-def read_effective_gf_iw(dir_='.', expand=False) -> model.SpinResolvedArray:
+def read_effective_gf_iw(dir_='.', expand=False) -> SpinResolvedArray:
     """Return the effective atomic Green's function from file in `dir_`.
 
     The effective atomic Green's function is defined
@@ -463,7 +345,7 @@ def read_effective_gf_iw(dir_='.', expand=False) -> model.SpinResolvedArray:
 
     Returns
     -------
-    effective_gf_iw : (2, N_l, N_iw) model.SpinResolvedArray
+    effective_gf_iw : (2, N_l, N_iw) util.SpinResolvedArray
         The effective atomic Green's function. The shape of the array is
         (# spins, # layers, # Matsubara frequencies).
 
@@ -473,7 +355,7 @@ def read_effective_gf_iw(dir_='.', expand=False) -> model.SpinResolvedArray:
     effective_gf_iw_real = dmft_output[5::STEP]
     effective_gf_iw_imag = dmft_output[6::STEP]
     effective_gf_iw = effective_gf_iw_real + 1j*effective_gf_iw_imag
-    effective_gf_iw = model.SpinResolvedArray(
+    effective_gf_iw = SpinResolvedArray(
         up=effective_gf_iw[0::2],
         dn=effective_gf_iw[1::2]
     )
@@ -482,7 +364,7 @@ def read_effective_gf_iw(dir_='.', expand=False) -> model.SpinResolvedArray:
     return effective_gf_iw
 
 
-def read_occ(dir_='.') -> model.SpinResolvedArray:
+def read_occ(dir_='.') -> SpinResolvedArray:
     """Return the layer resolved occupation from file in `dir_`.
 
     Parameters
@@ -492,21 +374,21 @@ def read_occ(dir_='.') -> model.SpinResolvedArray:
 
     Returns
     -------
-    occ.x : (2, N_l) model.SpinResolvedArray
+    occ.x : (2, N_l) util.SpinResolvedArray
         The layer resolved occupation. The shape of the array is
         (# spins, # layers).
-    occ.err : (2, N_l) model.SpinResolvedArray
+    occ.err : (2, N_l) util.SpinResolvedArray
         The statistical error corresponding to `occ.x` from Monte Carlo.
 
     """
     out_dir = output_dir(dir_)
     layer_output = np.loadtxt(out_dir / OCC_FILE, unpack=True)
     # 0: layer 1: up 2: up_err 3: dn 4: dn_err
-    occ = model.SpinResolvedArray(
+    occ = SpinResolvedArray(
         up=layer_output[1],
         dn=layer_output[3]
     )
-    occ_err = model.SpinResolvedArray(
+    occ_err = SpinResolvedArray(
         up=layer_output[2],
         dn=layer_output[4]
     )
