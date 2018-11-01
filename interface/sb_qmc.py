@@ -2,18 +2,25 @@
 import textwrap
 
 from pathlib import Path
+from datetime import date
 
 import numpy as np
 
 import gftools as gt
 
 from ..model import Hubbard_Parameters, sigma
+from ..util import SpinResolvedArray
 
-N_IW = 1024
+N_IW = 1024  # TODO: scan code for proper number
 
 
 OUTPUT_DIR = "output"
 INIT_FILE = "sb_qmc_param.init"
+GF_IW_FILE = "00-Gf_omega.dat"
+GF_TAU_FILE = "00-Gf_tau.dat"
+SELF_FILE = "00-self.dat"
+
+IM_STEP = 2
 
 PARAM_TEMPLATE = textwrap.dedent(
     r"""    #
@@ -107,7 +114,6 @@ def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, dir_='.'):
     h_l = prm.h[layer]
     assert on_site_e.up - sigma.up*h_l == on_site_e.dn - sigma.dn*h_l
     hybrid_iw = iw + on_site_e[:, np.newaxis] - self_iw - 1./gf_iw
-    # -2.07144315891833e-01  << 21
     digits = 14
     fill = 2 + 2 + digits + 4
     header = (
@@ -124,3 +130,164 @@ def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, dir_='.'):
                                          ef=-on_site_e.up + sigma.up*h_l,
                                          h=h_l)
     (dir_ / INIT_FILE).write_text(init_content)
+
+
+def output_dir(dir_) -> Path:
+    """Return the output directory of the **spinboson** code.
+
+    Parameters
+    ----------
+    dir_ : str or Path
+        Output directory is calculated relative to `dir_`
+
+    Returns
+    -------
+    output_dir : Path
+        The output directory.
+
+    Raises
+    ------
+    ValueError
+        If no output directory can be found in `dir_`.
+
+    """
+    dir_path = Path(dir_).expanduser()
+    if dir_path.name == OUTPUT_DIR:  # already in output directory
+        return dir_path
+    # descend into output directory
+    dir_path /= OUTPUT_DIR
+    if not dir_path.is_dir():
+        raise ValueError("Non output directory can be found in " + str(dir_))
+    return dir_path
+
+
+def read_tau(dir_='.') -> np.ndarray:
+    """Return the imaginary time mesh from file in `dir_`.
+
+    Parameters
+    ----------
+    dir_ : str or Path
+        The directory where the output of the **spinboson** code is located.
+
+    Returns
+    -------
+    tau : (N_tau) np.ndarray
+        The imaginary time mesh.
+
+    """
+    out_dir = output_dir(dir_)
+    tau = np.loadtxt(out_dir / GF_TAU_FILE, unpack=True, usecols=0)
+    assert tau.ndim == 1
+    return tau
+
+
+def read_gf_tau(dir_='.') -> gt.Result:
+    """Return the imaginary time Green's function from file in `dir_`.
+
+    Parameters
+    ----------
+    dir_ : str or Path
+        The directory where the output of the **spinboson** code is located.
+
+    Returns
+    -------
+    gf_tau.x, gf_tau_err : (2, N_tau) util.SpinResolvedArray
+        The imaginary time Green's function and its error.
+        The shape of the arrays is (#spins, # imaginary time points).
+
+    """
+    out_dir = output_dir(dir_)
+    gf_output = np.loadtxt(out_dir / GF_TAU_FILE, unpack=True, usecols=range(1, 5))
+    assert gf_output.shape[0] == 4
+    gf_tau = gf_output[::2].view(type=SpinResolvedArray)
+    gf_tau_err = gf_output[1::2].view(type=SpinResolvedArray)
+    return gt.Result(x=gf_tau, err=gf_tau_err)
+
+
+def read_gf_x_self_tau(dir_='.') -> SpinResolvedArray:
+    """Return the convolution (Gf x self energy)(tau) from file in `dir_`.
+
+    Parameters
+    ----------
+    dir_ : str or Path
+        The directory where the output of the **spinboson** code is located.
+
+    Returns
+    -------
+    gf_x_self_tau : (2, N_tau) util.SpinResolvedArray
+        The convolution of Green's function and self energy as a function of
+        imaginary time tau.
+        The shape of the arrays is (#spins, # imaginary time points).
+
+    """
+    out_dir = output_dir(dir_)
+    gf_output = np.loadtxt(out_dir / GF_TAU_FILE, unpack=True, usecols=(5, 6))
+    assert gf_output.shape[0] == 2
+    gf_x_self_tau = gf_output.view(type=SpinResolvedArray)
+    return gf_x_self_tau
+
+
+def read_gf_iw(dir_='.') -> SpinResolvedArray:
+    """Return the Matsubara Green's function from file in `dir_`.
+
+    Parameters
+    ----------
+    dir_ : str or Path
+        The directory where the output of the **spinboson** code is located.
+
+    Returns
+    -------
+    gf_iw : (2, N_iw) util.SpinResolvedArray
+        The Matsubara Green's function. The shape of the array is
+        (#spins, #Matsubara frequencies).
+
+    """
+    out_dir = output_dir(dir_)
+    gf_output = np.loadtxt(out_dir / GF_IW_FILE, unpack=True)
+    gf_iw_real = gf_output[1::IM_STEP]
+    gf_iw_imag = gf_output[2::IM_STEP]
+    gf_iw = gf_iw_real + 1j*gf_iw_imag
+    assert gf_iw.shape[0] == 2
+    gf_iw = gf_iw.view(type=SpinResolvedArray)
+    return gf_iw
+
+
+def read_self_energy_iw(dir_='.') -> SpinResolvedArray:
+    """Return the self-energy from file in `dir_`.
+
+    Parameters
+    ----------
+    dir_ : str or Path
+        The directory where the output of the **spinboson** code is located.
+
+    Returns
+    -------
+    self_iw : (2, N_iw) util.SpinResolvedArray
+        The self-energy. The shape of the array is
+        (#spins, #Matsubara frequencies).
+
+    """
+    out_dir = output_dir(dir_)
+    gf_output = np.loadtxt(out_dir / SELF_FILE, unpack=True, usecols=range(5, 9))
+    self_real = gf_output[0::IM_STEP]
+    self_imag = gf_output[1::IM_STEP]
+    self_iw = self_real + 1j*self_imag
+    assert self_iw.shape[0] == 2
+    self_iw = self_iw.view(type=SpinResolvedArray)
+    return self_iw
+
+
+def save_data(dir_='.', name='sb', compress=False):
+    """Read the **spinboson** data and save it as numpy arrays."""
+    dir_ = Path(dir_).expanduser()
+    dir_.mkdir(exist_ok=True)
+    data = {}
+    data['tau'] = read_tau(dir_)
+    data['gf_tau'], data['gf_tau_err'] = read_gf_tau(dir_)
+    data['gf_x_self_tau'] = read_gf_x_self_tau(dir_)
+    data['gf_iw'] = read_gf_iw(dir_)
+    data['self_energy_iw'] = read_self_energy_iw(dir_)
+    data['misc'] = np.genfromtxt(output_dir(dir_)/'xx.dat', missing_values='?')
+    save_method = np.savez_compressed if compress else np.savez
+    name = date.today().isoformat() + '_' + name
+    save_method(dir_/name, **data)
