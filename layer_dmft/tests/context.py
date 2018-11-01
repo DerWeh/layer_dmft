@@ -7,7 +7,11 @@ from sys import path
 PATH = os.path.abspath(os.path.dirname(__file__))
 path.insert(0, os.path.join(PATH, os.pardir, os.pardir))
 
-import model
-import util
+print(os.path.join(PATH, os.pardir, os.pardir))
+
+print(path)
+from layer_dmft import model, util, scatter
+# import model
+# import util
 import gftools
-import scatter
+# import scatter

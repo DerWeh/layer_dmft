@@ -23,12 +23,12 @@ import matplotlib.pyplot as plt
 
 from scipy import optimize
 
-import plot
+from . import plot
+from .capacitor_formula import potential_energy_vector
 import gftools as gt
-import capacitor_formula
 
-import model
-from model import prm, sigma, Spins
+from . import model
+from .model import prm
 
 VERBOSE = True
 SMALL_WIDTH = 50
