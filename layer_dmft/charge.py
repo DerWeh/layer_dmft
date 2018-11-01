@@ -3,7 +3,7 @@
 # File              : charge.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 02.08.2018
-# Last Modified Date: 16.08.2018
+# Last Modified Date: 01.11.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # encoding: utf-8
 """Handles the charge self-consistency loop of the combined scheme."""
@@ -77,12 +77,56 @@ def counter(func):
     return wrapper
 
 
-# FIXME
-layers = np.arange(40)
-# define get_V
-e_schot = np.ones_like(layers) * 0.4
-get_V = partial(capacitor_formula.potential_energy_vector,
-                e_schot=e_schot, layer_labels=layers)
+def attribute(**kwds):
+    def wrapper(func):
+        for key, value in kwds.items():
+            setattr(func, key, value)
+        return func
+    return wrapper
+
+
+@attribute(call=lambda delta_ni: 0)
+def get_V(delta_ni):
+    """Calculate the mean-field Coulomb potential form Poisson equations.
+
+    The functions needs to be set by `set_getV` before use.
+
+    Parameters
+    ----------
+    delta_ni : (N_l, ) float np.ndarray
+        The difference in occupation with respect to the bulk value.
+        Shape is (#layers, ).
+
+    Returns
+    -------
+    get_V : (N_l, ) float np.ndarray or 0
+        The mean-field Coulomb potential.
+
+    """
+    return get_V.call(delta_ni)
+
+
+def set_getV(e_schot=None):
+    """Configure the method `get_V` to calculate the mean-field Coulomb potential.
+
+    If `e_schot is None`, the method simply returns `0`, there is no potential.
+    Else the potential will be determined using the `potential_energy_vector`
+    function.
+
+    Parameters
+    ----------
+    e_schot : (N_l, ) array_like, optional
+        The Schotkey constant, it incorporates lattice constant, electrical
+        permeability and other constants.
+
+    """
+    if e_schot is None:
+        get_V.call = lambda delta_ni: 0
+    else:
+        e_schot = np.array(e_schot)
+        assert e_schot.ndim == 1
+        layers = np.arange(e_schot.size)
+        get_V.call = partial(potential_energy_vector, e_schot=e_schot, layer_labels=layers)
 
 
 def self_consistency_plain(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
