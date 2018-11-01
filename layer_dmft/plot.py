@@ -6,11 +6,6 @@
 # Last Modified Date: 23.10.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Collection of standard plotting functions for this module."""
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
-from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
-                      next, oct, open, pow, range, round, str, super, zip)
 from itertools import cycle
 from contextlib import contextmanager
 
@@ -18,7 +13,6 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from wrapt import decorator
 from matplotlib.colors import LogNorm
 from matplotlib.ticker import AutoMinorLocator
 from matplotlib.backends.backend_pdf import PdfPages

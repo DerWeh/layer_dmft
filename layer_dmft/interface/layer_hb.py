@@ -9,24 +9,14 @@
 
 This module contains function to read the output, and run the code.
 """
-from __future__ import division, print_function, unicode_literals
-
 from pathlib import Path
 
 import numpy as np
 
-# FIXME
-from sys import path as syspath
-
-_PATH = Path(__file__).absolute()
-syspath.insert(1, str(_PATH.parents[1]))
-
-import model
-from util import SelfEnergy, SpinResolvedArray
 import gftools as gt
 
-# from .. import model
-
+from .. import model
+from ..util import SelfEnergy, SpinResolvedArray
 
 DMFT_FILE = "00-dmft.dat"
 GF_FILE = "00-G_omega.dat"

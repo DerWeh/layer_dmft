@@ -18,20 +18,14 @@ Most likely you want to import this module like::
     from model import prm, sigma, Spins
 
 """
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
-from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
-                      next, oct, open, pow, range, round, str, super, zip)
-
 import numpy as np
+
 from numpy import newaxis
 
 import gftools as gf
 import gftools.matrix as gfmatrix
 
-from .util import Spins, SpinResolvedArray
-
+from .util import SpinResolvedArray, Spins
 
 sigma = SpinResolvedArray(up=0.5, dn=-0.5)
 sigma.flags.writeable = False
@@ -39,7 +33,7 @@ sigma.flags.writeable = False
 diag_dic = {True: 'diag', False: 'full'}
 
 
-class Hubbard_Parameters(object):
+class Hubbard_Parameters:
     """Parameters of the (layered) Hubbard model.
 
     Attributes
@@ -265,7 +259,6 @@ class Hubbard_Parameters(object):
             occ0[sp.name] = ham_decomp.reconstruct(xi=fermi, kind='diag')
 
         return SpinResolvedArray(**occ0)
-
 
     # TODO: use spinresolved wrapper. Add option to reverse arguments
     def occ_eps(self, eps, gf_eps_iw, hartree=False, return_err=True, total=False):
@@ -529,9 +522,9 @@ class Hubbard_Parameters(object):
         return self.__copy__()
 
 
-def _save_get(object, attribue):
+def _save_get(object_, attribue):
     try:
-        return getattr(object, attribue)
+        return getattr(object_, attribue)
     except AttributeError:
         return '<not assigned>'
 
@@ -539,6 +532,7 @@ def _save_get(object, attribue):
 def chain_hilbert_transform(xi, half_bandwidth=None):
     """Hilbert transform for the isolated 1D chain."""
     return 1./xi
+
 
 hilbert_transform = {
     'bethe': gf.bethe_hilbert_transfrom,

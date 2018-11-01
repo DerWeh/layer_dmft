@@ -9,12 +9,6 @@
 
 Formulas are mostly from the Byczuk paper on the Friedel sum rule.
 """
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
-from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
-                      next, oct, open, pow, range, round, str, super, zip)
-
 import inspect
 
 import numpy as np
@@ -106,7 +100,7 @@ def phase_shift(g_hom, potential):
     return -np.sum(np.angle(eigv)) / np.pi
 
 
-class PhaseShiftEps(object):
+class PhaseShiftEps:
     """Calculate ϵ-resolved phase shift."""
 
     def __init__(self, gf_inv_bare, potential):
@@ -167,7 +161,7 @@ class PhaseShiftEps(object):
         return -phi_eps/np.pi
 
 
-class PhaseShiftEps_alt(object):
+class PhaseShiftEps_alt:
     r"""Calculate ϵ-resolved phase shift using alternative formulation.
 
     .. math:: Φ(ω)

@@ -7,12 +7,6 @@
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # encoding: utf-8
 """Handles the charge self-consistency loop of the combined scheme."""
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
-from builtins import (ascii, bytes, chr, dict, filter, hex, input, int, map,
-                      next, oct, open, pow, range, round, str, super, zip)
-
 import warnings
 
 from functools import partial, wraps
@@ -23,18 +17,17 @@ import matplotlib.pyplot as plt
 
 from scipy import optimize
 
-from . import plot
-from .capacitor_formula import potential_energy_vector
 import gftools as gt
 
-from . import model
+from . import model, plot
 from .model import prm
+from .capacitor_formula import potential_energy_vector
 
 VERBOSE = True
 SMALL_WIDTH = 50
 
 
-class _vprint(object):
+class _vprint:
     __slots__ = ('_printer', )
 
     def __call__(self, *args, **kwds):
@@ -284,7 +277,7 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
         achieved.
     V0 : ndarray, optional
         Starting value for the electrical potential.
-    occ: ndarray, optional
+    occ : ndarray, optional
         Starting value for the occupation.
     kind : {'auto', 'occ', 'occ_lsq' 'V'}, optional
         Weather self-consistency is determined according to the charge 'occ' or
