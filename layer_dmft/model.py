@@ -3,7 +3,7 @@
 # File              : model.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 01.08.2018
-# Last Modified Date: 31.10.2018
+# Last Modified Date: 01.11.2018
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Module to define the layered Hubbard model in use.
 
@@ -102,7 +102,7 @@ class Hubbard_Parameters:
             The (layer dependent) on-site energy :math:`μ + U/2 - V - σh`.
 
         """
-        onsite_energy = -np.multiply.outer(sigma, self.h)
+        onsite_energy = +np.multiply.outer(sigma, self.h)
         onsite_energy += self.mu + 0.5*self.U - self.V
         if hartree is not False:
             assert (len(hartree.shape) == 1
