@@ -3,13 +3,14 @@ import textwrap
 
 from pathlib import Path
 from datetime import date
+from collections import Mapping
 
 import numpy as np
 
 import gftools as gt
 
-from ..model import Hubbard_Parameters, sigma
 from ..util import SpinResolvedArray
+from ..model import Hubbard_Parameters, sigma
 
 N_IW = 1024  # TODO: scan code for proper number
 
@@ -92,6 +93,29 @@ PARAM_TEMPLATE = textwrap.dedent(
 )
 
 
+class _qmc_params(Mapping):
+    __slots__ = ('N_BIN', 'N_MSR')
+    __getitem__ = object.__getattribute__
+    __setitem__ = object.__setattr__
+
+    def __init__(self, N_BIN, N_MSR):
+        self.N_BIN = N_BIN
+        self.N_MSR = N_MSR
+
+    def __len__(self):
+        return len(self.__slots__)
+
+    def __iter__(self):
+        return iter(self.__slots__)
+
+    def slots(self) -> set:
+        """Return the set of existing attributes."""
+        return set(self.__slots__)
+
+
+QMC_PARAMS = _qmc_params(N_BIN=10, N_MSR=10**5)
+
+
 def get_path(dir_) -> Path:
     """Return a Path object, asserting that the path exists."""
     dir_ = Path(dir_).expanduser()
@@ -100,13 +124,31 @@ def get_path(dir_) -> Path:
     return dir_
 
 
-def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, dir_='.'):
-    """Prepare the 'hybrid_fct' file and parameters to use spinboson code."""
+def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, dir_='.', **kwds):
+    """Prepare the 'hybrid_fct' file and parameters to use **spinboson** code.
+
+    Parameters
+    ----------
+    prm : Hubbard_Parameters
+        The model parameters.
+    layer : int
+        The index of the layer that is mapped onto the impurity problem.
+    gf_iw, self_iw : (2, N_IW) complex np.ndarray
+        The local Matsubara Green's function and self energy of the layer.
+    dir_ :
+        The working directory for the **spinboson** solver.
+    kwds :
+        Additional parameters for the CT-QMC. See `QMC_PARAMS`
+
+    """
     assert gf_iw.ndim == 2, f"Dimension must be 2: (N_spins, N_iw), ndim: {gf_iw.ndim}"
-    assert gf_iw.shape[0] == 2, f"First dimension must be of length 2=#Spins, "\
-        f"here: {gf_iw.shape[0]}"
-    assert gf_iw.shape == self_iw.shape, "Shape of self-energy and Gf have to match, " \
-        f"Gf: {gf_iw.shape}, self: {self_iw.shape}"
+    assert gf_iw.shape[0] == 2, ("First dimension must be of length 2=#Spins, "
+                                 f"here: {gf_iw.shape[0]}")
+    assert gf_iw.shape == self_iw.shape, ("Shape of self-energy and Gf have to match, "
+                                          f"Gf: {gf_iw.shape}, self: {self_iw.shape}")
+    if set(kwds.keys()) - QMC_PARAMS.slots():
+        raise TypeError("Unknown keyword arguments:"
+                        f" {kwds.keys()-QMC_PARAMS.slots()}")
     dir_ = get_path(dir_)
     # trim Green's function to spinboson code
     gf_iw, self_iw = gf_iw[:, :N_IW], self_iw[:, :N_IW]
