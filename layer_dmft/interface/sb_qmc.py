@@ -301,4 +301,5 @@ def save_data(dir_='.', name='sb', compress=False):
     data['misc'] = np.genfromtxt(output_dir(dir_)/'xx.dat', missing_values='?')
     save_method = np.savez_compressed if compress else np.savez
     name = date.today().isoformat() + '_' + name
-    save_method(dir_/name, **data)
+    (dir_/"imp_output").mkdir(exist_ok=True)
+    save_method(dir_/"imp_output"/name, **data)
