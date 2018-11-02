@@ -1,7 +1,7 @@
 """r-DMFT loop."""
 # encoding: utf-8
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime
 
 import numpy as np
 
@@ -12,6 +12,19 @@ from .model import prm
 from .interface import sb_qmc
 
 OUTPUT_DIR = "layer_output"
+
+
+def write_info(prm: prm):
+    from ._version import get_versions
+    with open('layer_output.txt', mode='a') as fp:
+        fp.write("\n".join([
+            datetime.now().isoformat(),
+            "layer_dmft version: " + str(get_versions()['version']),
+            "gftools version:    " + str(gt.__version__),
+            "",
+            str(prm),
+            "",
+        ]))
 
 
 def save_gf(gf_iw, self_iw, dir_='.', name='layer', compress=False):
@@ -50,6 +63,8 @@ if __name__ == '__main__':
     prm.t_mat[sdiag+1, sdiag] = prm.t_mat[sdiag, sdiag+1] = t
 
     prm.assert_valid()
+
+    write_info(prm)
 
     # technical parameters
     N_IW = sb_qmc.N_IW
