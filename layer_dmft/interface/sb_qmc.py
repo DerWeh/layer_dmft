@@ -14,7 +14,9 @@ from ..util import SpinResolvedArray
 N_IW = 1024  # TODO: scan code for proper number
 
 
+SB_EXECUTABLE = Path('~/spinboson-1.10/sb_qmc.out').expanduser()
 OUTPUT_DIR = "output"
+OUTPUT_FILE = "output.txt"
 INIT_FILE = "sb_qmc_param.init"
 GF_IW_FILE = "00-Gf_omega.dat"
 GF_TAU_FILE = "00-Gf_tau.dat"
@@ -130,6 +132,15 @@ def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, dir_='.'):
                                          ef=-on_site_e.up + sigma.up*h_l,
                                          h=h_l)
     (dir_ / INIT_FILE).write_text(init_content)
+
+
+def run(dir_=".", n_process=1):
+    """Execute the **spinboson** code."""
+    from subprocess import check_call
+    dir_ = get_path(dir_)
+    command = f"mpirun -n {n_process} {SB_EXECUTABLE}"
+    with open(OUTPUT_FILE, "w") as outfile:
+        check_call(command.split(), stdout=outfile)
 
 
 def output_dir(dir_) -> Path:
