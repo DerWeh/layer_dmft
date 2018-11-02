@@ -14,12 +14,12 @@ from .interface import sb_qmc
 OUTPUT_DIR = "layer_output"
 
 
-def save_gf(gf_iw, dir_='.', name='layer', compress=False):
+def save_gf(gf_iw, self_iw, dir_='.', name='layer', compress=False):
     dir_ = Path(dir_).expanduser()
     dir_.mkdir(exist_ok=True)
     save_method = np.savez_compressed if compress else np.savez
     name = date.today().isoformat() + '_' + name
-    save_method(dir_/name, gf_iw=gf_iw)
+    save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw)
 
 
 if __name__ == '__main__':
@@ -89,4 +89,4 @@ if __name__ == '__main__':
             self_layer_iw[:, ll] = sb_qmc.read_self_energy_iw()
             print('finished', ll, U_l, flush=True)
         gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
-        save_gf(gf_layer_iw, dir_=OUTPUT_DIR, name=f'layer_iter{ii}')
+        save_gf(gf_layer_iw, self_layer_iw, dir_=OUTPUT_DIR, name=f'layer_iter{ii}')
