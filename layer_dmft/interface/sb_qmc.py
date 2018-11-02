@@ -54,7 +54,7 @@ PARAM_TEMPLATE = textwrap.dedent(
     #----------------------------------------------------------
     # N_BIN  N_MSR
     # N_SEG  N_SPIN  N_BOSON  N_SHIFT  N_SEGSP (optimize if <0)
-     10  100000
+     {N_BIN}  {N_MSR}
      -3  -3  -10  -6  -10
     #----------------------------------------------------------
     # i_mesh  N_X  X_MIN  X_MAX  (if i_program != 0)
@@ -170,9 +170,11 @@ def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, dir_='.', **kwds)
                fmt=[f'%+.{digits}e %+.{digits}e', ]*2, delimiter=' ',
                header=header)
     (dir_ / OUTPUT_DIR).mkdir(exist_ok=True)
+    qmc_dict = dict(QMC_PARAMS)
+    qmc_dict.update(kwds)
     init_content = PARAM_TEMPLATE.format(D=prm.D, T=prm.T, U=prm.U[layer],
                                          ef=-on_site_e.up + sigma.up*h_l,
-                                         h=h_l)
+                                         h=h_l, **qmc_dict)
     (dir_ / INIT_FILE).write_text(init_content)
 
 
