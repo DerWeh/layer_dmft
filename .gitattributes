@@ -1,0 +1,2 @@
+gftools/_version.py export-subst
+layer_dmft/_version.py export-subst
