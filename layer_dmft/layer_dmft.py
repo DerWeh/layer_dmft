@@ -81,11 +81,15 @@ if __name__ == '__main__':
     if np.any(prm.U != 0):
         occ0 = prm.occ0(gf_layer_iw)
         tol = max(np.linalg.norm(occ0.err), 1e-14)
-        charge.charge_self_consistency(prm, tol=tol, occ0=occ0.x, n_points=N_IW)
+        opt_res = charge.charge_self_consistency(prm, tol=tol, occ0=occ0.x, n_points=N_IW)
+        gf_layer_iw = prm.gf0(iw_points, hartree=opt_res.occ.x[::-1])
+        self_layer_iw = np.zeros((2, N_l, N_IW), dtype=np.complex)
+        self_layer_iw[:] = opt_res.occ.x[::-1, :, np.newaxis] * prm.U[np.newaxis, : , np.newaxis]
+    else:  # nonsense case
+        # start with non-interacting solution
+        self_layer_iw = np.zeros((2, N_l, N_IW), dtype=np.complex)
     print('done')
 
-    # start with non-interacting solution
-    self_layer_iw = np.zeros((2, N_l, N_IW), dtype=np.complex)
 
     #
     # r-DMFT
