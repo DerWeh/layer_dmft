@@ -91,7 +91,7 @@ def find(fb, word):
         if line.strip().startswith(word):
             break
     else:
-        raise ValueError('{} not in stream {}'.format(word, fb))
+        raise ValueError(f'{word} not in stream {fb}')
     return line  # pylint: disable=undefined-loop-variable
 
 

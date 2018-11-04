@@ -350,7 +350,7 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
 
     """
     # TODO: check against given `n` if sum gives right result
-    assert kind in set(('auto', 'occ', 'occ_lsq', 'V')), "Unknown kind: {}".format(kind)
+    assert kind in set(('auto', 'occ', 'occ_lsq', 'V')), f"Unknown kind: {kind}"
     assert V0 is None or occ0 is None
     params = parameters
     iw_array = gt.matsubara_frequencies(np.arange(n_points), beta=params.beta)
@@ -403,7 +403,7 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
     gf_iw = params.gf0(iw_array, hartree=hartree_occ)
     occ = params.occ0(gf_iw, hartree=hartree_occ, return_err=True)
     vprint("".center(SMALL_WIDTH, '='))
-    vprint("Success: {opt.success}".format(opt=sol))
+    vprint(f"Success: {sol.success}")
     vprint(sol.message)
     vprint("".center(SMALL_WIDTH, '='))
     return ChargeSelfconsistency(sol=sol, occ=occ, V=params.V)

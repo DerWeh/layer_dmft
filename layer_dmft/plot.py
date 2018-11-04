@@ -156,7 +156,7 @@ def V(param, layer_max=None, axis=None,
     elif isinstance(layer_max, slice):
         layers = layers[layer_max]
     elif layer_max is not None:
-        raise TypeError("unsupported type for `layer_max`: {}".format(type(layer_max)))
+        raise TypeError(f"unsupported type for `layer_max`: {type(layer_max)}")
 
     axis.axhline(y=0, color='darkgray')
     V_data(V_l, axis=axis, **mpl_args)

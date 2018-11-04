@@ -108,7 +108,7 @@ class Hubbard_Parameters:
             assert (len(hartree.shape) == 1
                     if isinstance(sigma, float) else
                     len(hartree) == 2 == len(hartree.shape)), \
-                "hartree as no matching shape: {}".format(hartree.shape)
+                f"hartree as no matching shape: {hartree.shape}"
             onsite_energy -= hartree * self.U
         if isinstance(sigma, SpinResolvedArray):
             return onsite_energy.view(type=SpinResolvedArray)
@@ -484,26 +484,24 @@ class Hubbard_Parameters:
         if not self.mu.size == self.h.size == self.U.size == self.V.size:
             raise ValueError(
                 "all parameter arrays need to have the same shape - "
-                "mu: {self.mu.size}, h: {self.h.size}, "
-                "U:{self.U.size}, V: {self.V.size}".format(self=self)
+                f"mu: {self.mu.size}, h: {self.h.size}, "
+                f"U:{self.U.size}, V: {self.V.size}"
             )
         if np.any(self.t_mat.conj().T != self.t_mat):
             raise ValueError(
                 "Hamiltonian must be hermitian. "
                 "`t_mat`^† = `t_mat` must be fulfilled.\n"
-                "t_mat: {t_mat}".format(t_mat=self.t_mat)
+                f"t_mat: {self.t_mat}"
             )
 
     def __repr__(self):
         _str = "Hubbard model parameters: "
-        _str += ", ".join(('{}={!r}'.format(prm, _save_get(self, prm))
-                           for prm in self.__slots__))
+        _str += ", ".join(f'{prm}={_save_get(self, prm)!r}' for prm in self.__slots__)
         return _str
 
     def __str__(self):
         _str = "Hubbard model parameters:\n "
-        _str += ",\n ".join(('{}={}'.format(prm, _save_get(self, prm))
-                             for prm in self.__slots__))
+        _str += ",\n ".join(f'{prm}={_save_get(self, prm)}' for prm in self.__slots__)
         return _str
 
     def __copy__(self):
