@@ -15,6 +15,7 @@ OUTPUT_DIR = "layer_output"
 
 
 def write_info(prm: prm):
+    """Write basic information for DMFT run to."""
     from ._version import get_versions
     with open('layer_output.txt', mode='a') as fp:
         fp.write("\n".join([
@@ -22,7 +23,7 @@ def write_info(prm: prm):
             "layer_dmft version: " + str(get_versions()['version']),
             "gftools version:    " + str(gt.__version__),
             "",
-            str(prm),
+            prm.pstr(),
             "",
         ]))
 

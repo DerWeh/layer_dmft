@@ -504,6 +504,23 @@ class Hubbard_Parameters:
         _str += ",\n ".join(f'{prm}={_save_get(self, prm)}' for prm in self.__slots__)
         return _str
 
+    def pstr(self):
+        """Return pretty string for printing."""
+        scalars = ('T', 'D')
+        arrays = ('mu', 'V', 'h', 'U')
+        width = max(len(el) for el in arrays+scalars)
+        _str = "Hubbard model parameters:\n"
+        _str += "\n".join(f'{prm:>{width}} = {_save_get(self, prm)}'
+                          for prm in scalars) + "\n"
+        vals = np.stack([getattr(self, prm) for prm in arrays])
+        _str += "\n".join(f'{prm:>{width}} = {value}' for prm, value
+                          in zip(arrays, array_printer(vals).split('\n ')))
+        _str += "\nt_mat =\n " + array_printer(self.t_mat)
+        _str += f"\nhilbert_transform = {rev_dict_hilbert_transfrom[prm.hilbert_transform]}"
+        _str += "\n"
+
+        return _str
+
     def __copy__(self):
         copy = self.__class__()  # create new object
         for attr in self.__slots__:
@@ -527,6 +544,15 @@ def _save_get(object_, attribue):
         return '<not assigned>'
 
 
+def array_printer(array):
+    """Print all elements of the array and strip outermost brackets.
+
+    This function is meant mainly to print 2D arrays.
+    """
+    string = np.array2string(array, max_line_width=np.infty, threshold=np.infty)
+    return string[1:-1]  # strip surrounding `[  ]`
+
+
 def chain_hilbert_transform(xi, half_bandwidth=None):
     """Hilbert transform for the isolated 1D chain."""
     return 1./xi
@@ -536,5 +562,8 @@ hilbert_transform = {
     'bethe': gf.bethe_hilbert_transfrom,
     'chain': chain_hilbert_transform,
 }
+
+rev_dict_hilbert_transfrom = {transform: name for name, transform
+                              in hilbert_transform.items()}
 
 prm = Hubbard_Parameters()
