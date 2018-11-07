@@ -555,6 +555,7 @@ def array_printer(array):
 
 def chain_hilbert_transform(xi, half_bandwidth=None):
     """Hilbert transform for the isolated 1D chain."""
+    del half_bandwidth  # simply chain has no bandwidth
     return 1./xi
 
 
