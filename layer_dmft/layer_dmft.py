@@ -14,9 +14,10 @@ from .interface import sb_qmc
 OUTPUT_DIR = "layer_output"
 
 
-def write_info(prm: prm):
+def write_info(prm: model.Hubbard_Parameters):
     """Write basic information for DMFT run to."""
     from ._version import get_versions
+
     with open('layer_output.txt', mode='a') as fp:
         fp.write("\n".join([
             datetime.now().isoformat(),

@@ -177,7 +177,7 @@ def update_occupation(occ_init, i_omega, params, out_dict):
     i_omega : array(complex)
         Matsubara frequencies :math:`iω_n` at which the Green's function is
         evaluated to calculate the occupation.
-    params : prm
+    params : model.Hubbard_Parameters
         `prm` object with the parameters set, determining the non-interacting
         Green's function. `params.V` will be updated.
     out_dict : dict
@@ -213,9 +213,10 @@ def update_potential(V_init, i_omega, params, out_dict):
     i_omega : array(complex)
         Matsubara frequencies :math:`iω_n` at which the Green's function is
         evaluated to calculate the occupation.
-    params : prm
-        `prm` class with the parameters set, determining the non-interacting
-        Green's function. `params.V` will be updated.
+    params : model.Hubbard_Parameters
+        `model.Hubbard_Parameters` class with the parameters set,
+        determining the non-interacting Green's function.
+        `params.V` will be updated.
     out_dict : dict
         Dictionary into which the outputs are written:
         'occ': occupation, 'V': potential and 'Gf': local Green's function
@@ -314,8 +315,9 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
 
     Parameters
     ----------
-    parameters : prm
-        `prm` object with the parameters set, determining Hamiltonian.
+    parameters : model.Hubbard_Parameters
+        `model.Hubbard_Parameters` object with the parameters set,
+        determining Hamiltonian.
     tol : float
         Target tol of the self-consistency. Iteration stops if it is
         achieved.
