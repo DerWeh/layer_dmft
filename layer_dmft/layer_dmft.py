@@ -40,6 +40,108 @@ def save_gf(gf_iw, self_iw, dir_='.', name='layer', compress=True):
     save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw)
 
 
+def converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: callable):
+    """Abstract function as template for the DMFT self-consistency.
+
+    Parameters
+    ----------
+    it0 : int
+        Starting number of the iterations. Needed for filenames.
+    n_iter : int
+        Number of iterations performed.
+    gf_layer_iw0, self_layer_iw0 : (N_s, N_l, N_iw) complex np.ndarray
+        Initial value for local Green's function and self energy. The shape of
+        the arrays is (#spins=2, #layers, #Matsubara frequencies).
+    function : callable
+        The function implementing the self-consistency equations.
+
+    Returns
+    -------
+    gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarray
+        The result for local Green's function and self energy after `n_iter`
+        iterations.
+
+    """
+    del it0, n_iter, gf_layer_iw0, self_layer_iw0, function
+    raise NotImplementedError("Abstract function only!"
+                              " Needs to be overwritten by implementation.")
+    return NotImplemented, NotImplemented  # pylint: disable=unreachable
+
+
+def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, function):
+    """Iterate the DMFT self-consistency equations.
+
+    This is an implementation of `converge`.
+
+    Parameters
+    ----------
+    see `converge`
+
+    Returns
+    -------
+    gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarray
+        The result for local Green's function and self energy after `n_iter`
+        iterations.
+
+    """
+    gf_layer_iw, self_layer_iw = gf_layer_iw0, self_layer_iw0
+    for ii in range(it0, n_iter+it0):
+        gf_layer_iw, self_layer_iw = function(gf_layer_iw, self_layer_iw, ii)
+        save_gf(gf_layer_iw, self_layer_iw, dir_=OUTPUT_DIR, name=f'layer_iter{ii}')
+    return gf_layer_iw, self_layer_iw
+
+
+def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process) -> callable:
+    """Return a `sweep_update` function, calculating the impurities for all layers.
+
+    Parameters
+    ----------
+    prm : Hubbard_Parameters
+        The model parameters.
+    iw_points : (N_iw, ) complex np.ndarray
+        The array of Matsubara frequencies.
+    n_process : int
+        The number of precesses used by the `sb_qmc` code.
+
+    Returns
+    -------
+    sweep_updater : callable
+        The updater function. Its signature is
+        `sweep_update(gf_layer_iw, self_layer_iw, it) -> gf_layer_iw, self_layer_iw`.
+
+    """
+    def sweep_update(gf_layer_iw, self_layer_iw, it):
+        """Perform a sweep update, calculating the impurities for all layers.
+
+        Parameters
+        ----------
+        gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarray
+            The local Green's function and self-energy of the lattice.
+        it : int
+            The iteration number needed for writing the files.
+
+        Returns
+        -------
+        gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarry
+            The updated local Green's function and self-energy.
+
+        """
+        for ll, U_l in enumerate(prm.U):
+            if U_l == 0.:
+                continue  # skip non-interacting, exact solution known
+            # setup impurity solver
+            sb_qmc.setup(prm, layer=ll, gf_iw=gf_layer_iw[:, ll], self_iw=self_layer_iw[:, ll])
+            sb_qmc.run(n_process=n_process)
+            sb_qmc.save_data(name=f'iter{it}_lay{ll}')
+
+            self_layer_iw[:, ll] = sb_qmc.read_self_energy_iw()
+            print(f"iter {it}: finished layer {ll} with U = {U_l}", flush=True)
+        gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
+        return gf_layer_iw, self_layer_iw
+
+    return sweep_update
+
+
 def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PARAMS):
     """Execute DMFT loop."""
     write_info(prm)
@@ -58,19 +160,8 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PAR
         print("reading old Green's function and self energy")
         iter_files = Path("layer_output").glob('*_iter*.npz')
 
-        def _get_iter(file_objects):
-            """Return iteration number of file with the name "\*_iter.ENDING"
-
-            Parameters
-            ----------
-            file_objects : 
-                file_objects is
-
-            Returns
-            -------
-            _get_iter :
-
-            """
+        def _get_iter(file_objects: Path) -> int:
+            r"""Return iteration number of file with the name "\*_iter.ENDING"."""
             basename = file_objects.stem
             ending = basename.split('_iter')[-1]
             try:
@@ -79,6 +170,7 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PAR
                 warnings.warn(f"Skipping unprocessable file: {file_objects.name}")
                 return None
             return it
+
         iters = {_get_iter(file_): file_ for file_ in iter_files}
         last_iter = max(iters.keys() - {None})  # remove invalid item
         print(f"Starting from iteration {last_iter}: {iters[last_iter].name}")
@@ -106,21 +198,17 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PAR
     #
     # r-DMFT
     #
-    # sweep updates -> calculate all impurities, then update
     # TODO: use numpy self-consistency mixing
-    for ii in range(start, n_iter+start):
-        for ll, U_l in enumerate(prm.U):
-            if U_l == 0.:
-                continue  # skip non-interacting, exact solution known
-            # setup impurity solver
-            sb_qmc.setup(prm, layer=ll, gf_iw=gf_layer_iw[:, ll], self_iw=self_layer_iw[:, ll])
-            sb_qmc.run(n_process=n_process)
-            sb_qmc.save_data(name=f'iter{ii}_lay{ll}')
+    # iteration scheme
+    converge = bare_iteration
+    # sweep updates -> calculate all impurities, then update
+    iteration = get_sweep_updater(prm, iw_points=iw_points, n_process=n_process)
 
-            self_layer_iw[:, ll] = sb_qmc.read_self_energy_iw()
-            print(f"iter {ii}: finished layer {ll} with U = {U_l}", flush=True)
-        gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
-        save_gf(gf_layer_iw, self_layer_iw, dir_=OUTPUT_DIR, name=f'layer_iter{ii}')
+    # perform self-consistency loop
+    converge(
+        it0=start, n_iter=n_iter,
+        gf_layer_iw0=gf_layer_iw, self_layer_iw0=self_layer_iw, function=iteration
+    )
 
 
 if __name__ == '__main__':
