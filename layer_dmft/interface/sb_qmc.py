@@ -332,7 +332,7 @@ def read_self_energy_iw(dir_='.') -> SpinResolvedArray:
     return self_iw
 
 
-def save_data(dir_='.', name='sb', compress=False):
+def save_data(dir_='.', name='sb', compress=True):
     """Read the **spinboson** data and save it as numpy arrays."""
     dir_ = Path(dir_).expanduser()
     dir_.mkdir(exist_ok=True)

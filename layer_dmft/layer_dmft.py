@@ -32,7 +32,7 @@ def write_info(prm: model.Hubbard_Parameters):
         ]))
 
 
-def save_gf(gf_iw, self_iw, dir_='.', name='layer', compress=False):
+def save_gf(gf_iw, self_iw, dir_='.', name='layer', compress=True):
     dir_ = Path(dir_).expanduser()
     dir_.mkdir(exist_ok=True)
     save_method = np.savez_compressed if compress else np.savez
