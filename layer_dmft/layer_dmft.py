@@ -10,14 +10,14 @@ import numpy as np
 import gftools as gt
 
 from . import charge, model
-from .model import prm
+from .model import prm, Hubbard_Parameters
 from .interface import sb_qmc
 
 OUTPUT_DIR = "layer_output"
 CONTINUE = True
 
 
-def write_info(prm: model.Hubbard_Parameters):
+def write_info(prm: Hubbard_Parameters):
     """Write basic information for DMFT run to."""
     from ._version import get_versions
 
@@ -40,7 +40,7 @@ def save_gf(gf_iw, self_iw, dir_='.', name='layer', compress=True):
     save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw)
 
 
-def main(prm: model.Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PARAMS):
+def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PARAMS):
     """Execute DMFT loop."""
     write_info(prm)
     N_l = prm.mu.size

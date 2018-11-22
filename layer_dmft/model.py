@@ -71,7 +71,7 @@ class Hubbard_Parameters:
             self.__delattr__(attribute)
 
     @property
-    def beta(self):
+    def beta(self) -> float:
         """Inverse temperature."""
         return 1./self.T
 
