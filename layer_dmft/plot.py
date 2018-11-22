@@ -7,6 +7,7 @@
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Collection of standard plotting functions for this module."""
 from itertools import cycle
+from pathlib import Path
 from contextlib import contextmanager
 
 import numpy as np
@@ -70,10 +71,15 @@ def print_param(filename, param, **kwds):
     the parameters `param` are printed.
     """
     # add git SHA <- version
+    print_file = Path(filename)
+    if print_file.suffix.lower() != '.pdf':
+        print_file = print_file.parent / (print_file.name + '.pdf')
+    filename = str(print_file)
+
     with PdfPages(filename, **kwds) as pdf:
         yield pdf
         pdf.savefig()
-        plt.close()
+        plt.close(plt.gcf())
 
         fig, ax = plt.subplots()
         ax.set_title('Hubbard parameters')
