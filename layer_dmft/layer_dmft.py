@@ -40,6 +40,26 @@ def save_gf(gf_iw, self_iw, dir_='.', name='layer', compress=True):
     save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw)
 
 
+def get_last_iter(dir_) -> (int, Path):
+    """Return number and the file of the output of last iteration."""
+    iter_files = Path(dir_).glob('*_iter*.npz')
+
+    def _get_iter(file_object) -> int:
+        r"""Return iteration `it` number of file with the name "\*_iter{it}.ENDING"."""
+        basename = Path(file_object).stem
+        ending = basename.split('_iter')[-1]
+        try:
+            it = int(ending)
+        except ValueError:
+            warnings.warn(f"Skipping unprocessable file: {file_object.name}")
+            return None
+        return it
+
+    iters = {_get_iter(file_): file_ for file_ in iter_files}
+    last_iter = max(iters.keys() - {None})  # remove invalid item
+    return last_iter, iters[last_iter]
+
+
 def converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: callable):
     """Abstract function as template for the DMFT self-consistency.
 
@@ -158,24 +178,10 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PAR
     #
     if CONTINUE:
         print("reading old Green's function and self energy")
-        iter_files = Path("layer_output").glob('*_iter*.npz')
+        last_iter, last_output = get_last_iter("layer_output")
+        print(f"Starting from iteration {last_iter}: {last_output.name}")
 
-        def _get_iter(file_objects: Path) -> int:
-            r"""Return iteration number of file with the name "\*_iter.ENDING"."""
-            basename = file_objects.stem
-            ending = basename.split('_iter')[-1]
-            try:
-                it = int(ending)
-            except ValueError:
-                warnings.warn(f"Skipping unprocessable file: {file_objects.name}")
-                return None
-            return it
-
-        iters = {_get_iter(file_): file_ for file_ in iter_files}
-        last_iter = max(iters.keys() - {None})  # remove invalid item
-        print(f"Starting from iteration {last_iter}: {iters[last_iter].name}")
-
-        with np.load(iters[last_iter]) as data:
+        with np.load(last_output) as data:
             gf_layer_iw = data['gf_iw']
             self_layer_iw = data['self_iw']
         start = last_iter + 1
