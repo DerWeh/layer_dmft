@@ -3,7 +3,7 @@
 # File              : model.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 01.08.2018
-# Last Modified Date: 01.11.2018
+# Last Modified Date: 21.01.2019
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Module to define the layered Hubbard model in use.
 
@@ -582,6 +582,16 @@ def chain_hilbert_transform(xi, half_bandwidth=None):
     """Hilbert transform for the isolated 1D chain."""
     del half_bandwidth  # simply chain has no bandwidth
     return 1./xi
+
+
+def hopping_matrix(size, nearest_neighbor):
+    """Create a hopping matrix with nearest neighbor hopping."""
+    # TODO: generalize for arbitrary hopping (NN, NNN, ...)
+    t_mat = np.zeros((size, size))
+    row, col = np.diag_indices(size)
+    # TODO: complex conjugation
+    t_mat[row[:-1], col[:-1]+1] = t_mat[row[:-1]+1, col[:-1]] = nearest_neighbor
+    return t_mat
 
 
 hilbert_transform = {
