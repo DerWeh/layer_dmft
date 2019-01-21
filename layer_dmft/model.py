@@ -476,6 +476,31 @@ class Hubbard_Parameters:
                 gf_out_sp[..., ii] = gf_dec.reconstruct(kind=diag_dic[diagonal])
         return gf_out
 
+    def hybrid_fct_m1(self, occ):
+        r"""Return the first high-frequency moment of the hybridization function.
+
+        The moment is the first order term of the high-frequency expansion of
+        the hybridization function :math:`Δ(z)`. It can be obtained
+
+        .. math:: m^{(1)} = \lim_{z → ∞} z Δ(z)
+
+        Parameters
+        ----------
+        occ : ([2,] N_l) float ndarray
+            The local occupation, needed for the constant part of the self-energy.
+
+        Returns
+        -------
+        m1 : ([2,] N_l) complex ndarray
+
+        """
+        hamil = self.hamiltonian(hartree=occ[::-1])
+        hoppingterm = {}
+        hoppingterm = np.diagonal(hamil @ hamil, axis1=-2, axis2=-1) \
+            - np.diagonal(hamil, axis1=-2, axis2=-1)**2
+        dos_m2 = self.hilbert_transform.m2(self.D)
+        return dos_m2 + hoppingterm
+
     def assert_valid(self):
         """Raise error if attributes are not valid.
 
@@ -563,6 +588,8 @@ hilbert_transform = {
     'bethe': gf.bethe_hilbert_transfrom,
     'chain': chain_hilbert_transform,
 }
+hilbert_transform['bethe'].m2 = gf.bethe_dos.m2
+hilbert_transform['chain'].m2 = lambda D: 0
 
 rev_dict_hilbert_transfrom = {transform: name for name, transform
                               in hilbert_transform.items()}
