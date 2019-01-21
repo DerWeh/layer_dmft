@@ -32,7 +32,7 @@ PARAM_TEMPLATE = textwrap.dedent(
     # i_program
     # flag_tp
      0
-     0
+     {FLAG_TP}
     #----------------------------------------------------------
     # D
     # T
@@ -94,13 +94,14 @@ PARAM_TEMPLATE = textwrap.dedent(
 
 
 class _qmc_params(Mapping):
-    __slots__ = ('N_BIN', 'N_MSR')
+    __slots__ = ('N_BIN', 'N_MSR', 'FLAG_TP')
     __getitem__ = object.__getattribute__
     __setitem__ = object.__setattr__
 
-    def __init__(self, N_BIN, N_MSR):
+    def __init__(self, N_BIN, N_MSR, FLAG_TP=0):
         self.N_BIN = N_BIN
         self.N_MSR = N_MSR
+        self.FLAG_TP = FLAG_TP
 
     def __len__(self):
         return len(self.__slots__)
