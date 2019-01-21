@@ -47,7 +47,7 @@ PARAM_TEMPLATE = textwrap.dedent(
     # g_ch^2
     # g_xy^2  [g_z^2]  (default: g_z = g_xy)
     # b_dos  [w0 (if b_dos=0)]  [w_cutoff power (if b_dos=1)]
-     1.00
+     {V2_up}  {V2_dn}
      0.0
      0.0
      1  1.0  1.0
@@ -124,7 +124,7 @@ def get_path(dir_) -> Path:
     return dir_
 
 
-def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, dir_='.', **kwds):
+def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, occ, dir_='.', **kwds):
     """Prepare the 'hybrid_fct' file and parameters to use **spinboson** code.
 
     Parameters
@@ -135,6 +135,8 @@ def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, dir_='.', **kwds)
         The index of the layer that is mapped onto the impurity problem.
     gf_iw, self_iw : (2, N_IW) complex np.ndarray
         The local Matsubara Green's function and self energy of the layer.
+    occ : (2, ) float np.ndarray
+        The local occupation number.
     dir_ :
         The working directory for the **spinboson** solver.
     kwds :
@@ -158,6 +160,7 @@ def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, dir_='.', **kwds)
     h_l = prm.h[layer]
     assert on_site_e.up - sigma.up*h_l == on_site_e.dn - sigma.dn*h_l
     hybrid_iw = iw + on_site_e[:, np.newaxis] - self_iw - 1./gf_iw
+    hybrid_m1 = prm.hybrid_fct_m1(occ)[:, layer]
     digits = 14
     fill = 2 + 2 + digits + 4
     header = (
@@ -173,8 +176,9 @@ def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, dir_='.', **kwds)
     qmc_dict = dict(QMC_PARAMS)
     qmc_dict.update(kwds)
     init_content = PARAM_TEMPLATE.format(D=prm.D, T=prm.T, U=prm.U[layer],
-                                         ef=-on_site_e.up + sigma.up*h_l,
-                                         h=h_l, **qmc_dict)
+                                         ef=-on_site_e.up + sigma.up*h_l, h=h_l,
+                                         V2_up=hybrid_m1.up, V2_dn=hybrid_m1.dn,
+                                         **qmc_dict)
     (dir_ / INIT_FILE).write_text(init_content)
 
 
@@ -330,6 +334,25 @@ def read_self_energy_iw(dir_='.') -> SpinResolvedArray:
     assert self_iw.shape[0] == 2
     self_iw = self_iw.view(type=SpinResolvedArray)
     return self_iw
+
+
+def read_occ(dir_='.') -> gt.Result:
+    """Return the occupation number from file in `dir_`.
+
+    Parameters
+    ----------
+    dir_ : str or Path
+        The directory where the output of the **spinboson** code is located.
+
+    Returns
+    -------
+    occ.x, occ.err : (2, ) util.SpinResolvedArray
+        The occupation number and its error.
+
+    """
+    gf_tau = read_gf_tau(dir_)
+    # occ = Gf(τ=0^-) = Gf(τ=β^-)
+    return gt.Result(x=-gf_tau.x[:, -1], err=gf_tau.err[:, -1])
 
 
 def save_data(dir_='.', name='sb', compress=True):

@@ -32,12 +32,12 @@ def write_info(prm: Hubbard_Parameters):
         ]))
 
 
-def save_gf(gf_iw, self_iw, dir_='.', name='layer', compress=True):
+def save_gf(gf_iw, self_iw, occ_layer, dir_='.', name='layer', compress=True):
     dir_ = Path(dir_).expanduser()
     dir_.mkdir(exist_ok=True)
     save_method = np.savez_compressed if compress else np.savez
     name = date.today().isoformat() + '_' + name
-    save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw)
+    save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw, occ=occ_layer)
 
 
 def get_last_iter(dir_) -> (int, Path):
@@ -88,7 +88,7 @@ def converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: callable):
     return NotImplemented, NotImplemented  # pylint: disable=unreachable
 
 
-def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, function):
+def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, function):
     """Iterate the DMFT self-consistency equations.
 
     This is an implementation of `converge`.
@@ -104,10 +104,11 @@ def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, function):
         iterations.
 
     """
-    gf_layer_iw, self_layer_iw = gf_layer_iw0, self_layer_iw0
+    gf_layer_iw, self_layer_iw, occ_layer = gf_layer_iw0, self_layer_iw0, occ_layer0
     for ii in range(it0, n_iter+it0):
-        gf_layer_iw, self_layer_iw = function(gf_layer_iw, self_layer_iw, ii)
-        save_gf(gf_layer_iw, self_layer_iw, dir_=OUTPUT_DIR, name=f'layer_iter{ii}')
+        gf_layer_iw, self_layer_iw, occ_layer = function(gf_layer_iw, self_layer_iw, occ_layer, it=ii)
+        save_gf(gf_layer_iw, self_layer_iw, occ_layer,
+                dir_=OUTPUT_DIR, name=f'layer_iter{ii}')
     return gf_layer_iw, self_layer_iw
 
 
@@ -130,13 +131,16 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process) -> callable
         `sweep_update(gf_layer_iw, self_layer_iw, it) -> gf_layer_iw, self_layer_iw`.
 
     """
-    def sweep_update(gf_layer_iw, self_layer_iw, it):
+    def sweep_update(gf_layer_iw, self_layer_iw, occ_layer, it):
         """Perform a sweep update, calculating the impurities for all layers.
 
         Parameters
         ----------
         gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarray
             The local Green's function and self-energy of the lattice.
+        occ_layer : (N_s, N_l) float np.ndarray
+            The local occupation of the *impurities* corresponding to the layers.
+            The occupations have to match the self-energy (moments).
         it : int
             The iteration number needed for writing the files.
 
@@ -150,14 +154,17 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process) -> callable
             if U_l == 0.:
                 continue  # skip non-interacting, exact solution known
             # setup impurity solver
-            sb_qmc.setup(prm, layer=ll, gf_iw=gf_layer_iw[:, ll], self_iw=self_layer_iw[:, ll])
+            sb_qmc.setup(prm, layer=ll, gf_iw=gf_layer_iw[:, ll],
+                         self_iw=self_layer_iw[:, ll], occ=occ_layer)
             sb_qmc.run(n_process=n_process)
             sb_qmc.save_data(name=f'iter{it}_lay{ll}')
 
             self_layer_iw[:, ll] = sb_qmc.read_self_energy_iw()
+            occ_layer[:, ll] = sb_qmc.read_occ().x
+
             print(f"iter {it}: finished layer {ll} with U = {U_l}", flush=True)
         gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
-        return gf_layer_iw, self_layer_iw
+        return gf_layer_iw, self_layer_iw, occ_layer
 
     return sweep_update
 
@@ -184,20 +191,23 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PAR
         with np.load(last_output) as data:
             gf_layer_iw = data['gf_iw']
             self_layer_iw = data['self_iw']
+            occ_layer = data['occ']
         start = last_iter + 1
     else:
         print('start initialization')
         gf_layer_iw = prm.gf0(iw_points)  # start with non-interacting Gf
+        occ0 = prm.occ0(gf_layer_iw)
         if np.any(prm.U != 0):
-            occ0 = prm.occ0(gf_layer_iw)
             tol = max(np.linalg.norm(occ0.err), 1e-14)
             opt_res = charge.charge_self_consistency(prm, tol=tol, occ0=occ0.x, n_points=N_IW)
             gf_layer_iw = prm.gf0(iw_points, hartree=opt_res.occ.x[::-1])
             self_layer_iw = np.zeros((2, N_l, N_IW), dtype=np.complex)
             self_layer_iw[:] = opt_res.occ.x[::-1, :, np.newaxis] * prm.U[np.newaxis, :, np.newaxis]
+            occ_layer = opt_res.occ.x
         else:  # nonsense case
             # start with non-interacting solution
             self_layer_iw = np.zeros((2, N_l, N_IW), dtype=np.complex)
+            occ_layer = occ0
         print('done')
         start = 0
 
@@ -213,7 +223,8 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PAR
     # perform self-consistency loop
     converge(
         it0=start, n_iter=n_iter,
-        gf_layer_iw0=gf_layer_iw, self_layer_iw0=self_layer_iw, function=iteration
+        gf_layer_iw0=gf_layer_iw, self_layer_iw0=self_layer_iw, occ_layer0=occ_layer,
+        function=iteration
     )
 
 
