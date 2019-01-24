@@ -45,11 +45,12 @@ def get_last_iter(dir_) -> (int, Path):
     iter_files = Path(dir_).glob('*_iter*.npz')
 
     def _get_iter(file_object) -> int:
-        r"""Return iteration `it` number of file with the name "\*_iter{it}.ENDING"."""
+        r"""Return iteration `it` number of file with the name '\*_iter{it}(_*)?.ENDING'."""
         basename = Path(file_object).stem
-        ending = basename.split('_iter')[-1]
+        ending = basename.split('_iter')[-1]  # select part after '_iter'
+        iter_num = ending.split('_')[0]  # drop everything after possible '_'
         try:
-            it = int(ending)
+            it = int(iter_num)
         except ValueError:
             warnings.warn(f"Skipping unprocessable file: {file_object.name}")
             return None
