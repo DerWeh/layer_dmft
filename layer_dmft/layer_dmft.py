@@ -1,4 +1,12 @@
-"""r-DMFT loop."""
+"""r-DMFT loop.
+
+Variables
+---------
+FORCE_PARAMAGNET: bool
+    If `FORCE_PARAMAGNET` and no magnetic field, paramagnetism is enforce, i.e.
+    the self-energy of ↑ and ↓ are set equal.
+
+"""
 # encoding: utf-8
 import warnings
 
@@ -14,7 +22,9 @@ from .model import prm, Hubbard_Parameters
 from .interface import sb_qmc
 
 OUTPUT_DIR = "layer_output"
+
 CONTINUE = True
+FORCE_PARAMAGNET = True
 
 
 def write_info(prm: Hubbard_Parameters):
@@ -164,6 +174,9 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process) -> callable
             occ_layer[:, ll] = sb_qmc.read_occ().x
 
             print(f"iter {it}: finished layer {ll} with U = {U_l}", flush=True)
+        if FORCE_PARAMAGNET and np.all(prm.h == 0):
+            # TODO: think about using shape [1, N_l] arrays for paramagnet
+            self_layer_iw[:] = np.mean(self_layer_iw, axis=0)
         gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
         return gf_layer_iw, self_layer_iw, occ_layer
 
