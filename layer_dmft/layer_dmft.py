@@ -240,36 +240,3 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PAR
         gf_layer_iw0=gf_layer_iw, self_layer_iw0=self_layer_iw, occ_layer0=occ_layer,
         function=iteration
     )
-
-
-if __name__ == '__main__':
-    # Paramters
-    # ---------
-    # layers = np.abs(np.arange(-19, 20))
-    layers = np.abs(np.arange(-19, 20))
-
-    N_l = layers.size
-
-    # Hubbard model parameters
-    prm.T = 0.01
-    prm.D = 1.  # half-bandwidth
-    prm.mu = np.zeros(N_l)  # with respect to half filling
-    prm.mu[N_l//2] = 0.45
-    prm.V = np.zeros(N_l)
-    prm.h = np.zeros(N_l)
-    prm.h[N_l//2] = -0.9
-    prm.U = np.zeros(N_l)
-    prm.U[N_l//2] = 0.8
-
-    prm.hilbert_transform = model.hilbert_transform['bethe']
-
-    t = 0.2
-    prm.t_mat = np.zeros((N_l, N_l))
-    diag, _ = np.diag_indices_from(prm.t_mat)
-    sdiag = diag[:-1]
-    prm.t_mat[sdiag+1, sdiag] = prm.t_mat[sdiag, sdiag+1] = t
-
-    prm.assert_valid()
-    ITER_MAX = 3
-    qmc_params = sb_qmc.QMC_PARAMS
-    main(prm, n_iter=ITER_MAX)

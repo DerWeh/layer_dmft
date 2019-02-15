@@ -419,30 +419,8 @@ def plot_results(occ, prm):
     plot.V(prm, axis=axes[2])
     plt.tight_layout()
     plt.show()
-
-
-# def main():
-#    """Function to test convergence"""
-if __name__ == '__main__':
-    # Setup
-    N = layers.size
-
-    prm.T = 0.01
-    prm.D = 1.  # half-bandwidth
-    prm.mu = np.zeros(N)  # with respect to half filling
-    prm.mu[N//2] = 0.45
-    prm.V = np.zeros(N)
-    prm.h = np.zeros(N)
-    prm.h[N//2] = 0.9
-    prm.U = np.zeros(N)
-    # prm.U[N//2] = 0.8
-
-    t = 0.2
-    prm.t_mat = np.zeros((N, N))
-    diag, _ = np.diag_indices_from(prm.t_mat)
-    sdiag = diag[:-1]
-    prm.t_mat[sdiag+1, sdiag] = prm.t_mat[sdiag, sdiag+1] = t
-
-    prm.assert_valid()
-
-    opt_param = broyden_self_consistency(prm, tol=1e-6)
+    if grid is not None:
+        for ax in axes:
+            ax.grid(b=grid)
+    return fig, axes
+    # plt.show()
