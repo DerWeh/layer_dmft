@@ -50,6 +50,30 @@ def save_gf(gf_iw, self_iw, occ_layer, dir_='.', name='layer', compress=True):
     save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw, occ=occ_layer)
 
 
+def get_iter(dir_, num) -> Path:
+    """Return the file of the output of iteration `num`."""
+    iter_files = Path(dir_).glob(f'*_iter{num}*.npz')
+
+    def is_valid(file_object: Path) -> bool:
+        """Check if `num` was just the leading part of the number."""
+        basename = file_object.stem
+        ending = basename.split('_iter')[-1]  # select part after '_iter'
+        iter_num = ending.split('_')[0]  # drop everything after possible '_'
+        try:
+            it = int(iter_num)
+        except ValueError:
+            warnings.warn(f"Skipping unprocessable file: {file_object.name}")
+            return None
+        return it == num
+    paths = [iter_f for iter_f in iter_files if is_valid(iter_f)]
+    if not paths:
+        raise AttributeError(f'Iterations {num} cannot be found.')
+    if len(paths) > 1:
+        raise AttributeError(f'Multiple occurrences of iteration {num}:\n'
+                             + '\n'.join(str(element) for element in paths))
+    return paths[0]
+
+
 def get_last_iter(dir_) -> (int, Path):
     """Return number and the file of the output of last iteration."""
     iter_files = Path(dir_).glob('*_iter*.npz')
