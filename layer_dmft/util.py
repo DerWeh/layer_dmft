@@ -4,7 +4,6 @@ from collections import namedtuple
 
 import numpy as np
 
-import gftools as gt
 import gftools.pade as gtpade
 
 spins = ('up', 'dn')
@@ -203,7 +202,7 @@ class SelfEnergy(SpinResolvedArray):
             static = static[..., np.newaxis]
         return static
 
-    def pade(self, z_out, z_in, n_min: int, n_max: int, valid_z, threshold=1e-8):
+    def pade(self, z_out, z_in, n_min: int, n_max: int, valid_z=None, threshold=1e-8):
         """Perform Pade analytic continuation on the self-energy.
 
         Parameters
@@ -225,19 +224,13 @@ class SelfEnergy(SpinResolvedArray):
 
         """
         z_out = np.asarray(z_out)
-        pade_fct = np.vectorize(
-            lambda self_sl:
-            gtpade.averaged(z_out, z_in, gf_iw=self_sl, n_min=n_min, n_max=n_max,
-                            valid_z=valid_z, threshold=threshold, kind='self'),
-            otypes=(np.complex, np.complex),
-            doc=gtpade.averaged.__doc__,
-            signature='(n)->(m),(m)'
-        )
+
         # Pade performs better if static part is not stripped from self-energy
         # # static part needs to be stripped as function is for Gf not self-energy
         # self_pade, self_pade_err = pade_fct(self.dynamic())
-        self_pade, self_pade_err = pade_fct(self)
-        self_pade = self_pade.squeeze()
-        self_pade_err = self_pade_err.squeeze()
+        self_pade = gtpade.averaged(
+            z_out, z_in, fct_z=self,
+            n_min=n_min, n_max=n_max, valid_z=valid_z, threshold=threshold, kind='self'
+        )
         # return gt.Result(x=self_pade+self.static(expand=True), err=self_pade_err)
-        return gt.Result(x=self_pade, err=self_pade_err)
+        return self_pade
