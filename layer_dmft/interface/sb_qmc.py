@@ -343,6 +343,21 @@ Suscept = namedtuple('Susceptibility', ['spin', 'charge'])
 
 
 def read_susceptibility_tau(dir_='.') -> Suscept:
+    """Return the imaginary time susceptibility from file in `dir_`.
+
+    Parameters
+    ----------
+    dir_ : str or Path
+        The directory where the output of the **spinboson** code is located.
+
+    Returns
+    -------
+    susceptibility.spin, susceptibility.charge: gt.Result
+        The spin- (charge-) susceptibility in τ-space and its error.
+        The value (`gt.Result.x`) and the error (`gt.Result.err`) are
+        1d float `np.ndarray`s.
+
+    """
     out_dir = output_dir(dir_)
     suscept_output = np.loadtxt(out_dir / SUSCEPT_TAU_FILE, unpack=True, usecols=range(1, 5))
     spin = gt.Result(x=suscept_output[0], err=suscept_output[1])
@@ -351,6 +366,19 @@ def read_susceptibility_tau(dir_='.') -> Suscept:
 
 
 def read_susceptibility_iw(dir_='.') -> Suscept:
+    """Return the susceptibility from file in `dir_` for *bosonic* frequencies.
+
+    Parameters
+    ----------
+    dir_ : str or Path
+        The directory where the output of the **spinboson** code is located.
+
+    Returns
+    -------
+    susceptibility.spin, susceptibility.charge : (N_iw, ) float np.ndarray
+        The spin- (charge-) susceptibility for *bosonic* Matsubara frequencies.
+
+    """
     out_dir = output_dir(dir_)
     suscept_output = np.loadtxt(out_dir / SUSCEPT_IW_FILE, unpack=True, usecols=[1, 3])  # FIXME
     return Suscept(spin=suscept_output[0], charge=suscept_output[1])
