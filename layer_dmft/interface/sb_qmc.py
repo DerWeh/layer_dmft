@@ -3,7 +3,7 @@ import textwrap
 
 from pathlib import Path
 from datetime import date
-from collections import Mapping
+from collections import Mapping, namedtuple
 
 import numpy as np
 
@@ -22,6 +22,8 @@ INIT_FILE = "sb_qmc_param.init"
 GF_IW_FILE = "00-Gf_omega.dat"
 GF_TAU_FILE = "00-Gf_tau.dat"
 SELF_FILE = "00-self.dat"
+SUSCEPT_IW_FILE = "00-chi_omega.dat"
+SUSCEPT_TAU_FILE = "00-chi_omega.dat"
 
 IM_STEP = 2
 
@@ -337,6 +339,23 @@ def read_self_energy_iw(dir_='.') -> SpinResolvedArray:
     return self_iw
 
 
+Suscept = namedtuple('Susceptibility', ['spin', 'charge'])
+
+
+def read_susceptibility_tau(dir_='.') -> Suscept:
+    out_dir = output_dir(dir_)
+    suscept_output = np.loadtxt(out_dir / SUSCEPT_TAU_FILE, unpack=True, usecols=range(1, 5))
+    spin = gt.Result(x=suscept_output[0], err=suscept_output[1])
+    charge = gt.Result(x=suscept_output[2], err=suscept_output[3])
+    return Suscept(spin=spin, charge=charge)
+
+
+def read_susceptibility_iw(dir_='.') -> Suscept:
+    out_dir = output_dir(dir_)
+    suscept_output = np.loadtxt(out_dir / SUSCEPT_IW_FILE, unpack=True, usecols=[1, 3])  # FIXME
+    return Suscept(spin=suscept_output[0], charge=suscept_output[1])
+
+
 def read_occ(dir_='.') -> gt.Result:
     """Return the occupation number from file in `dir_`.
 
@@ -367,6 +386,15 @@ def save_data(dir_='.', name='sb', compress=True):
     data['gf_iw'] = read_gf_iw(dir_)
     data['self_energy_iw'] = read_self_energy_iw(dir_)
     data['misc'] = np.genfromtxt(output_dir(dir_)/'xx.dat', missing_values='?')
+    if QMC_PARAMS.FLAG_TP == 1:  # FIXME: not the only way to calculate it
+        suscept_iw = read_susceptibility_iw()
+        data['spin_susceptibility_iw'] = suscept_iw.spin
+        data['charge_susceptibility_iw'] = suscept_iw.charge
+        suscept_tau = read_susceptibility_tau()
+        data['spin_susceptibility_tau'] = suscept_tau.spin.x
+        data['spin_susceptibility_tau_err'] = suscept_tau.spin.err
+        data['charge_susceptibility_tau'] = suscept_tau.charge.x
+        data['charge_susceptibility_tau_err'] = suscept_tau.charge.err
     save_method = np.savez_compressed if compress else np.savez
     name = date.today().isoformat() + '_' + name
     (dir_/"imp_output").mkdir(exist_ok=True)
