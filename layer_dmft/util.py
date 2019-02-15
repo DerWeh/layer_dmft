@@ -1,5 +1,8 @@
 """Utility classes."""
+import sys
+from os import getcwd
 from enum import IntEnum
+from contextlib import contextmanager
 from collections import namedtuple
 
 import numpy as np
@@ -234,3 +237,16 @@ class SelfEnergy(SpinResolvedArray):
         )
         # return gt.Result(x=self_pade+self.static(expand=True), err=self_pade_err)
         return self_pade
+
+
+@contextmanager
+def local_import(dir_=None):
+    """Only import modules within `dir_` (default: cwd)."""
+    if dir_ is None:
+        dir_ = getcwd()
+    import_path = sys.path
+    sys.path = [str(dir_), ]
+    try:
+        yield
+    finally:
+        sys.path = import_path
