@@ -411,14 +411,13 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
     return ChargeSelfconsistency(sol=sol, occ=occ, V=params.V)
 
 
-def plot_results(occ, prm):
+def plot_results(occ, prm, grid=None):
     """Visualize the results of charge self_consistency quickly."""
     fig, axes = plt.subplots(num='occ + V', nrows=3, ncols=1, sharex=True)
     plot.occ(occ, spin='both', axis=axes[0])
     plot.magnetization(occ, axis=axes[1])
     plot.V(prm, axis=axes[2])
     plt.tight_layout()
-    plt.show()
     if grid is not None:
         for ax in axes:
             ax.grid(b=grid)

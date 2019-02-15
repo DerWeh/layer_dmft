@@ -23,7 +23,7 @@ DEFAULT_MARKER = 'x'
 ERR_CAPSIZE = 2
 
 
-def err_plot(x, y, yerr, axis: mpl.axes.Axes = None, **mpl_args):
+def err_plot(x, y, yerr=None, xerr=None, axis: mpl.axes.Axes = None, **mpl_args):
     """Plot graph with error bars.
 
     Decided weather to plot points with error bars or lines with shaded areas
@@ -33,7 +33,7 @@ def err_plot(x, y, yerr, axis: mpl.axes.Axes = None, **mpl_args):
     ----------
     x, y : array_like
         x and y coordinates of the data to plot.
-    yerr : array_like
+    yerr, xerr : array_like, optional
         The corresponding error of the data. Has same shape `x` and `y`.
     axis : mpl.axes.Axes, optional
         `mpl.axes.Axes` object used for plotting.
@@ -56,7 +56,10 @@ def err_plot(x, y, yerr, axis: mpl.axes.Axes = None, **mpl_args):
             baseline, = axis.plot(x, y, fmt, **mpl_args)
         if ecolor is None:
             ecolor = baseline.get_color()
-        axis.fill_between(x, y-yerr, y+yerr, color=ecolor, alpha=.3, zorder=1)
+        if yerr is not None:
+            axis.fill_between(x, y-yerr, y+yerr, color=ecolor, alpha=.3, zorder=1)
+        if xerr is not None:
+            axis.fill_betweenx(y, x-xerr, x+xerr, color=ecolor, alpha=.3, zorder=1)
     else:
         default_args = {'capsize': 2.5, 'elinewidth': .3}
         default_args.update(mpl_args)
