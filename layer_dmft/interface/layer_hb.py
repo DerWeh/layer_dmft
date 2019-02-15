@@ -354,7 +354,7 @@ def read_effective_gf_iw(dir_='.', expand=False) -> SpinResolvedArray:
     return effective_gf_iw
 
 
-def read_occ(dir_='.') -> SpinResolvedArray:
+def read_occ(dir_='.') -> gt.Result:
     """Return the layer resolved occupation from file in `dir_`.
 
     Parameters
