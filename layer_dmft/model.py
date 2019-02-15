@@ -529,7 +529,7 @@ class Hubbard_Parameters:
         _str += ",\n ".join(f'{prm}={_save_get(self, prm)}' for prm in self.__slots__)
         return _str
 
-    def pstr(self):
+    def pstr(self, precision=1):
         """Return pretty string for printing."""
         scalars = ('T', 'D')
         arrays = ('mu', 'V', 'h', 'U')
@@ -539,9 +539,9 @@ class Hubbard_Parameters:
                           for prm in scalars) + "\n"
         vals = np.stack([getattr(self, prm) for prm in arrays])
         _str += "\n".join(f'{prm:>{width}} = {value}' for prm, value
-                          in zip(arrays, array_printer(vals).split('\n ')))
+                          in zip(arrays, array_printer(vals, precision=precision).split('\n ')))
         _str += "\nt_mat =\n " + array_printer(self.t_mat)
-        _str += f"\nhilbert_transform = {rev_dict_hilbert_transfrom[prm.hilbert_transform]}"
+        _str += f"\nhilbert_transform = {rev_dict_hilbert_transfrom[self.hilbert_transform]}"
         _str += "\n"
 
         return _str
@@ -569,12 +569,13 @@ def _save_get(object_, attribue):
         return '<not assigned>'
 
 
-def array_printer(array):
+def array_printer(array, precision=None):
     """Print all elements of the array and strip outermost brackets.
 
     This function is meant mainly to print 2D arrays.
     """
-    string = np.array2string(array, max_line_width=np.infty, threshold=np.infty)
+    string = np.array2string(array, max_line_width=np.infty, threshold=np.infty,
+                             precision=precision, suppress_small=True)
     return string[1:-1]  # strip surrounding `[  ]`
 
 
