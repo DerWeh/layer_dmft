@@ -115,7 +115,9 @@ class SpinResolvedArray(np.ndarray):
         """Return the attribute `up`/`dn`."""
         if name in spins:  # special cases
             return self[Spins[name]].view(type=np.ndarray)
-        raise AttributeError  # default behavior
+        raise AttributeError(  # default behavior
+            f"'{self.__class__.__name__}' object has no attribute {name}"
+        )
 
     @property
     def total(self):
