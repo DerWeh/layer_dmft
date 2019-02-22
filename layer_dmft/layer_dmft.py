@@ -9,6 +9,8 @@ FORCE_PARAMAGNET: bool
 """
 # encoding: utf-8
 import warnings
+from collections import OrderedDict
+from weakref import finalize
 
 from pathlib import Path
 from datetime import date, datetime
@@ -83,6 +85,60 @@ def get_last_iter(dir_) -> (int, Path):
     iters = {_get_iter(file_): file_ for file_ in iter_files}
     last_iter = max(iters.keys() - {None})  # remove invalid item
     return last_iter, iters[last_iter]
+
+
+def get_all_iter(dir_) -> dict:
+    """Return dictionary of files of the output with key `num`."""
+    iter_files = Path(dir_).glob('*_iter*.npz')
+    path_dict = {_get_iter(iter_f): iter_f for iter_f in iter_files
+                 if _get_iter(iter_f) is not None}
+    return path_dict
+
+
+class LayerData:
+    """Interface to saved layer data."""
+
+    keys = {'gf_iw', 'self_iw', 'occ'}
+
+    def __init__(self, dir_=OUTPUT_DIR):
+        """Mmap all data from directory."""
+        self._filname_dict = get_all_iter(dir_)
+        self.mmap_dict = OrderedDict((key, self._autoclean_load(val, mmap_mode='r'))
+                                     for key, val in sorted(self._filname_dict.items()))
+        self.array = np.array(self.mmap_dict.values(), dtype=object)
+
+    def _autoclean_load(self, *args, **kwds):
+        data = np.load(*args, **kwds)
+
+        def _test():
+            print('Destroy', data)
+            data.close()
+        finalize(self, _test)
+        return data
+
+    def iter(self, it: int):
+        """Return data of iteration `it`."""
+        return self.mmap_dict[it]
+
+    def iterations(self):
+        """Return list of iteration numbers."""
+        return self.mmap_dict.keys()
+
+    def __getitem__(self, key):
+        """Emulate structured array behavior."""
+        try:
+            return self.mmap_dict[key]
+        except KeyError:
+            if key in self.keys:
+                return np.array([data[key] for data in self.mmap_dict.values()])
+            else:
+                raise
+
+    def __getattr__(self, item):
+        """Access elements in `keys`."""
+        if item in self.keys:
+            return self[item]
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
 
 
 def converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: callable):
