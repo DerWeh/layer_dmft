@@ -22,8 +22,8 @@ import numpy as np
 
 from numpy import newaxis
 
-import gftools as gf
-import gftools.matrix as gfmatrix
+import gftools as gt
+import gftools.matrix as gtmatrix
 
 from .util import SpinResolvedArray, Spins
 
@@ -166,7 +166,7 @@ class Hubbard_Parameters:
         gf_0 = {}
         for sp, occ in zip(Spins, hartree):
             gf_0_inv = -self.hamiltonian(sigma=sigma[sp], hartree=occ)
-            gf_decomp = gfmatrix.decompose_hamiltonian(gf_0_inv)
+            gf_decomp = gtmatrix.decompose_hamiltonian(gf_0_inv)
             xi_bar = self.hilbert_transform(np.add.outer(gf_decomp.xi, omega),
                                             half_bandwidth=self.D)
             gf_0[sp.name] = gf_decomp.reconstruct(xi_bar, kind=diag_dic[diagonal])
@@ -176,7 +176,7 @@ class Hubbard_Parameters:
     def occ0(self, gf_iw, hartree=False, return_err=True, total=False):
         """Return occupation for the non-interacting (mean-field) model.
 
-        This is a wrapper around `gf.density`.
+        This is a wrapper around `gt.density`.
 
         Parameters
         ----------
@@ -209,7 +209,7 @@ class Hubbard_Parameters:
             hartree = (False, False)
         for sp, hartree_sp in zip(Spins, hartree):
             ham = self.hamiltonian(sigma=sigma[sp], hartree=hartree_sp)
-            occ0_ = gf.density(gf_iw[sp], potential=-ham, beta=self.beta,
+            occ0_ = gt.density(gf_iw[sp], potential=-ham, beta=self.beta,
                                return_err=return_err, matrix=True, total=total)
             if return_err is True:
                 occ0[sp.name], occ0_err[sp.name] = occ0_
@@ -217,7 +217,7 @@ class Hubbard_Parameters:
                 occ0[sp.name] = occ0_
 
         if return_err is True:
-            return gf.Result(x=SpinResolvedArray(**occ0),
+            return gt.Result(x=SpinResolvedArray(**occ0),
                              err=SpinResolvedArray(**occ0_err))
         else:
             return SpinResolvedArray(**occ0)
@@ -230,7 +230,7 @@ class Hubbard_Parameters:
 
         .. math:: \sum_k → \int dϵ δ(ϵ_k - ϵ)
 
-        This is a wrapper around `gf.density`, there is no error returned as
+        This is a wrapper around `gt.density`, there is no error returned as
         the result is exact.
 
         Parameters
@@ -254,8 +254,8 @@ class Hubbard_Parameters:
             hartree = (False, False)
         for sp, hartree_sp in zip(Spins, hartree):
             ham = self.hamiltonian(sigma=sigma[sp], hartree=hartree_sp)
-            ham_decomp = gfmatrix.decompose_hamiltonian(ham)
-            fermi = gf.fermi_fct(np.add.outer(ham_decomp.xi, eps), beta=self.beta)
+            ham_decomp = gtmatrix.decompose_hamiltonian(ham)
+            fermi = gt.fermi_fct(np.add.outer(ham_decomp.xi, eps), beta=self.beta)
             occ0[sp.name] = ham_decomp.reconstruct(xi=fermi, kind='diag')
 
         return SpinResolvedArray(**occ0)
@@ -269,7 +269,7 @@ class Hubbard_Parameters:
 
         .. math:: \sum_k → \int dϵ δ(ϵ_k - ϵ)
 
-        This is a wrapper around `gf.density`.
+        This is a wrapper around `gt.density`.
 
         Parameters
         ----------
@@ -305,11 +305,11 @@ class Hubbard_Parameters:
             hartree = (False, False)
         for sp, hartree_sp in zip(Spins, hartree):
             ham = self.hamiltonian(sigma=sigma[sp], hartree=hartree_sp)
-            ham_decomp = gfmatrix.decompose_hamiltonian(-ham)
+            ham_decomp = gtmatrix.decompose_hamiltonian(-ham)
             xi_base = ham_decomp.xi.copy()
             for ii, eps_i in enumerate(eps):
                 ham_decomp.xi[:] = xi_base - eps_i
-                occ_ = gf.density(
+                occ_ = gt.density(
                     gf_eps_iw[sp, ii], potential=ham_decomp, beta=self.beta,
                     matrix=True, return_err=return_err, total=total
                 )
@@ -318,7 +318,7 @@ class Hubbard_Parameters:
                 else:
                     occ[sp, ..., ii] = occ_
         if return_err is True:
-            return gf.Result(x=occ, err=occ_err)
+            return gt.Result(x=occ, err=occ_err)
         else:
             return occ
 
@@ -429,7 +429,7 @@ class Hubbard_Parameters:
         for diag_z_sp, gf_out_sp in zip(diag_z, gf_out):  # iterate spins
             for ii in range(shape[-1]):  # iterate z-values
                 gf_bare_inv[diag] = diag_z_sp[:, ii]
-                gf_dec = gfmatrix.decompose_gf_omega(gf_bare_inv)
+                gf_dec = gtmatrix.decompose_gf_omega(gf_bare_inv)
                 gf_dec.xi = 1./(gf_dec.xi[..., newaxis] - eps)
                 gf_out_sp[..., ii] = gf_dec.reconstruct(kind=diag_dic[diagonal])
         return gf_out
@@ -471,7 +471,7 @@ class Hubbard_Parameters:
         for diag_z_sp, gf_out_sp in zip(diag_z, gf_out):  # iterate spins
             for ii in range(shape[-1]):  # iterate z-values
                 gf_bare_inv[diag] = diag_z_sp[:, ii]
-                gf_dec = gfmatrix.decompose_gf_omega(gf_bare_inv)
+                gf_dec = gtmatrix.decompose_gf_omega(gf_bare_inv)
                 gf_dec.apply(self.hilbert_transform, half_bandwidth=self.D)
                 gf_out_sp[..., ii] = gf_dec.reconstruct(kind=diag_dic[diagonal])
         return gf_out
@@ -596,10 +596,10 @@ def hopping_matrix(size, nearest_neighbor):
 
 
 hilbert_transform = {
-    'bethe': gf.bethe_hilbert_transfrom,
+    'bethe': gt.bethe_hilbert_transfrom,
     'chain': chain_hilbert_transform,
 }
-hilbert_transform['bethe'].m2 = gf.bethe_dos.m2
+hilbert_transform['bethe'].m2 = gt.bethe_dos.m2
 hilbert_transform['chain'].m2 = lambda D: 0
 
 rev_dict_hilbert_transfrom = {transform: name for name, transform
