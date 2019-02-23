@@ -231,22 +231,27 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process) -> callable
             The updated local Green's function and self-energy.
 
         """
-        for ll, U_l in enumerate(prm.U):
-            if U_l == 0.:
-                continue  # skip non-interacting, exact solution known
+        interacting_siams = prm.get_impurity_models(
+            z=iw_points, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
+            only_interacting=True
+        )
+        interacting_layers = np.flatnonzero(prm.U)
+
+        for lay, siam in zip(interacting_layers, interacting_siams):
             # setup impurity solver
-            sb_qmc.setup(prm, layer=ll, gf_iw=gf_layer_iw[:, ll],
-                         self_iw=self_layer_iw[:, ll], occ=occ_layer)
+            sb_qmc.setup(siam)
             sb_qmc.run(n_process=n_process)
-            sb_qmc.save_data(name=f'iter{it}_lay{ll}')
+            sb_qmc.save_data(name=f'iter{it}_lay{lay}')
 
-            self_layer_iw[:, ll] = sb_qmc.read_self_energy_iw()
-            occ_layer[:, ll] = sb_qmc.read_occ().x
+            self_layer_iw[:, lay] = sb_qmc.read_self_energy_iw()
+            occ_layer[:, lay] = sb_qmc.read_occ().x
 
-            print(f"iter {it}: finished layer {ll} with U = {U_l}", flush=True)
+            print(f"iter {it}: finished layer {lay} with U = {siam.U}", flush=True)
+
         if FORCE_PARAMAGNET and np.all(prm.h == 0):
             # TODO: think about using shape [1, N_l] arrays for paramagnet
             self_layer_iw[:] = np.mean(self_layer_iw, axis=0)
+
         gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
         return gf_layer_iw, self_layer_iw, occ_layer
 

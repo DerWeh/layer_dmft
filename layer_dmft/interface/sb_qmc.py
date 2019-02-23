@@ -40,7 +40,7 @@ PARAM_TEMPLATE = textwrap.dedent(
     # T
     # ef  h (= ef_d - ef_u)
     # U
-     {D}
+     1.
      {T}
      {ef}  {h}
      {U}
@@ -127,43 +127,33 @@ def get_path(dir_) -> Path:
     return dir_
 
 
-def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, occ, dir_='.', **kwds):
+def setup(siam: SIAM, dir_='.', **kwds):
     """Prepare the 'hybrid_fct' file and parameters to use **spinboson** code.
 
     Parameters
     ----------
-    prm : Hubbard_Parameters
-        The model parameters.
-    layer : int
-        The index of the layer that is mapped onto the impurity problem.
-    gf_iw, self_iw : (2, N_IW) complex np.ndarray
-        The local Matsubara Green's function and self energy of the layer.
-    occ : (2, ) float np.ndarray
-        The local occupation number.
+    siam: SIAM
+        The effective single impurity Anderson model to solve.
     dir_ :
         The working directory for the **spinboson** solver.
     kwds :
         Additional parameters for the CT-QMC. See `QMC_PARAMS`
 
     """
-    assert gf_iw.ndim == 2, f"Dimension must be 2: (N_spins, N_iw), ndim: {gf_iw.ndim}"
-    assert gf_iw.shape[0] == 2, ("First dimension must be of length 2=#Spins, "
-                                 f"here: {gf_iw.shape[0]}")
-    assert gf_iw.shape == self_iw.shape, ("Shape of self-energy and Gf have to match, "
-                                          f"Gf: {gf_iw.shape}, self: {self_iw.shape}")
     if set(kwds.keys()) - QMC_PARAMS.slots():
-        raise TypeError("Unknown keyword arguments:"
-                        f" {kwds.keys()-QMC_PARAMS.slots()}")
+        raise TypeError(f"Unknown keyword arguments: {kwds.keys()-QMC_PARAMS.slots()}")
     dir_ = get_path(dir_)
-    # trim Green's function to spinboson code
-    gf_iw, self_iw = gf_iw[:, :N_IW], self_iw[:, :N_IW]
 
-    iw = gt.matsubara_frequencies(np.arange(gf_iw.shape[1]), beta=prm.beta)
-    on_site_e = prm.onsite_energy()[:, layer]
-    h_l = prm.h[layer]
+    on_site_e = siam.e_onsite
+    h_l = on_site_e.up - on_site_e.dn
     assert on_site_e.up - SIGMA.up*h_l == on_site_e.dn - SIGMA.dn*h_l
-    hybrid_iw = iw + on_site_e[:, np.newaxis] - self_iw - 1./gf_iw
-    hybrid_m1 = prm.hybrid_fct_m1(occ)[:, layer]
+
+    # trim hybridization function to spinboson code
+    hybrid_iw = siam.hybrid_fct[:, :N_IW]
+    assert hybrid_iw.ndim == 2, f"Dimension must be 2: (N_spins, N_iw), ndim: {hybrid_iw.ndim}"
+    assert hybrid_iw.shape[0] == 2, ("First dimension must be of length 2=#Spins, "
+                                     f"here: {hybrid_iw.shape[0]}")
+    hybrid_mom = siam.hybrid_mom
     digits = 14
     fill = 2 + 2 + digits + 4
     header = (
