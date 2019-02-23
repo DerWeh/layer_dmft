@@ -9,8 +9,8 @@ import numpy as np
 
 import gftools as gt
 
-from ..util import SpinResolvedArray
-from ..model import Hubbard_Parameters, sigma
+from layer_dmft.util import SpinResolvedArray
+from layer_dmft.model import SIGMA, SIAM
 
 N_IW = 1024  # TODO: scan code for proper number
 
@@ -161,7 +161,7 @@ def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, occ, dir_='.', **
     iw = gt.matsubara_frequencies(np.arange(gf_iw.shape[1]), beta=prm.beta)
     on_site_e = prm.onsite_energy()[:, layer]
     h_l = prm.h[layer]
-    assert on_site_e.up - sigma.up*h_l == on_site_e.dn - sigma.dn*h_l
+    assert on_site_e.up - SIGMA.up*h_l == on_site_e.dn - SIGMA.dn*h_l
     hybrid_iw = iw + on_site_e[:, np.newaxis] - self_iw - 1./gf_iw
     hybrid_m1 = prm.hybrid_fct_m1(occ)[:, layer]
     digits = 14
@@ -178,9 +178,9 @@ def setup(prm: Hubbard_Parameters, layer: int, gf_iw, self_iw, occ, dir_='.', **
     (dir_ / OUTPUT_DIR).mkdir(exist_ok=True)
     qmc_dict = dict(QMC_PARAMS)
     qmc_dict.update(kwds)
-    init_content = PARAM_TEMPLATE.format(D=prm.D, T=prm.T, U=prm.U[layer],
-                                         ef=-on_site_e.up + sigma.up*h_l, h=h_l,
-                                         V2_up=hybrid_m1.up, V2_dn=hybrid_m1.dn,
+    init_content = PARAM_TEMPLATE.format(T=siam.T, U=siam.U,
+                                         ef=-on_site_e.up + SIGMA.up*h_l, h=h_l,
+                                         V2_up=hybrid_mom.up, V2_dn=hybrid_mom.dn,
                                          **qmc_dict)
     (dir_ / INIT_FILE).write_text(init_content)
 

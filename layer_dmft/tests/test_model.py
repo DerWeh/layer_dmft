@@ -114,11 +114,11 @@ def test_2x2_matrix():
 
     omegas = gftools.matsubara_frequencies(np.arange(100), prm.beta)
     gf_prm = prm.gf0(omegas, diagonal=False)
-    gf_2x2_up = np.array([gf_2x2(iw, prm.t_mat, prm.onsite_energy(sigma=model.sigma.up))
+    gf_2x2_up = np.array([gf_2x2(iw, prm.t_mat, prm.onsite_energy(sigma=model.SIGMA.up))
                           for iw in omegas])
     gf_2x2_up = gf_2x2_up.transpose(1, 2, 0)  # adjuste axis order (2, 2, omegas)
     assert np.allclose(gf_2x2_up, gf_prm.up)
-    gf_2x2_dn = np.array([gf_2x2(iw, prm.t_mat, prm.onsite_energy(sigma=model.sigma.dn))
+    gf_2x2_dn = np.array([gf_2x2(iw, prm.t_mat, prm.onsite_energy(sigma=model.SIGMA.dn))
                           for iw in omegas])
     gf_2x2_dn = gf_2x2_dn.transpose(1, 2, 0)  # adjuste axis order (2, 2, omegas)
     assert np.allclose(gf_2x2_dn, gf_prm.dn)

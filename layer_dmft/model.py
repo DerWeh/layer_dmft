@@ -10,12 +10,12 @@
 The main constituents are:
 * The `prm` class which defines the Hamiltonian
   (the layer density of states DOS still needs to be supplemented).
-* Spin *objects*: `Spins`, `SpinResolved`, `sigma`
+* Spin *objects*: `Spins`, `SpinResolved`, `SIGMA`
   They allow to handle the spin dependence σ=↑=+1/2, σ=↓=−1/2
 
 Most likely you want to import this module like::
 
-    from model import prm, sigma, Spins
+    from model import prm, SIGMA, Spins
 
 """
 from typing import Tuple
@@ -28,8 +28,8 @@ import gftools.matrix as gtmatrix
 
 from .util import SpinResolvedArray, Spins
 
-sigma = SpinResolvedArray(up=0.5, dn=-0.5)
-sigma.flags.writeable = False
+SIGMA = SpinResolvedArray(up=0.5, dn=-0.5)
+SIGMA.flags.writeable = False
 
 diag_dic = {True: 'diag', False: 'full'}
 
@@ -217,7 +217,7 @@ class Hubbard_Parameters:
     def beta(self, value):
         self.T = 1./value
 
-    def onsite_energy(self, sigma=sigma, hartree=False):
+    def onsite_energy(self, sigma=SIGMA, hartree=False):
         """Return the single-particle on-site energy.
 
         The energy is given with respect to half-filling, thus the chemical
@@ -252,12 +252,12 @@ class Hubbard_Parameters:
             return onsite_energy.view(type=SpinResolvedArray)
         return onsite_energy
 
-    def hamiltonian(self, sigma=sigma, hartree=False):
+    def hamiltonian(self, sigma=SIGMA, hartree=False):
         """Return the matrix form of the non-interacting Hamiltonian.
 
         Parameters
         ----------
-        sigma : {-0.5, +0.5, sigma}
+        sigma : {-0.5, +0.5, SIGMA}
             The value of :math:`σ∈{↑,↓}` which is needed to determine the
             Zeeman energy contribution :math:`σh`.
         hartree : False or float ndarray
@@ -303,7 +303,7 @@ class Hubbard_Parameters:
             assert hartree.shape[0] == 2
         gf_0 = {}
         for sp, occ in zip(Spins, hartree):
-            gf_0_inv = -self.hamiltonian(sigma=sigma[sp], hartree=occ)
+            gf_0_inv = -self.hamiltonian(sigma=SIGMA[sp], hartree=occ)
             gf_decomp = gtmatrix.decompose_hamiltonian(gf_0_inv)
             xi_bar = self.hilbert_transform(np.add.outer(gf_decomp.xi, omega),
                                             half_bandwidth=self.D)
@@ -346,7 +346,7 @@ class Hubbard_Parameters:
         if hartree is False:
             hartree = (False, False)
         for sp, hartree_sp in zip(Spins, hartree):
-            ham = self.hamiltonian(sigma=sigma[sp], hartree=hartree_sp)
+            ham = self.hamiltonian(sigma=SIGMA[sp], hartree=hartree_sp)
             occ0_ = gt.density(gf_iw[sp], potential=-ham, beta=self.beta,
                                return_err=return_err, matrix=True, total=total)
             if return_err is True:
@@ -391,7 +391,7 @@ class Hubbard_Parameters:
         if hartree is False:
             hartree = (False, False)
         for sp, hartree_sp in zip(Spins, hartree):
-            ham = self.hamiltonian(sigma=sigma[sp], hartree=hartree_sp)
+            ham = self.hamiltonian(sigma=SIGMA[sp], hartree=hartree_sp)
             ham_decomp = gtmatrix.decompose_hamiltonian(ham)
             fermi = gt.fermi_fct(np.add.outer(ham_decomp.xi, eps), beta=self.beta)
             occ0[sp.name] = ham_decomp.reconstruct(xi=fermi, kind='diag')
@@ -442,7 +442,7 @@ class Hubbard_Parameters:
         if hartree is False:
             hartree = (False, False)
         for sp, hartree_sp in zip(Spins, hartree):
-            ham = self.hamiltonian(sigma=sigma[sp], hartree=hartree_sp)
+            ham = self.hamiltonian(sigma=SIGMA[sp], hartree=hartree_sp)
             ham_decomp = gtmatrix.decompose_hamiltonian(-ham)
             xi_base = ham_decomp.xi.copy()
             for ii, eps_i in enumerate(eps):
