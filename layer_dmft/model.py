@@ -18,6 +18,7 @@ Most likely you want to import this module like::
     from model import prm, sigma, Spins
 
 """
+from typing import Tuple
 import numpy as np
 
 from numpy import newaxis
@@ -31,6 +32,143 @@ sigma = SpinResolvedArray(up=0.5, dn=-0.5)
 sigma.flags.writeable = False
 
 diag_dic = {True: 'diag', False: 'full'}
+
+
+class SIAM:
+    """Single Impurity Anderson model for given frequencies.
+
+    Attributes
+    ----------
+    see `SIAM.__init__`
+
+    """
+
+    __slots__ = ('T', 'e_onsite', 'U', 'z', 'hybrid_fct', 'hybrid_mom')
+
+    def __init__(self, e_onsite, U: float, T: float, z, hybrid_fct, hybrid_mom) -> None:
+        r"""Create effective single impurity Anderson model.
+
+        In frequency space the non-interacting Green's function is
+
+        .. math::
+            G_{0\,σ}(z) = (z - ϵ_{σ} - Δ_{σ}(z))^{-1}
+
+        Parameters
+        ----------
+        e_onsite : (2, ) float array_like
+            The onsite energy of the impurity.
+        U : float
+            The local interaction strength of the impurity site.
+        T : float
+            The temperature.
+        z : (N_z, ) complex array_like
+            The frequencies for which the hybridization function is given.
+        hybrid_fct : (N_z, ) complex array_like
+            The hybridization function evaluated at frequencies `z`.
+        hybrid_mom : (2, ) float array_like
+            The first `1/z` moment of the hybridization function.
+            This is necessary to determine the (jump of the) hybridization
+            function in :math:`τ`-space correctly.
+
+        """
+        self.e_onsite = np.asanyarray(e_onsite)
+        self.U = U
+        self.T = T
+        self.z = z
+        self.hybrid_fct = hybrid_fct
+        self.hybrid_mom = hybrid_mom
+        assert z.size == hybrid_fct.shape[-1]
+
+    @property
+    def beta(self) -> float:
+        """Inverse temperature."""
+        return 1./self.T
+
+    @beta.setter
+    def beta(self, value):
+        self.T = 1./value
+
+    def gf0(self, hartree=False):
+        """Return the non-interacting Green's function.
+
+        Parameters
+        ----------
+        hartree : False or float ndarray
+            If Hartree Green's function is returned. If it is `False` (default),
+            non-interacting Green's function is returned. If it is the electron
+            density, the (one-shot) Hartree Green's function is returned.
+
+        Returns
+        -------
+        gf_0 : (2, N_z) complex SpinResolvedArray
+            The Green's function for spin up and down.
+
+        """
+        assert hartree is False, "Not implemented yet"
+        if hartree is False:  # for common loop
+            hartree = (False, False)
+        else:  # first axis needs to be spin such that loop is possible
+            assert hartree.shape[0] == 2
+        gf_0 = 1./(self.z - self.e_onsite[:, newaxis] - self.hybrid_fct)
+        return gf_0.view(type=SpinResolvedArray)
+
+    def occ0(self, gf_iw, hartree=False, return_err=True, total=False):
+        """Return occupation for the non-interacting (mean-field) model.
+
+        This is a wrapper around `gt.density`.
+
+        Parameters
+        ----------
+        gf_iw : (2, N_matsubara) SpinResolvedArray
+            The Matsubara frequency Green's function for positive frequencies
+            :math:`iω_n`.  The shape corresponds to the result of `self.gf_0`
+            and `self.gf_dmft`.  The last axis corresponds to the Matsubara
+            frequencies.
+        hartree : False or (2, N) SpinResolvedArray
+            If Hartree term is included. If it is `False` (default) Hartree is
+            not included. Else it needs to be the electron density necessary
+            to calculate the mean-field term.
+        return_err : bool or float, optional
+            If `True` (default), the error estimate will be returned along
+            with the density.  If `return_err` is a float, a warning will
+            Warning will be issued if the error estimate is larger than
+            `return_err`. If `False`, no error estimate is calculated.
+
+        Returns
+        -------
+        occ0.x : (2, ) SpinResolvedArray
+            The occupation per layer and spin
+        occ0.err : (2, ) SpinResolvedArray
+            If `return_err`, the truncation error of occupation
+
+        """
+        assert hartree is False, "Not implemented yet"
+        if hartree is False:
+            hartree = (False, False)
+        # for sp, hartree_sp in zip(Spins, hartree):
+        occ0_ = gt.density(gf_iw, potential=-self.e_onsite, beta=self.beta,
+                           return_err=return_err, matrix=False, total=total)
+        return occ0_
+
+    def gf_s(self, self_z):
+        """Calculate the local Green's function from the self-energy `self_z`.
+
+        Parameters
+        ----------
+        self_z : (2, N) complex ndarray
+            Self-energy of the green's function. It's last axis corresponds to
+            the frequencies `z`. The first axis contains the spin components.
+
+        Returns
+        -------
+        gf_z : (2, N) SpinResolvedArray
+            The Green's function.
+
+        """
+        assert self.z.size == self_z.shape[-1], "Same number of frequencies"
+        assert len(Spins) == self_z.shape[0], "Two spin components"
+        gf_inv = 1./(self.z + self.e_onsite()[:, newaxis] - self_z)
+        return gf_inv.view(type=SpinResolvedArray)
 
 
 class Hubbard_Parameters:
