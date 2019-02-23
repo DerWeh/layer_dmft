@@ -699,6 +699,67 @@ class Hubbard_Parameters:
         """Return a copy of the Hubbard_Parameters object."""
         return self.__copy__()
 
+    def get_impurity_models(self, z, self_z, gf_z=None, *, occ,
+                            only_interacting=False) -> Tuple[SIAM, ...]:
+        """Get effective impurity models.
+
+        Parameters
+        ----------
+        z : (N_z,) complex ndarray
+            The frequencies at which the self-energy and Green's function is
+            known.
+        self_z : (2, N_z) complex ndarray
+            The local self-energy of the lattice model.
+        gf_z : (2, N_z) complex ndarray, optional
+            The local Green's function. If not given, it will be calculated from
+            the self-energy `self_z`.
+        occ : (2, ) float ndarray
+            The occupation corresponding to the self-energy `self_z`. This is
+            necessary to calculated the high-frequency (:math:`1/z`) of the
+            self-energy and thus the hybridization function.
+        only_interacting : bool, optional
+            Weather to only calculate the corresponding to interacting layers
+            or all (default). For DMFT only the interacting layers are relevant.
+
+        Returns
+        -------
+        impurity_models : Tuple[SIAM, ...]
+            Tuple containing the calculated (see `only_interacting`) single
+            impurity Anderson models.
+
+        Examples
+        --------
+        Get effective SIAMs for interacting layers as starting point for DMFT:
+
+        >>> prm.U = np.array([0. 0., 1., 1.])
+        >>> z = gt.matsub
+        >>> prm.get_impurity_models()
+        >>> N_iw = 2**10
+        >>> iw = gt.matsubara_frequencies(N_iw, beta=prm.beta)
+        >>> imp_mod_list = prm.get_impurity_models(z=iw, self_z=0, only_interacting=True)
+
+        Identify corresponding layers
+
+        >>> imp_mod_dict = {lay: mod for lay, mod in zip(np.flatnonzero(prm.U), imp_mod_list)}
+
+        """
+        if gf_z is None:
+            gf_z = self.gf_dmft_s(z, self_z=self_z, diagonal=True)
+        else:
+            assert gf_z.shape == self_z.shape, ("Shape of self-energy and Gf have to match, "
+                                                f"Gf: {gf_z.shape}, self: {self_z.shape}")
+        e_onsite = self.onsite_energy()
+        hybrid_z = z + e_onsite[..., newaxis] - self_z - 1./gf_z
+        hybrid_mom = self.hybrid_fct_m1(occ)
+        if only_interacting:
+            layers = self.U.nonzero()[0]
+        else:
+            layers = range(self.mu.size)
+        impurity_models = tuple(SIAM(e_onsite[:, ll], U=self.U[ll], T=self.T,
+                                     z=z, hybrid_fct=hybrid_z[:, ll], hybrid_mom=hybrid_mom[:, ll])
+                                for ll in layers)
+        return impurity_models
+
 
 def _save_get(object_, attribue):
     try:
