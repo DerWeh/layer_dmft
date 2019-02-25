@@ -19,8 +19,7 @@ from scipy import optimize
 
 import gftools as gt
 
-from . import model, plot
-from .model import prm
+from . import plot
 from .capacitor_formula import potential_energy_vector
 
 VERBOSE = True
@@ -159,8 +158,8 @@ def self_consistency_plain(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
     print(n)
     print('Final potential')
     print(V_l)
-    print(prm.V)
-    print(np.linalg.norm(prm.V - V_l))
+    print(params.V)
+    print(np.linalg.norm(params.V - V_l))
 
 
 @counter
@@ -240,6 +239,7 @@ def update_potential(V_init, i_omega, params, out_dict):
 @counter
 def print_status(x, dx):
     """Intermediate print output for `optimize.root`."""
+    del x
     if print_status.count == 1:  # print heading in first iteration
         print('_____________________')
         print('| iteration | change ')

@@ -231,9 +231,9 @@ class SelfEnergy(SpinResolvedArray):
         # Pade performs better if static part is not stripped from self-energy
         # # static part needs to be stripped as function is for Gf not self-energy
         # self_pade, self_pade_err = pade_fct(self.dynamic())
-        self_pade = gtpade.averaged(
-            z_out, z_in, fct_z=self,
-            n_min=n_min, n_max=n_max, valid_z=valid_z, threshold=threshold, kind='self'
+        kind = gtpade.KindSelf(n_min=n_min, n_max=n_max)
+        self_pade = gtpade.avg_no_neg_imag(
+            z_out, z_in, fct_z=self, valid_z=valid_z, threshold=threshold, kind=kind
         )
         # return gt.Result(x=self_pade+self.static(expand=True), err=self_pade_err)
         return self_pade

@@ -506,7 +506,7 @@ def matrix(mat, axis=None, log=False, **mpl_args):
         imag = axis.matshow(mat, norm=norm, **mpl_args)
     else:
         imag = axis.matshow(mat, **mpl_args)
-    cbar = axis.figure.colorbar(imag, ax=axis)
+    axis.figure.colorbar(imag, ax=axis)
 
     # make white grid between matrix elements
     axis.set_xticks(np.arange(mat.shape[1]+1)-.5, minor=True)

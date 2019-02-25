@@ -141,7 +141,7 @@ class LayerData:
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
 
 
-def converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: callable):
+def abstract_converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: callable):
     """Abstract function as template for the DMFT self-consistency.
 
     Parameters
@@ -193,7 +193,7 @@ def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, functi
     return gf_layer_iw, self_layer_iw
 
 
-def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process) -> callable:
+def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kwds) -> callable:
     """Return a `sweep_update` function, calculating the impurities for all layers.
 
     Parameters
@@ -204,6 +204,8 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process) -> callable
         The array of Matsubara frequencies.
     n_process : int
         The number of precesses used by the `sb_qmc` code.
+    solver_kwds:
+        Parameters passed to the impurity solver, here `sb_qmc`.
 
     Returns
     -------
@@ -239,7 +241,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process) -> callable
 
         for lay, siam in zip(interacting_layers, interacting_siams):
             # setup impurity solver
-            sb_qmc.setup(siam)
+            sb_qmc.setup(siam, **solver_kwds)
             sb_qmc.run(n_process=n_process)
             sb_qmc.save_data(name=f'iter{it}_lay{lay}')
 
@@ -307,7 +309,8 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PAR
     # iteration scheme
     converge = bare_iteration
     # sweep updates -> calculate all impurities, then update
-    iteration = get_sweep_updater(prm, iw_points=iw_points, n_process=n_process)
+    iteration = get_sweep_updater(prm, iw_points=iw_points, n_process=n_process,
+                                  **qmc_params)
 
     # perform self-consistency loop
     converge(

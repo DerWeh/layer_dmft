@@ -11,19 +11,21 @@ from __future__ import absolute_import, unicode_literals
 import pytest
 import numpy as np
 
-from .context import model
-from .context import util
+import gftools
+
+from .context import model, util
+
 SpinResolvedArray = util.SpinResolvedArray
-# from .context.util import SpinResolvedArray
-from .context import gftools
 
 
 def test_SpinResolvedArray_creation():
+    """Basic test that `SpinResolvedArray` constructor creates suitable array."""
     assert np.all(SpinResolvedArray([1, 2]) == np.array([1, 2]))
     assert np.all(SpinResolvedArray(up=1, dn=2) == np.array([1, 2]))
 
 
 def test_SpinResolvedArray_access():
+    """Basic test for accessing elements of `SpinResolvedArray`s"""
     updata = np.arange(0, 7)
     dndata = np.arange(0, 7)
     test_array = SpinResolvedArray(up=updata, dn=dndata)
@@ -42,9 +44,9 @@ def test_SpinResolvedArray_access():
 
 def test_SpinResolvedArray_elements():
     """Assert that the elements of SpinResolvedArray are regular arrays."""
-    assert type(SpinResolvedArray([1, 2]).up) is not SpinResolvedArray
+    assert not isinstance(SpinResolvedArray([1, 2]).up, SpinResolvedArray)
     spin_array = SpinResolvedArray(up=np.arange(9), dn=np.arange(9))
-    assert type(spin_array.up) is not SpinResolvedArray
+    assert not isinstance(spin_array.up, SpinResolvedArray)
     # assert type(spin_array[slice(1, None, 1)])\
     #     is not SpinResolvedArray
 
@@ -53,7 +55,7 @@ def test_SpinResolvedArray_iteration():
     """Assert that the array is iterable."""
     test = SpinResolvedArray(up=np.arange(9).reshape(3, 3),
                              dn=np.arange(9).reshape(3, 3))
-    for i, element in enumerate(test):
+    for __ in test:
         pass
 
 
@@ -84,7 +86,7 @@ def test_compare_greensfunction():
 
 def test_2x2_matrix():
     """Compare with analytic inversion of (2, 2) matrix.
-    
+
     Done for the 1D chain of sites.
     """
     prm = model.prm
@@ -94,7 +96,7 @@ def test_2x2_matrix():
             "No diagonal elements for t_mat allowed"
         assert t_mat.shape == (2, 2)
         assert onsite_energys.shape == (2, )
-        diag =  omega + onsite_energys
+        diag = omega + onsite_energys
         norm = 1. / (np.prod(diag) - t_mat[0, 1]*t_mat[1, 0])
         gf = np.zeros_like(t_mat, dtype=np.complex)
         gf[0, 0] = diag[1]
