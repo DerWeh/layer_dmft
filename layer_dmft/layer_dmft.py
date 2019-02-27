@@ -9,10 +9,11 @@ FORCE_PARAMAGNET: bool
 """
 # encoding: utf-8
 import warnings
+import logging
 
 from pathlib import Path
 from weakref import finalize
-from datetime import date, datetime
+from datetime import date
 from collections import OrderedDict
 
 import numpy as np
@@ -22,23 +23,28 @@ from . import __version__, charge
 from .model import Hubbard_Parameters
 from .interface import sb_qmc
 
+PROGRESS = logging.INFO - 5
+logging.addLevelName(PROGRESS, 'PROGRESS')
+LOGGER = logging.getLogger(__name__)
+LOG_FMT = logging.Formatter('%(asctime)s|%(name)s|%(levelname)s: %(message)s')
+HANDLER = logging.StreamHandler()
+# HANDLER = logging.FileHandler("layer_output.txt", mode='a')
+HANDLER.setFormatter(LOG_FMT)
+LOGGER.addHandler(HANDLER)
+LOGGER.setLevel(PROGRESS)
+
+
 OUTPUT_DIR = "layer_output"
 
 CONTINUE = True
 FORCE_PARAMAGNET = True
 
 
-def write_info(prm: Hubbard_Parameters):
-    """Write basic information for DMFT run to."""
-    with open('layer_output.txt', mode='a') as fp:
-        fp.write("\n".join([
-            datetime.now().isoformat(),
-            "layer_dmft version: " + str(__version__),
-            "gftools version:    " + str(gt.__version__),
-            "",
-            prm.pstr(),
-            "",
-        ]))
+def log_info(prm: Hubbard_Parameters):
+    """Log basic information for r-DMFT."""
+    LOGGER.info("layer_dmft version: %s", __version__)
+    LOGGER.info("gftools version:    %s", gt.__version__)
+    LOGGER.info("%s", prm.pstr())
 
 
 def save_gf(gf_iw, self_iw, occ_layer, dir_='.', name='layer', compress=True):
@@ -108,7 +114,6 @@ class LayerData:
         data = np.load(*args, **kwds)
 
         def _test():
-            print('Destroy', data)
             data.close()
         finalize(self, _test)
         return data
@@ -237,14 +242,13 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
         interacting_layers = np.flatnonzero(prm.U)
 
         for lay, siam in zip(interacting_layers, interacting_siams):
-            # setup impurity solver
+            LOGGER.log(PROGRESS, 'iter %s: starting layer %s with U = %s',
+                       it, lay, siam.U)
             data = sb_qmc.solve(siam, n_process=n_process,
                                 output_name=f'iter{it}_lay{lay}', **solver_kwds)
 
             self_layer_iw[:, lay] = data['self_energy_iw']
             occ_layer[:, lay] = -data['gf_tau'][:, -1]
-
-            print(f"iter {it}: finished layer {lay} with U = {siam.U}", flush=True)
 
         if FORCE_PARAMAGNET and np.all(prm.h == 0):
             # TODO: think about using shape [1, N_l] arrays for paramagnet
@@ -258,7 +262,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
 
 def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.DEFAULT_QMC_PARAMS):
     """Execute DMFT loop."""
-    write_info(prm)
+    log_info(prm)
     N_l = prm.mu.size
 
     # technical parameters
@@ -271,9 +275,9 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.DEFAULT
     # initial condition
     #
     if CONTINUE:
-        print("reading old Green's function and self energy")
+        LOGGER.info("reading old Green's function and self energy")
         last_iter, last_output = get_last_iter("layer_output")
-        print(f"Starting from iteration {last_iter}: {last_output.name}")
+        LOGGER.info("Starting from iteration %s: %s", last_iter, last_output.name)
 
         with np.load(last_output) as data:
             gf_layer_iw = data['gf_iw']
@@ -281,7 +285,7 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.DEFAULT
             occ_layer = data['occ']
         start = last_iter + 1
     else:
-        print('start initialization')
+        LOGGER.info('Start from Hartree')
         gf_layer_iw = prm.gf0(iw_points)  # start with non-interacting Gf
         occ0 = prm.occ0(gf_layer_iw)
         if np.any(prm.U != 0):
@@ -295,7 +299,7 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.DEFAULT
             # start with non-interacting solution
             self_layer_iw = np.zeros((2, N_l, N_IW), dtype=np.complex)
             occ_layer = occ0
-        print('done')
+        LOGGER.log(PROGRESS, 'DONE: calculated starting point')
         start = 0
 
     #
