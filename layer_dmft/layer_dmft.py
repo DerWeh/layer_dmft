@@ -241,12 +241,11 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
 
         for lay, siam in zip(interacting_layers, interacting_siams):
             # setup impurity solver
-            sb_qmc.setup(siam, **solver_kwds)
-            sb_qmc.run(n_process=n_process)
-            sb_qmc.save_data(name=f'iter{it}_lay{lay}')
+            data = sb_qmc.solve(siam, n_process=n_process,
+                                output_name=f'iter{it}_lay{lay}', **solver_kwds)
 
-            self_layer_iw[:, lay] = sb_qmc.read_self_energy_iw()
-            occ_layer[:, lay] = sb_qmc.read_occ().x
+            self_layer_iw[:, lay] = data['self_energy_iw']
+            occ_layer[:, lay] = -data['gf_tau'][:, -1]
 
             print(f"iter {it}: finished layer {lay} with U = {siam.U}", flush=True)
 

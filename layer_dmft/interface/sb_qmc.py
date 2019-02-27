@@ -184,6 +184,13 @@ def run(dir_=".", n_process=1):
         check_call(command.split(), stdout=outfile)
 
 
+def solve(siam: SIAM, n_process, output_name, dir_='.', **solver_kwds):
+    setup(siam, dir_=dir_, **solver_kwds)
+    run(n_process=n_process, dir_=dir_)
+    data = save_data(name=output_name, dir_=dir_)
+    return data
+
+
 def output_dir(dir_) -> Path:
     """Return the output directory of the **spinboson** code.
 
@@ -417,3 +424,4 @@ def save_data(dir_='.', name='sb', compress=True):
     name = date.today().isoformat() + '_' + name
     (dir_/"imp_output").mkdir(exist_ok=True)
     save_method(dir_/"imp_output"/name, **data)
+    return data
