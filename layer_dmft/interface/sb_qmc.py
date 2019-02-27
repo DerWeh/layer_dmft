@@ -2,18 +2,18 @@
 import textwrap
 
 from pathlib import Path
-from datetime import date
-from collections import Mapping, namedtuple
+from datetime import date, datetime
+from collections import ChainMap, Mapping, namedtuple
 
 import numpy as np
 
 import gftools as gt
 
+from layer_dmft import __version__
 from layer_dmft.util import SpinResolvedArray
-from layer_dmft.model import SIGMA, SIAM
+from layer_dmft.model import SIAM, SIGMA
 
 N_IW = 1024  # TODO: scan code for proper number
-
 
 SB_EXECUTABLE = Path('~/spinboson-1.10/sb_qmc.out').expanduser()
 OUTPUT_DIR = "output"
@@ -95,14 +95,16 @@ PARAM_TEMPLATE = textwrap.dedent(
 )
 
 
-class _qmc_params(Mapping):
+class QMCParams(Mapping):
     __slots__ = ('N_BIN', 'N_MSR', 'FLAG_TP')
     __getitem__ = object.__getattribute__
     __setitem__ = object.__setattr__
 
-    def __init__(self, N_BIN, N_MSR, FLAG_TP=0):
+    def __init__(self, N_BIN: int, N_MSR: int, FLAG_TP: int = 0) -> None:
         self.N_BIN = N_BIN
         self.N_MSR = N_MSR
+        if not isinstance(FLAG_TP, int) or FLAG_TP < 0:
+            raise TypeError(f"'FLAG_TP' must be non-negative integer, got: {FLAG_TP}")
         self.FLAG_TP = FLAG_TP
 
     def __len__(self):
@@ -111,12 +113,13 @@ class _qmc_params(Mapping):
     def __iter__(self):
         return iter(self.__slots__)
 
-    def slots(self) -> set:
+    @classmethod
+    def slots(cls) -> set:
         """Return the set of existing attributes."""
-        return set(self.__slots__)
+        return set(cls.__slots__)
 
 
-QMC_PARAMS = _qmc_params(N_BIN=10, N_MSR=10**5)
+DEFAULT_QMC_PARAMS = QMCParams(N_BIN=10, N_MSR=10**5)
 
 
 def get_path(dir_) -> Path:
@@ -137,11 +140,11 @@ def setup(siam: SIAM, dir_='.', **kwds):
     dir_ :
         The working directory for the **spinboson** solver.
     kwds :
-        Additional parameters for the CT-QMC. See `QMC_PARAMS`
+        Additional parameters for the CT-QMC. See `QMCParams`
 
     """
-    if set(kwds.keys()) - QMC_PARAMS.slots():
-        raise TypeError(f"Unknown keyword arguments: {kwds.keys()-QMC_PARAMS.slots()}")
+    if set(kwds.keys()) - QMCParams.slots():
+        raise TypeError(f"Unknown keyword arguments: {kwds.keys()-QMCParams.slots()}")
     dir_ = get_path(dir_)
 
     on_site_e = siam.e_onsite
@@ -166,12 +169,10 @@ def setup(siam: SIAM, dir_='.', **kwds):
                fmt=[f'%+.{digits}e %+.{digits}e', ]*2, delimiter=' ',
                header=header)
     (dir_ / OUTPUT_DIR).mkdir(exist_ok=True)
-    qmc_dict = dict(QMC_PARAMS)
-    qmc_dict.update(kwds)
     init_content = PARAM_TEMPLATE.format(T=siam.T, U=siam.U,
                                          ef=-on_site_e.up + SIGMA.up*h_l, h=h_l,
                                          V2_up=hybrid_mom.up, V2_dn=hybrid_mom.dn,
-                                         **qmc_dict)
+                                         **kwds)
     (dir_ / INIT_FILE).write_text(init_content)
 
 
@@ -184,10 +185,13 @@ def run(dir_=".", n_process=1):
         check_call(command.split(), stdout=outfile)
 
 
-def solve(siam: SIAM, n_process, output_name, dir_='.', **solver_kwds):
+def solve(siam: SIAM, n_process, output_name, dir_='.', **kwds):
+    if set(kwds.keys()) - QMCParams.slots():
+        raise TypeError(f"Unknown keyword arguments: {kwds.keys()-QMCParams.slots()}")
+    solver_kwds = ChainMap(kwds, DEFAULT_QMC_PARAMS)
     setup(siam, dir_=dir_, **solver_kwds)
     run(n_process=n_process, dir_=dir_)
-    data = save_data(name=output_name, dir_=dir_)
+    data = save_data(name=output_name, dir_=dir_, qmc_params=solver_kwds)
     return data
 
 
@@ -400,18 +404,22 @@ def read_occ(dir_='.') -> gt.Result:
     return gt.Result(x=-gf_tau.x[:, -1], err=gf_tau.err[:, -1])
 
 
-def save_data(dir_='.', name='sb', compress=True):
+def save_data(dir_='.', name='sb', compress=True, qmc_params=DEFAULT_QMC_PARAMS):
     """Read the **spinboson** data and save it as numpy arrays."""
     dir_ = Path(dir_).expanduser()
     dir_.mkdir(exist_ok=True)
     data = {}
+    data['solver'] = __name__
+    data['__version__'] = __version__
+    data['__date__'] = datetime.now().isoformat()
     data['tau'] = read_tau(dir_)
     data['gf_tau'], data['gf_tau_err'] = read_gf_tau(dir_)
     data['gf_x_self_tau'] = read_gf_x_self_tau(dir_)
     data['gf_iw'] = read_gf_iw(dir_)
     data['self_energy_iw'] = read_self_energy_iw(dir_)
     data['misc'] = np.genfromtxt(output_dir(dir_)/'xx.dat', missing_values='?')
-    if QMC_PARAMS.FLAG_TP == 1:  # FIXME: not the only way to calculate it
+    data['qmc_params'] = dict(qmc_params)
+    if 0 < qmc_params['FLAG_TP'] < 3:
         suscept_iw = read_susceptibility_iw()
         data['spin_susceptibility_iw'] = suscept_iw.spin
         data['charge_susceptibility_iw'] = suscept_iw.charge

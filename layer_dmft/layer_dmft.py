@@ -9,17 +9,16 @@ FORCE_PARAMAGNET: bool
 """
 # encoding: utf-8
 import warnings
-from collections import OrderedDict
-from weakref import finalize
 
 from pathlib import Path
+from weakref import finalize
 from datetime import date, datetime
+from collections import OrderedDict
 
 import numpy as np
-
 import gftools as gt
 
-from . import charge
+from . import __version__, charge
 from .model import Hubbard_Parameters
 from .interface import sb_qmc
 
@@ -31,12 +30,10 @@ FORCE_PARAMAGNET = True
 
 def write_info(prm: Hubbard_Parameters):
     """Write basic information for DMFT run to."""
-    from ._version import get_versions
-
     with open('layer_output.txt', mode='a') as fp:
         fp.write("\n".join([
             datetime.now().isoformat(),
-            "layer_dmft version: " + str(get_versions()['version']),
+            "layer_dmft version: " + str(__version__),
             "gftools version:    " + str(gt.__version__),
             "",
             prm.pstr(),
@@ -259,7 +256,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
     return sweep_update
 
 
-def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.QMC_PARAMS):
+def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.DEFAULT_QMC_PARAMS):
     """Execute DMFT loop."""
     write_info(prm)
     N_l = prm.mu.size
