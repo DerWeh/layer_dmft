@@ -149,7 +149,8 @@ def setup(siam: SIAM, dir_='.', **kwds):
 
     on_site_e = siam.e_onsite
     h_l = on_site_e.up - on_site_e.dn
-    assert on_site_e.up - SIGMA.up*h_l == on_site_e.dn - SIGMA.dn*h_l
+    assert np.allclose(on_site_e.up - SIGMA.up*h_l, on_site_e.dn - SIGMA.dn*h_l,
+                       rtol=1e-12, atol=1e-15)
 
     # trim hybridization function to spinboson code
     hybrid_iw = siam.hybrid_fct[:, :N_IW]
