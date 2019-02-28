@@ -36,7 +36,6 @@ LOGGER.setLevel(PROGRESS)
 
 OUTPUT_DIR = "layer_output"
 
-CONTINUE = True
 FORCE_PARAMAGNET = True
 
 
@@ -260,10 +259,68 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
     return sweep_update
 
 
-def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.DEFAULT_QMC_PARAMS):
+def load_last_iteration():
+    """Load relevant data from last iteration in `OUTPUT_DIR`.
+
+    Returns
+    -------
+    layer_data: tuple
+        Green's function, self-energy and occupation
+    last_iter: int
+        Number of the last iteration
+
+    """
+    last_iter, last_output = get_last_iter(OUTPUT_DIR)
+    LOGGER.info("Loading iteration %s: %s", last_iter, last_output.name)
+
+    with np.load(last_output) as data:
+        gf_layer_iw = data['gf_iw']
+        self_layer_iw = data['self_iw']
+        occ_layer = data['occ']
+    return (gf_layer_iw, self_layer_iw, occ_layer), last_iter
+
+
+def hartree_solution(prm: Hubbard_Parameters, iw_n: int):
+    """Calculate the Hartree solution of `prm` for the r-DMFT loop.
+
+    Parameters
+    ----------
+    prm : Hubbard_Parameters
+        The parameters of the Hubbard model.
+    iw_n : int
+        Number of Matsubara frequencies. This determines the output shape,
+        for how many points the Green's function and self-energy are calculated
+        as well as the accuracy of the occupation which also enters the
+        self-consistency for the Hartree solution.
+
+    Returns
+    -------
+    hartree_solution : tuple
+        The Green's function, self-energy and occupation.
+
+    """
+    N_l = prm.mu.size
+    N_iw = iw_n.size
+    gf_layer_iw = prm.gf0(iw_n)  # start with non-interacting Gf
+    occ0 = prm.occ0(gf_layer_iw)
+    if np.any(prm.U != 0):
+        tol = max(np.linalg.norm(occ0.err), 1e-14)
+        opt_res = charge.charge_self_consistency(prm, tol=tol, occ0=occ0.x, n_points=N_iw)
+        gf_layer_iw = prm.gf0(iw_n, hartree=opt_res.occ.x[::-1])
+        self_layer_iw = np.zeros((2, N_l, N_iw), dtype=np.complex)
+        self_layer_iw[:] = opt_res.occ.x[::-1, :, np.newaxis] * prm.U[np.newaxis, :, np.newaxis]
+        occ_layer = opt_res.occ.x
+    else:  # nonsense case
+        # start with non-interacting solution
+        self_layer_iw = np.zeros((2, N_l, N_iw), dtype=np.complex)
+        occ_layer = occ0
+    return gf_layer_iw, self_layer_iw, occ_layer
+
+
+def main(prm: Hubbard_Parameters, n_iter, n_process=1,
+         qmc_params=sb_qmc.DEFAULT_QMC_PARAMS, resume=True):
     """Execute DMFT loop."""
     log_info(prm)
-    N_l = prm.mu.size
 
     # technical parameters
     N_IW = sb_qmc.N_IW
@@ -274,31 +331,13 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1, qmc_params=sb_qmc.DEFAULT
     #
     # initial condition
     #
-    if CONTINUE:
-        LOGGER.info("reading old Green's function and self energy")
-        last_iter, last_output = get_last_iter("layer_output")
-        LOGGER.info("Starting from iteration %s: %s", last_iter, last_output.name)
-
-        with np.load(last_output) as data:
-            gf_layer_iw = data['gf_iw']
-            self_layer_iw = data['self_iw']
-            occ_layer = data['occ']
-        start = last_iter + 1
+    if resume:
+        LOGGER.info("Reading old Green's function and self energy")
+        (gf_layer_iw, self_layer_iw, occ_layer), last_it = load_last_iteration()
+        start = last_it + 1
     else:
         LOGGER.info('Start from Hartree')
-        gf_layer_iw = prm.gf0(iw_points)  # start with non-interacting Gf
-        occ0 = prm.occ0(gf_layer_iw)
-        if np.any(prm.U != 0):
-            tol = max(np.linalg.norm(occ0.err), 1e-14)
-            opt_res = charge.charge_self_consistency(prm, tol=tol, occ0=occ0.x, n_points=N_IW)
-            gf_layer_iw = prm.gf0(iw_points, hartree=opt_res.occ.x[::-1])
-            self_layer_iw = np.zeros((2, N_l, N_IW), dtype=np.complex)
-            self_layer_iw[:] = opt_res.occ.x[::-1, :, np.newaxis] * prm.U[np.newaxis, :, np.newaxis]
-            occ_layer = opt_res.occ.x
-        else:  # nonsense case
-            # start with non-interacting solution
-            self_layer_iw = np.zeros((2, N_l, N_IW), dtype=np.complex)
-            occ_layer = occ0
+        gf_layer_iw, self_layer_iw, occ_layer = hartree_solution(prm, iw_n=iw_points)
         LOGGER.log(PROGRESS, 'DONE: calculated starting point')
         start = 0
 
