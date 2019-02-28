@@ -244,9 +244,9 @@ def local_import(dir_=None):
     """Only import modules within `dir_` (default: cwd)."""
     if dir_ is None:
         dir_ = getcwd()
-    import_path = sys.path
-    sys.path = [str(dir_), ]
+    import_path0 = sys.path[0]
+    sys.path[0] = str(dir_)
     try:
         yield
     finally:
-        sys.path = import_path
+        sys.path[0] = import_path0
