@@ -109,7 +109,7 @@ class SIAM:
             hartree = (False, False)
         else:  # first axis needs to be spin such that loop is possible
             assert hartree.shape[0] == 2
-        gf_0 = 1./(self.z - self.e_onsite[:, newaxis] - self.hybrid_fct)
+        gf_0 = 1./(self.z + self.e_onsite[:, newaxis] - self.hybrid_fct)
         return gf_0.view(type=SpinResolvedArray)
 
     def occ0(self, gf_iw, hartree=False, return_err=True, total=False):
@@ -165,9 +165,7 @@ class SIAM:
             The Green's function.
 
         """
-        assert self.z.size == self_z.shape[-1], "Same number of frequencies"
-        assert len(Spins) == self_z.shape[0], "Two spin components"
-        gf_inv = 1./(self.z + self.e_onsite()[:, newaxis] - self_z)
+        gf_inv = 1./(self.z + self.e_onsite[:, newaxis] - self_z - self.hybrid_fct)
         return gf_inv.view(type=SpinResolvedArray)
 
 

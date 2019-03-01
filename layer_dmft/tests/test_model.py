@@ -84,6 +84,31 @@ def test_compare_greensfunction():
     assert np.allclose(gf0, gf_dmft)
 
 
+def test_non_interacting_siam():
+    """Compare that the SIAM yields the correct local Green's function."""
+    prm = model.Hubbard_Parameters()
+    N_l = 7
+    prm.T = 0.137
+    prm.D = 1.3  # half-bandwidth
+    prm.mu = np.linspace(-.78, .6, num=N_l)
+    prm.V = np.zeros(N_l)
+    prm.h = np.linspace(-1.47, .47, num=N_l)
+    prm.U = np.zeros(N_l)
+    prm.hilbert_transform = model.hilbert_transform['bethe']
+    t = 0.2
+    prm.t_mat = model.hopping_matrix(N_l, nearest_neighbor=t)
+
+    iw = gftools.matsubara_frequencies(np.arange(1024), beta=prm.beta)
+    gf_layer = prm.gf0(iw)
+    occ = prm.occ0(gf_layer)
+    siams = prm.get_impurity_models(iw, self_z=0, gf_z=gf_layer, occ=occ.x)
+
+    for lay, siam in enumerate(siams):
+        assert np.allclose(gf_layer[:, lay], siam.gf0())
+        # check that gf0 and gf_s coincide
+        assert np.allclose(siam.gf0(), siam.gf_s(0))
+
+
 def test_2x2_matrix():
     """Compare with analytic inversion of (2, 2) matrix.
 
