@@ -783,12 +783,16 @@ def chain_hilbert_transform(xi, half_bandwidth=None):
 
 
 def hopping_matrix(size, nearest_neighbor):
-    """Create a hopping matrix with nearest neighbor hopping."""
+    """Create a hopping matrix with nearest neighbor hopping.
+
+    If `nearest_neighbor` is complex, the lower diagonal will be conjugated to
+    ensure hermiticity.
+    """
     # TODO: generalize for arbitrary hopping (NN, NNN, ...)
     t_mat = np.zeros((size, size))
     row, col = np.diag_indices(size)
-    # TODO: complex conjugation
-    t_mat[row[:-1], col[:-1]+1] = t_mat[row[:-1]+1, col[:-1]] = nearest_neighbor
+    t_mat[row[:-1], col[:-1]+1] = nearest_neighbor
+    t_mat[row[:-1]+1, col[:-1]] = nearest_neighbor.conjugate()
     return t_mat
 
 
