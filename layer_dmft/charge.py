@@ -128,40 +128,6 @@ def set_getV(e_schot=None):
         get_V.call = partial(potential_energy_vector, e_schot=e_schot, layer_labels=layers)
 
 
-def self_consistency_plain(parameter, accuracy, mixing=1e-2, n_max=int(1e4)):
-    """Naive self-consistency loop using simple mixing."""
-    warnings.warn("Don't use plain self-consistency. "
-                  "`self_consistency` can also be used with simple mixing",
-                  DeprecationWarning)
-    params = parameter
-    iw_array = gt.matsubara_frequencies(np.arange(int(2**12)), beta=params.beta)
-
-    # start loop paramters
-    i, n, n_old = 0, 0, np.infty
-    while np.linalg.norm(n - n_old) > accuracy:
-        print('**** difference *****')
-        print(np.linalg.norm(n - n_old))
-        n_old = n
-        gf_iw = params.gf0(iw_array)
-        n = gt.density(gf_iw, potential=params.onsite_energy(), beta=params.beta)
-        print('<n>: ', n)
-        V_l = get_V(n.up + n.dn - np.average(n))  # FIXME: better dimension checks!!!
-        print('V_l: ', V_l)
-        params.V[:] = mixing * V_l + (1-mixing)*params.V
-        print('V_l mixed: ', params.V[:])
-        print(i)
-        i += 1
-        if i > n_max:
-            print('maximum reached')
-            break
-    print('Final occupation:')
-    print(n)
-    print('Final potential')
-    print(V_l)
-    print(params.V)
-    print(np.linalg.norm(params.V - V_l))
-
-
 @counter
 def update_occupation(occ_init, i_omega, params, out_dict):
     r"""Calculate new occupation by setting :math:`V_l` from the method `get_V`.
