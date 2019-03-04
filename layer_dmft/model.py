@@ -757,9 +757,6 @@ class Hubbard_Parameters:
         """
         if gf_z is None:
             gf_z = self.gf_dmft_s(z, self_z=self_z, diagonal=True)
-        else:
-            assert gf_z.shape == self_z.shape, ("Shape of self-energy and Gf have to match, "
-                                                f"Gf: {gf_z.shape}, self: {self_z.shape}")
         e_onsite = self.onsite_energy()
         hybrid_z = z + e_onsite[..., newaxis] - self_z - 1./gf_z
         hybrid_mom = self.hybrid_fct_m1(occ)
