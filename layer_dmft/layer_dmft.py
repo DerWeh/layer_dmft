@@ -365,3 +365,77 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1,
         gf_layer_iw0=gf_layer_iw, self_layer_iw0=self_layer_iw, occ_layer0=occ_layer,
         function=iteration
     )
+
+
+class Runner:
+    """Run r-DMFT loop using `Runner.iteration`."""
+
+    def __init__(self, prm: Hubbard_Parameters, resume=True):
+        """Create runner for the model `prm`.
+
+        Parameters
+        ----------
+        prm : Hubbard_Parameters
+            Parameters of the Hamiltonian.
+        resume : bool
+            If `resume`, load old r-DMFT data, else start from Hartree.
+
+        """
+        log_info(prm)
+        self.prm = prm
+
+        # technical parameters
+        N_IW = sb_qmc.N_IW
+
+        # dependent parameters
+        self.iw_points = gt.matsubara_frequencies(np.arange(N_IW), prm.beta)
+
+        #
+        # initial condition
+        #
+        if resume:
+            LOGGER.info("Reading old Green's function and self energy")
+            (gf_layer_iw, self_layer_iw, occ_layer), last_it = load_last_iteration()
+            start = last_it + 1
+        else:
+            LOGGER.info('Start from Hartree')
+            gf_layer_iw, self_layer_iw, occ_layer = hartree_solution(prm, iw_n=self.iw_points)
+            LOGGER.log(PROGRESS, 'DONE: calculated starting point')
+            start = 0
+        self.iter_nr = start
+        self.gf_iw = gf_layer_iw
+        self.self_iw = self_layer_iw
+        self.occ = occ_layer
+
+        # iteration scheme
+        self.converge = bare_iteration
+        # sweep updates -> calculate all impurities, then update
+
+    def iteration(self, n_process, **qmc_params):
+        r"""Perform a DMFT iteration.
+
+        Parameters
+        ----------
+        n_process : int
+            How many cores should be used.
+        \*\*qmc_params :
+            Parameters passed to the impurity solver, here `sb_qmc`.
+
+        Returns
+        -------
+        data : LayerIterData
+            Green's function, self-energy and occupation of the iteration.
+
+        """
+        iteration = get_sweep_updater(self.prm, iw_points=self.iw_points,
+                                      n_process=n_process, **qmc_params)
+
+        # perform self-consistency loop
+        data = self.converge(
+            it0=self.iter_nr, n_iter=1,
+            gf_layer_iw0=self.gf_iw, self_layer_iw0=self.self_iw, occ_layer0=self.occ,
+            function=iteration
+        )
+        self.gf_iw, self.self_iw, self.occ = data
+        self.iter_nr += 1
+        return data
