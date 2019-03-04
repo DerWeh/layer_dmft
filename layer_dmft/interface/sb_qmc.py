@@ -179,11 +179,17 @@ def setup(siam: SIAM, dir_='.', **kwds):
 
 def run(dir_=".", n_process=1):
     """Execute the **spinboson** code."""
-    from subprocess import check_call
+    from subprocess import Popen
     dir_ = get_path(dir_)
     command = f"mpirun -n {n_process} {SB_EXECUTABLE}"
     with open(OUTPUT_FILE, "w") as outfile:
-        check_call(command.split(), stdout=outfile)
+        proc = Popen(command.split(), stdout=outfile)
+        try:
+            proc.wait()
+        except Exception as exc:
+            proc.terminate()
+            raise exc
+
 
 
 def solve(siam: SIAM, n_process, output_name, dir_='.', **kwds):
