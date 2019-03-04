@@ -20,6 +20,7 @@ Most likely you want to import this module like::
 """
 from typing import Tuple
 import numpy as np
+import warnings
 
 from numpy import newaxis
 
@@ -27,6 +28,8 @@ import gftools as gt
 import gftools.matrix as gtmatrix
 
 from .util import SpinResolvedArray, Spins
+
+warnings.simplefilter('always', DeprecationWarning)
 
 SIGMA = SpinResolvedArray(up=0.5, dn=-0.5)
 SIGMA.flags.writeable = False
