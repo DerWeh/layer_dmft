@@ -46,6 +46,10 @@ def log_info(prm: Hubbard_Parameters):
     LOGGER.info("%s", prm.pstr())
 
 
+# DATA necessary for the DMFT iteration
+LayerIterData = namedtuple('layer_iter_data', ['gf_iw', 'self_iw', 'occ'])
+
+
 def save_gf(gf_iw, self_iw, occ_layer, dir_='.', name='layer', compress=True):
     dir_ = Path(dir_).expanduser()
     dir_.mkdir(exist_ok=True)
@@ -188,10 +192,11 @@ def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, functi
     """
     gf_layer_iw, self_layer_iw, occ_layer = gf_layer_iw0, self_layer_iw0, occ_layer0
     for ii in range(it0, n_iter+it0):
-        gf_layer_iw, self_layer_iw, occ_layer = function(gf_layer_iw, self_layer_iw, occ_layer, it=ii)
+        result = function(gf_layer_iw, self_layer_iw, occ_layer, it=ii)
+        gf_layer_iw, self_layer_iw, occ_layer = result
         save_gf(gf_layer_iw, self_layer_iw, occ_layer,
                 dir_=OUTPUT_DIR, name=f'layer_iter{ii}')
-    return gf_layer_iw, self_layer_iw
+    return result
 
 
 def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kwds) -> callable:
@@ -254,7 +259,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
             self_layer_iw[:] = np.mean(self_layer_iw, axis=0)
 
         gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
-        return gf_layer_iw, self_layer_iw, occ_layer
+        return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
     return sweep_update
 
@@ -277,10 +282,11 @@ def load_last_iteration():
         gf_layer_iw = data['gf_iw']
         self_layer_iw = data['self_iw']
         occ_layer = data['occ']
-    return (gf_layer_iw, self_layer_iw, occ_layer), last_iter
+    result = LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
+    return result, last_iter
 
 
-def hartree_solution(prm: Hubbard_Parameters, iw_n: int):
+def hartree_solution(prm: Hubbard_Parameters, iw_n: int) -> LayerIterData:
     """Calculate the Hartree solution of `prm` for the r-DMFT loop.
 
     Parameters
@@ -314,7 +320,7 @@ def hartree_solution(prm: Hubbard_Parameters, iw_n: int):
         # start with non-interacting solution
         self_layer_iw = np.zeros((2, N_l, N_iw), dtype=np.complex)
         occ_layer = occ0
-    return gf_layer_iw, self_layer_iw, occ_layer
+    return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
 
 def main(prm: Hubbard_Parameters, n_iter, n_process=1,
