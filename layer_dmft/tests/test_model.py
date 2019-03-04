@@ -86,14 +86,12 @@ def test_compare_greensfunction():
 
 def test_non_interacting_siam():
     """Compare that the SIAM yields the correct local Green's function."""
-    prm = model.Hubbard_Parameters()
     N_l = 7
+    prm = model.Hubbard_Parameters(N_l)
     prm.T = 0.137
     prm.D = 1.3  # half-bandwidth
     prm.mu = np.linspace(-.78, .6, num=N_l)
-    prm.V = np.zeros(N_l)
     prm.h = np.linspace(-1.47, .47, num=N_l)
-    prm.U = np.zeros(N_l)
     prm.hilbert_transform = model.hilbert_transform['bethe']
     t = 0.2
     prm.t_mat = model.hopping_matrix(N_l, nearest_neighbor=t)

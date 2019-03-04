@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 from weakref import finalize
 from datetime import date
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 
 import numpy as np
 import gftools as gt

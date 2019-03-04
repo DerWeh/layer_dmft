@@ -191,20 +191,31 @@ class Hubbard_Parameters:
 
     """
 
-    __slots__ = ('T', 'D', 'mu', 'V', 'h', 'U', 't_mat', 'hilbert_transform')
+    __slots__ = ('_N_l', 'T', 'D', 'mu', 'V', 'h', 'U', 't_mat', 'hilbert_transform')
 
-    def __init__(self):
-        """Empty initialization. The assignments are just to help linters."""
+    def __init__(self, N_l: int = None):
+        """Empty initialization creating of according shape filled with zeros."""
+        self._N_l = N_l
         self.T = float
         self.D = float
-        self.mu = np.ndarray
-        self.V = np.ndarray
-        self.h = np.ndarray
-        self.U = np.ndarray
-        self.t_mat = np.ndarray
         self.hilbert_transform = callable
-        for attribute in self.__slots__:
-            self.__delattr__(attribute)
+        if N_l is None:
+            warnings.warn("Deprecated, use 'N_l' to state the size.", DeprecationWarning)
+            self.mu = np.ndarray
+            self.V = np.ndarray
+            self.h = np.ndarray
+            self.U = np.ndarray
+            self.t_mat = np.ndarray
+            for attribute in set(self.__slots__) - {'_N_l'}:
+                self.__delattr__(attribute)
+        else:
+            self.mu = np.zeros(N_l)
+            self.V = np.zeros(N_l)
+            self.h = np.zeros(N_l)
+            self.U = np.zeros(N_l)
+            self.t_mat = np.zeros((N_l, N_l))
+            for attribute in ('T', 'D', 'hilbert_transform'):
+                self.__delattr__(attribute)
 
     @property
     def beta(self) -> float:
@@ -806,4 +817,7 @@ hilbert_transform['chain'].m2 = lambda D: 0
 rev_dict_hilbert_transfrom = {transform: name for name, transform
                               in hilbert_transform.items()}
 
-prm = Hubbard_Parameters()
+
+with warnings.catch_warnings():
+    warnings.simplefilter('ignore', DeprecationWarning)
+    prm = Hubbard_Parameters()
