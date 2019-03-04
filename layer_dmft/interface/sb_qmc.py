@@ -96,21 +96,46 @@ PARAM_TEMPLATE = textwrap.dedent(
 
 
 class QMCParams(Mapping):
+    """Non-physical parameters passed to **spinboson** CT-Hyb.
+
+    See `QMCParams.__init__` for the meaning of the arguments.
+    """
+
     __slots__ = ('N_BIN', 'N_MSR', 'FLAG_TP')
     __getitem__ = object.__getattribute__
     __setitem__ = object.__setattr__
 
     def __init__(self, N_BIN: int, N_MSR: int, FLAG_TP: int = 0) -> None:
-        self.N_BIN = N_BIN
-        self.N_MSR = N_MSR
+        """Initialize CT-Hyb parameters defining what will be sampled.
+
+        Parameters
+        ----------
+        N_BIN : int
+            Number of bins used in CT-Hyb.
+        N_MSR : int
+            Total number of measurements performed.
+        FLAG_TP : int
+            If two particle quantities will be sampled.
+            0: Green's function
+            1: Green's function & susceptibility
+            2: Green's function & susceptibility & vertex
+            3: free energy by Wang-Landau sampling
+            For DMFT only the Green's function is necessary, the self-energy
+            will also be sampled.
+
+        """
+        self.N_BIN = int(N_BIN)
+        self.N_MSR = int(N_MSR)
         if not isinstance(FLAG_TP, int) or FLAG_TP < 0:
             raise TypeError(f"'FLAG_TP' must be non-negative integer, got: {FLAG_TP}")
         self.FLAG_TP = FLAG_TP
 
     def __len__(self):
+        """Return the number of attributes in `__slots__`."""
         return len(self.__slots__)
 
     def __iter__(self):
+        """Iterate over attributes in `__slots__`."""
         return iter(self.__slots__)
 
     @classmethod

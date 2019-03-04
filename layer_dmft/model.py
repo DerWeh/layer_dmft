@@ -56,7 +56,7 @@ class SIAM:
         Parameters
         ----------
         e_onsite : (2, ) float array_like
-            The onsite energy of the impurity.
+            The onsite energy :math:`ϵ_{σ}` of the impurity.
         U : float
             The local interaction strength of the impurity site.
         T : float

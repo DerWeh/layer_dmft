@@ -11,6 +11,7 @@ FORCE_PARAMAGNET: bool
 import warnings
 import logging
 
+from typing import Tuple
 from pathlib import Path
 from weakref import finalize
 from datetime import date
@@ -23,6 +24,7 @@ from . import __version__, charge
 from .model import Hubbard_Parameters
 from .interface import sb_qmc
 
+# setup logging
 PROGRESS = logging.INFO - 5
 logging.addLevelName(PROGRESS, 'PROGRESS')
 LOGGER = logging.getLogger(__name__)
@@ -264,7 +266,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
     return sweep_update
 
 
-def load_last_iteration():
+def load_last_iteration() -> Tuple[LayerIterData, int]:
     """Load relevant data from last iteration in `OUTPUT_DIR`.
 
     Returns

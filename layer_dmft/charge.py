@@ -77,6 +77,7 @@ def counter(func):
 
 
 def attribute(**kwds):
+    """Add an attribute to a function in a way working with linters."""
     def wrapper(func):
         for key, value in kwds.items():
             setattr(func, key, value)

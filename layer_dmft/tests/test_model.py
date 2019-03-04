@@ -25,7 +25,7 @@ def test_SpinResolvedArray_creation():
 
 
 def test_SpinResolvedArray_access():
-    """Basic test for accessing elements of `SpinResolvedArray`s"""
+    """Basic test for accessing elements of `SpinResolvedArray`s."""
     updata = np.arange(0, 7)
     dndata = np.arange(0, 7)
     test_array = SpinResolvedArray(up=updata, dn=dndata)
