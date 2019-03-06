@@ -248,8 +248,8 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
         interacting_layers = np.flatnonzero(prm.U)
 
         for lay, siam in zip(interacting_layers, interacting_siams):
-            LOGGER.log(PROGRESS, 'iter %s: starting layer %s with U = %s',
-                       it, lay, siam.U)
+            LOGGER.log(PROGRESS, 'iter %s: starting layer %s with U = %s (%s)',
+                       it, lay, siam.U, solver_kwds)
             data = sb_qmc.solve(siam, n_process=n_process,
                                 output_name=f'iter{it}_lay{lay}', **solver_kwds)
 
