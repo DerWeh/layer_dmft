@@ -133,6 +133,7 @@ def load_param(dir_='.') -> model.Hubbard_Parameters:
 
     """
     out_file = Path(dir_).expanduser() / OUTPUT_FILE
+    # FIXME: think about fixing discrepancy with V_l
     assert out_file.is_file()
     prm = model.Hubbard_Parameters()
     with open(out_file, 'r') as out_fp:

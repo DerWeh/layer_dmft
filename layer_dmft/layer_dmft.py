@@ -218,6 +218,7 @@ def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, functi
     for ii in range(it0, n_iter+it0):
         result = function(gf_layer_iw, self_layer_iw, occ_layer, it=ii, **kwds)
         gf_layer_iw, self_layer_iw, occ_layer = result
+        # TODO: also save error
         save_gf(gf_layer_iw, self_layer_iw, occ_layer,
                 dir_=OUTPUT_DIR, name=f'layer_iter{ii}')
     return result
@@ -363,6 +364,7 @@ def hartree_solution(prm: Hubbard_Parameters, iw_n: int) -> LayerIterData:
     return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
 
+# TODO: add resume=None -> "automatic choice"
 def main(prm: Hubbard_Parameters, n_iter, n_process=1,
          qmc_params=sb_qmc.DEFAULT_QMC_PARAMS, resume=True):
     """Execute DMFT loop."""

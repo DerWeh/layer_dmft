@@ -11,7 +11,3 @@ print(os.path.join(PATH, os.pardir, os.pardir))
 
 print(path)
 from layer_dmft import model, util, scatter
-# import model
-# import util
-import gftools
-# import scatter

@@ -616,6 +616,7 @@ class Hubbard_Parameters:
             )
         gf_bare_inv = -self.t_mat.astype(np.complex256)
         diag = np.diag_indices_from(gf_bare_inv)
+        # TODO reshape diag_z_sp to see if there is speedup
         for diag_z_sp, gf_out_sp in zip(diag_z, gf_out):  # iterate spins
             for ii in range(shape[-1]):  # iterate z-values
                 gf_bare_inv[diag] = diag_z_sp[:, ii]

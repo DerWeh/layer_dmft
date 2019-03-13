@@ -318,6 +318,7 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
         The final potential of the converged result.
 
     """
+    # TODO: optimize n_points from error guess
     # TODO: check against given `n` if sum gives right result
     assert kind in set(('auto', 'occ', 'occ_lsq', 'V')), f"Unknown kind: {kind}"
     assert V0 is None or occ0 is None
