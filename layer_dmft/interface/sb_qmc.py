@@ -16,6 +16,7 @@ from layer_dmft.model import SIAM, SIGMA
 N_IW = 1024  # TODO: scan code for proper number
 
 SB_EXECUTABLE = Path('~/spinboson-1.10/sb_qmc.out').expanduser()
+IMP_OUTPUT = "imp_output"
 OUTPUT_DIR = "output"
 OUTPUT_FILE = "output.txt"
 INIT_FILE = "sb_qmc_param.init"
@@ -155,6 +156,33 @@ def get_path(dir_) -> Path:
     return dir_
 
 
+def write_hybridization_file(hybrid_iw):
+    r"""Write 'hybrid_fct' file containing hybridization function of the SIAM.
+
+    Parameters
+    ----------
+    hybrid_iw : (2, N_iw) complex np.ndarray
+        Hybridization function :math:`\Delta(i\omega_n)` evaluated at matsubara
+        frequencies. It is necessary to have `N_iw >= N_IW`.
+
+    """
+    hybrid_iw = hybrid_iw[:, :N_IW]
+    assert hybrid_iw.ndim == 2, f"Dimension must be 2: (N_spins, N_iw), ndim: {hybrid_iw.ndim}"
+    assert hybrid_iw.shape[0] == 2, ("First dimension must be of length 2=#Spins, "
+                                     f"here: {hybrid_iw.shape[0]}")
+    digits = 14
+    fill = 2 + 2 + digits + 4
+    header = (
+        'Re spin up'.ljust(fill)
+        + 'Im spin up'.ljust(fill)
+        + 'Re spin dn'.ljust(fill)
+        + 'Im spin dn'.ljust(fill)
+    )
+    np.savetxt("hybrid_fct.dat", hybrid_iw.T,
+               fmt=[f'%+.{digits}e %+.{digits}e', ]*2, delimiter=' ',
+               header=header)
+
+
 def setup(siam: SIAM, dir_='.', **kwds):
     """Prepare the 'hybrid_fct' file and parameters to use **spinboson** code.
 
@@ -178,22 +206,8 @@ def setup(siam: SIAM, dir_='.', **kwds):
                        rtol=1e-12, atol=1e-15)
 
     # trim hybridization function to spinboson code
-    hybrid_iw = siam.hybrid_fct[:, :N_IW]
-    assert hybrid_iw.ndim == 2, f"Dimension must be 2: (N_spins, N_iw), ndim: {hybrid_iw.ndim}"
-    assert hybrid_iw.shape[0] == 2, ("First dimension must be of length 2=#Spins, "
-                                     f"here: {hybrid_iw.shape[0]}")
+    write_hybridization_file(siam.hybrid_fct)
     hybrid_mom = siam.hybrid_mom
-    digits = 14
-    fill = 2 + 2 + digits + 4
-    header = (
-        'Re spin up'.ljust(fill)
-        + 'Im spin up'.ljust(fill)
-        + 'Re spin dn'.ljust(fill)
-        + 'Im spin dn'.ljust(fill)
-    )
-    np.savetxt("hybrid_fct.dat", hybrid_iw.T,
-               fmt=[f'%+.{digits}e %+.{digits}e', ]*2, delimiter=' ',
-               header=header)
     (dir_ / OUTPUT_DIR).mkdir(exist_ok=True)
     init_content = PARAM_TEMPLATE.format(T=siam.T, U=siam.U,
                                          ef=-on_site_e.up + SIGMA.up*h_l, h=h_l,
@@ -214,7 +228,6 @@ def run(dir_=".", n_process=1):
         except Exception as exc:
             proc.terminate()
             raise exc
-
 
 
 def solve(siam: SIAM, n_process, output_name, dir_='.', **kwds):
@@ -462,6 +475,6 @@ def save_data(dir_='.', name='sb', compress=True, qmc_params=DEFAULT_QMC_PARAMS)
         data['charge_susceptibility_tau_err'] = suscept_tau.charge.err
     save_method = np.savez_compressed if compress else np.savez
     name = date.today().isoformat() + '_' + name
-    (dir_/"imp_output").mkdir(exist_ok=True)
-    save_method(dir_/"imp_output"/name, **data)
+    (dir_/IMP_OUTPUT).mkdir(exist_ok=True)
+    save_method(dir_/IMP_OUTPUT/name, **data)
     return data
