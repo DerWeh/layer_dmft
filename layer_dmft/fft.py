@@ -45,7 +45,7 @@ def dft_iw2tau(gf_iw, beta, moment=1., dft_backend=bare_dft_iw2tau):
         The function at **fermionic** Matsubara frequencies.
     beta : float
         The inverse temperature.
-    moment : float
+    moment : (...) float array_like or float
         High frequency moment of `gf_iw`.
     dft_backend : callable, optional
         The function called to perform the Fourier transform on the data stripped
@@ -57,6 +57,7 @@ def dft_iw2tau(gf_iw, beta, moment=1., dft_backend=bare_dft_iw2tau):
         The Fourier transform of `gf_iw` on the interval [0, β].
 
     """
+    moment = np.asarray(moment)[..., np.newaxis]
     iws = gt.matsubara_frequencies(np.arange(gf_iw.shape[-1]), beta=beta)
     gf_iw = gf_iw - moment/iws
     gf_tau = dft_backend(gf_iw, beta)
