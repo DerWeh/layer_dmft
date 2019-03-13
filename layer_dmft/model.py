@@ -18,14 +18,15 @@ Most likely you want to import this module like::
     from model import prm, SIGMA, Spins
 
 """
-from typing import Tuple
-import numpy as np
 import warnings
 
-from numpy import newaxis
+from typing import Tuple
 
+import numpy as np
 import gftools as gt
 import gftools.matrix as gtmatrix
+
+from numpy import newaxis
 
 from .util import SpinResolvedArray, Spins
 
@@ -196,29 +197,26 @@ class Hubbard_Parameters:
 
     __slots__ = ('_N_l', 'T', 'D', 'mu', 'V', 'h', 'U', 't_mat', 'hilbert_transform')
 
-    def __init__(self, N_l: int = None):
+    def __init__(self, N_l: int = None) -> None:
         """Empty initialization creating of according shape filled with zeros."""
         self._N_l = N_l
-        self.T = float
-        self.D = float
+        self.T: float
+        self.D: float
         self.hilbert_transform = callable
+        del self.hilbert_transform
         if N_l is None:
             warnings.warn("Deprecated, use 'N_l' to state the size.", DeprecationWarning)
-            self.mu = np.ndarray
-            self.V = np.ndarray
-            self.h = np.ndarray
-            self.U = np.ndarray
-            self.t_mat = np.ndarray
-            for attribute in set(self.__slots__) - {'_N_l'}:
-                self.__delattr__(attribute)
+            self.mu: np.ndarray
+            self.V: np.ndarray
+            self.h: np.ndarray
+            self.U: np.ndarray
+            self.t_mat: np.ndarray
         else:
             self.mu = np.zeros(N_l)
             self.V = np.zeros(N_l)
             self.h = np.zeros(N_l)
             self.U = np.zeros(N_l)
             self.t_mat = np.zeros((N_l, N_l))
-            for attribute in ('T', 'D', 'hilbert_transform'):
-                self.__delattr__(attribute)
 
     @property
     def beta(self) -> float:
