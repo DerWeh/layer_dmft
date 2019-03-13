@@ -15,7 +15,7 @@ from typing import Tuple
 from pathlib import Path
 from weakref import finalize
 from datetime import date
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict, namedtuple, defaultdict
 
 import numpy as np
 import gftools as gt
@@ -62,8 +62,18 @@ def save_gf(gf_iw, self_iw, occ_layer, dir_='.', name='layer', compress=True):
 
 def _get_iter(file_object) -> int:
     r"""Return iteration `it` number of file with the name '\*_iter{it}(_*)?.ENDING'."""
+    return _get_anystring(file_object, name='iter')
+
+
+def _get_layer(file_object) -> int:
+    r"""Return iteration `it` number of file with the name '\*_lay{it}(_*)?.ENDING'."""
+    return _get_anystring(file_object, name='lay')
+
+
+def _get_anystring(file_object, name: str) -> int:
+    r"""Return iteration `it` number of file with the name '\*_{`name`}{it}(_*)?.ENDING'."""
     basename = Path(file_object).stem
-    ending = basename.split('_iter')[-1]  # select part after '_iter'
+    ending = basename.split(f'_{name}')[-1]  # select part after '_iter'
     iter_num = ending.split('_')[0]  # drop everything after possible '_'
     try:
         it = int(iter_num)
@@ -100,6 +110,18 @@ def get_all_iter(dir_) -> dict:
     iter_files = Path(dir_).glob('*_iter*.npz')
     path_dict = {_get_iter(iter_f): iter_f for iter_f in iter_files
                  if _get_iter(iter_f) is not None}
+    return path_dict
+
+
+def get_all_imp_iter(dir_) -> dict:
+    """Return directory of {int(layer): output} with keu `num`."""
+    iter_files = Path(dir_).glob('*_iter*_lay*.npz')
+    path_dict = defaultdict(dict)
+    for iter_f in iter_files:
+        it = _get_iter(iter_f)
+        lay = _get_layer(iter_f)
+        if (it is not None) and (lay is not None):
+            path_dict[it][lay] = iter_f
     return path_dict
 
 
