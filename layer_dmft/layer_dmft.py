@@ -198,7 +198,7 @@ def abstract_converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: calla
     return NotImplemented, NotImplemented  # pylint: disable=unreachable
 
 
-def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, function):
+def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, function, **kwds):
     """Iterate the DMFT self-consistency equations.
 
     This is an implementation of `converge`.
@@ -216,7 +216,7 @@ def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, functi
     """
     gf_layer_iw, self_layer_iw, occ_layer = gf_layer_iw0, self_layer_iw0, occ_layer0
     for ii in range(it0, n_iter+it0):
-        result = function(gf_layer_iw, self_layer_iw, occ_layer, it=ii)
+        result = function(gf_layer_iw, self_layer_iw, occ_layer, it=ii, **kwds)
         gf_layer_iw, self_layer_iw, occ_layer = result
         save_gf(gf_layer_iw, self_layer_iw, occ_layer,
                 dir_=OUTPUT_DIR, name=f'layer_iter{ii}')
@@ -244,7 +244,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
         `sweep_update(gf_layer_iw, self_layer_iw, it) -> gf_layer_iw, self_layer_iw`.
 
     """
-    def sweep_update(gf_layer_iw, self_layer_iw, occ_layer, it):
+    def sweep_update(gf_layer_iw, self_layer_iw, occ_layer, it, layer_config=None):
         """Perform a sweep update, calculating the impurities for all layers.
 
         Parameters
@@ -263,11 +263,22 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
             The updated local Green's function and self-energy.
 
         """
-        interacting_siams = prm.get_impurity_models(
-            z=iw_points, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
-            only_interacting=True
-        )
         interacting_layers = np.flatnonzero(prm.U)
+        if layer_config is None:
+            # TODO: return iterator instead of Tuple?
+            interacting_siams = prm.get_impurity_models(
+                z=iw_points, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
+                only_interacting=True
+            )
+        else:
+            layer_config = np.asarray(layer_config)
+            layers = np.unique(layer_config)
+            interacting_layers = layers[np.isin(layers, interacting_layers)]
+            siams = prm.get_impurity_models(
+                z=iw_points, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
+                only_interacting=False
+            )
+            interacting_siams = (siams[lay] for lay in layers)
 
         for lay, siam in zip(interacting_layers, interacting_siams):
             LOGGER.log(PROGRESS, 'iter %s: starting layer %s with U = %s (%s)',
@@ -277,6 +288,11 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
 
             self_layer_iw[:, lay] = data['self_energy_iw']
             occ_layer[:, lay] = -data['gf_tau'][:, -1]
+
+        if layer_config is not None:
+            LOGGER.log(PROGRESS, 'Using calculated self-energies on layers %s',
+                       list(layer_config))
+            self_layer_iw = self_layer_iw[:, layer_config]
 
         if FORCE_PARAMAGNET and np.all(prm.h == 0):
             # TODO: think about using shape [1, N_l] arrays for paramagnet
@@ -433,7 +449,7 @@ class Runner:
         self.converge = bare_iteration
         # sweep updates -> calculate all impurities, then update
 
-    def iteration(self, n_process, **qmc_params):
+    def iteration(self, n_process=1, layer_config=None, **qmc_params):
         r"""Perform a DMFT iteration.
 
         Parameters
@@ -456,7 +472,8 @@ class Runner:
         data = self.converge(
             it0=self.iter_nr, n_iter=1,
             gf_layer_iw0=self.gf_iw, self_layer_iw0=self.self_iw, occ_layer0=self.occ,
-            function=iteration
+            function=iteration,
+            layer_config=layer_config
         )
         self.gf_iw, self.self_iw, self.occ = data
         self.iter_nr += 1
