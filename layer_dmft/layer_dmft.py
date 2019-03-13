@@ -170,6 +170,51 @@ class LayerData:
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
 
 
+class ImpurityData:
+    """Interface to saved impurity data."""
+
+    keys = {'gf_iw', 'gf_tau', 'self_iw', 'self_tau'}
+
+    def __init__(self, dir_=sb_qmc.IMP_OUTPUT):
+        """Mmap all data from directory."""
+        self._filname_dict = get_all_imp_iter(dir_)
+        mmap_dict = OrderedDict()
+        for iter_key, iter_dict in sorted(self._filname_dict.items()):
+            mmap_dict[iter_key] = OrderedDict(
+                (key, self._autoclean_load(val, mmap_mode='r'))
+                for key, val in sorted(iter_dict.items())
+            )
+        self.mmap_dict = mmap_dict
+        self.array = np.array(self.mmap_dict.values(), dtype=object)
+
+    def _autoclean_load(self, *args, **kwds):
+        data = np.load(*args, **kwds)
+
+        def _test():
+            data.close()
+        finalize(self, _test)
+        return data
+
+    def iter(self, it: int):
+        """Return data of iteration `it`."""
+        return self.mmap_dict[it]
+
+    @property
+    def iterations(self):
+        """Return list of iteration numbers."""
+        return self.mmap_dict.keys()
+
+    def __getitem__(self, key):
+        """Emulate structured array behavior."""
+        return self.mmap_dict[key]
+
+    # def __getattr__(self, item):
+    #     """Access elements in `keys`."""
+    #     if item in self.keys:
+    #         return self[item]
+    #     raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
+
+
 def abstract_converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: callable):
     """Abstract function as template for the DMFT self-consistency.
 
