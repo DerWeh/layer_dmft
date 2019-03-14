@@ -3,7 +3,7 @@
 # File              : model.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 01.08.2018
-# Last Modified Date: 21.01.2019
+# Last Modified Date: 14.03.2019
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Module to define the layered Hubbard model in use.
 
@@ -29,6 +29,8 @@ import gftools.matrix as gtmatrix
 from numpy import newaxis
 
 from .util import SpinResolvedArray, Spins
+from .fft import dft_iw2tau
+
 
 warnings.simplefilter('always', DeprecationWarning)
 
@@ -67,7 +69,7 @@ class SIAM:
             The temperature.
         z : (N_z, ) complex array_like
             The frequencies for which the hybridization function is given.
-        hybrid_fct : (N_z, ) complex array_like
+        hybrid_fct : (2, N_z) complex array_like
             The hybridization function evaluated at frequencies `z`.
         hybrid_mom : (2, ) float array_like
             The first `1/z` moment of the hybridization function.
@@ -91,6 +93,27 @@ class SIAM:
     @beta.setter
     def beta(self, value):
         self.T = 1./value
+
+    def hybrid_tau(self):
+        """Calculate the hybridization function for imaginary times τ in [0, β].
+
+        Returns
+        -------
+        hybrid_tau : (2, 2*N_z + 1) float np.ndarray
+            The Fourier transform of `self.hybrid_fct` on the interval [0, β].
+
+        Raises
+        ------
+        RuntimeError
+            If `self.z` does not correspond to Matsubara frequency, the Fourier
+            transform has no defined meaning.
+
+        """
+        z = self.z
+        if not np.allclose(z, gt.matsubara_frequencies(np.arange(z.size), self.beta)):
+            raise RuntimeError("The given frequencies `z` do not correspond to"
+                               " the Matsubara frequencies.")
+        return dft_iw2tau(self.hybrid_fct, beta=self.beta, moment=self.hybrid_mom)
 
     def gf0(self, hartree=False):
         """Return the non-interacting Green's function.
@@ -696,7 +719,13 @@ class Hubbard_Parameters:
         return _str
 
     def __copy__(self):
-        copy = self.__class__()  # create new object
+        try:
+            N_l = self._N_l
+        except AttributeError:
+            copy = self.__class__()  # create new object
+        else:
+            copy = self.__class__(N_l=N_l)  # create new object
+
         for attr in self.__slots__:
             attr_val = getattr(self, attr)
             try:  # copy the attribute if it provides a copy method
