@@ -13,6 +13,7 @@ from layer_dmft import __version__
 from layer_dmft.util import SpinResolvedArray
 from layer_dmft.model import SIAM, SIGMA
 
+N_TAU = 2048
 N_IW = 1024  # TODO: scan code for proper number
 
 SB_EXECUTABLE = Path('~/spinboson-1.10/sb_qmc.out').expanduser()
@@ -156,7 +157,7 @@ def get_path(dir_) -> Path:
     return dir_
 
 
-def write_hybridization_file(hybrid_iw):
+def write_hybridization_iw(hybrid_iw):
     r"""Write 'hybrid_fct' file containing hybridization function of the SIAM.
 
     Parameters
@@ -183,6 +184,28 @@ def write_hybridization_file(hybrid_iw):
                header=header)
 
 
+def write_hybridization_tau(hybrid_tau):
+    r"""Write 'hybrid_tau' file containing hybridization function of the SIAM.
+
+    Parameters
+    ----------
+    hybrid_tau : (2, N_tau) float np.ndarray
+        Hybridization function Δ(τ) evaluated at τ points [0, β].
+        It is necessary to have `N_tau = N_TAU + 1`.
+
+    """
+    assert hybrid_tau.shape == (2, N_TAU + 1)
+    digits = 14
+    fill = 2 + digits + 4
+    header = (
+        'spin up'.ljust(fill)
+        + 'spin dn'.ljust(fill)
+    )
+    np.savetxt("hybrid_tau.dat", hybrid_tau.T,
+               fmt=[f'%+.{digits}e', ]*2, delimiter=' ',
+               header=header)
+
+
 def setup(siam: SIAM, dir_='.', **kwds):
     """Prepare the 'hybrid_fct' file and parameters to use **spinboson** code.
 
@@ -205,10 +228,9 @@ def setup(siam: SIAM, dir_='.', **kwds):
     assert np.allclose(on_site_e.up - SIGMA.up*h_l, on_site_e.dn - SIGMA.dn*h_l,
                        rtol=1e-12, atol=1e-15)
 
-    # trim hybridization function to spinboson code
-    write_hybridization_file(siam.hybrid_fct)
-    hybrid_mom = siam.hybrid_mom
+    write_hybridization_tau(siam.hybrid_tau())
     (dir_ / OUTPUT_DIR).mkdir(exist_ok=True)
+    hybrid_mom = siam.hybrid_mom
     init_content = PARAM_TEMPLATE.format(T=siam.T, U=siam.U,
                                          ef=-on_site_e.up + SIGMA.up*h_l, h=h_l,
                                          V2_up=hybrid_mom.up, V2_dn=hybrid_mom.dn,
@@ -219,6 +241,7 @@ def setup(siam: SIAM, dir_='.', **kwds):
 def run(dir_=".", n_process=1):
     """Execute the **spinboson** code."""
     from subprocess import Popen
+
     dir_ = get_path(dir_)
     command = f"mpirun -n {n_process} {SB_EXECUTABLE}"
     with open(OUTPUT_FILE, "w") as outfile:
