@@ -289,7 +289,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
         `sweep_update(gf_layer_iw, self_layer_iw, it) -> gf_layer_iw, self_layer_iw`.
 
     """
-    def sweep_update(gf_layer_iw, self_layer_iw, occ_layer, it, layer_config=None):
+    def sweep_update(gf_layer_iw, self_layer_iw, occ_layer, it, layer_config=None, data_T=None):
         """Perform a sweep update, calculating the impurities for all layers.
 
         Parameters
@@ -309,10 +309,12 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
 
         """
         interacting_layers = np.flatnonzero(prm.U)
+        siam_z = iw_points if data_T is None \
+            else gt.matsubara_frequencies(np.arange(iw_points.size), beta=1./data_T)
         if layer_config is None:
             # TODO: return iterator instead of Tuple?
             interacting_siams = prm.get_impurity_models(
-                z=iw_points, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
+                z=siam_z, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
                 only_interacting=True
             )
         else:
@@ -320,14 +322,28 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
             layers = np.unique(layer_config)
             interacting_layers = layers[np.isin(layers, interacting_layers)]
             siams = prm.get_impurity_models(
-                z=iw_points, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
+                z=siam_z, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
                 only_interacting=False
             )
             interacting_siams = (siams[lay] for lay in interacting_layers)
 
+        #
+        # solve impurity model for the relevant layers
+        #
         for lay, siam in zip(interacting_layers, interacting_siams):
             LOGGER.log(PROGRESS, 'iter %s: starting layer %s with U = %s (%s)',
                        it, lay, siam.U, solver_kwds)
+            if data_T is not None and not np.allclose(siam.T, data_T):
+                if data_T > siam.T:
+                    LOGGER.info("Interpolate hybridization fct (iter %s: lay %s) from T=%s to T=%s",
+                                it, lay, data_T, siam.T)
+                    siam.hybrid_fct = interpolate(siam.z, siam.hybrid_fct, iw_points)
+                    siam.z = iw_points
+                else:
+                    raise NotImplementedError(
+                        "Input data corresponds to lower temperatures than calculation.\n"
+                        "Only interpolation for larger temperatures implemented."
+                    )
             data = sb_qmc.solve(siam, n_process=n_process,
                                 output_name=f'iter{it}_lay{lay}', **solver_kwds)
 
@@ -471,6 +487,7 @@ def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
 def main(prm: Hubbard_Parameters, n_iter, n_process=1,
          qmc_params=sb_qmc.DEFAULT_QMC_PARAMS, resume=True):
     """Execute DMFT loop."""
+    warnings.warn("Currently not maintained!")
     log_info(prm)
 
     # technical parameters
@@ -545,10 +562,25 @@ class Runner:
             gf_layer_iw, self_layer_iw, occ_layer = hartree_solution(prm, iw_n=self.iw_points)
             LOGGER.log(PROGRESS, 'DONE: calculated starting point')
             start = 0
+            data_T = prm.T
         self.iter_nr = start
         self.gf_iw = gf_layer_iw
         self.self_iw = self_layer_iw
         self.occ = occ_layer
+
+        if not np.allclose(data_T, prm.T, atol=1e-14):
+            if data_T < prm.T:
+                raise NotImplementedError(
+                    "Input data corresponds to lower temperatures than calculation.\n"
+                    "Only interpolation for larger temperatures implemented."
+                )
+            LOGGER.info("Temperature of loaded data (%s) disagrees with parameters (%s)."
+                        "Data will be interpolated.",
+                        data_T, prm.T)
+            self._temperature_missmatch = True
+            self.data_T = data_T
+        else:
+            self._temperature_missmatch = False
 
         # iteration scheme
         self.converge = bare_iteration
@@ -572,6 +604,10 @@ class Runner:
         """
         iteration = get_sweep_updater(self.prm, iw_points=self.iw_points,
                                       n_process=n_process, **qmc_params)
+        if self._temperature_missmatch:
+            iteration = partial(iteration, data_T=self.data_T)
+            # assuming no errors occur temperatures match as soon as function finishes
+            self._temperature_missmatch = False
 
         # perform self-consistency loop
         data = self.converge(
