@@ -54,12 +54,12 @@ def log_info(prm: Hubbard_Parameters):
 LayerIterData = namedtuple('layer_iter_data', ['gf_iw', 'self_iw', 'occ'])
 
 
-def save_gf(gf_iw, self_iw, occ_layer, dir_='.', name='layer', compress=True):
+def save_gf(gf_iw, self_iw, occ_layer, T, dir_='.', name='layer', compress=True):
     dir_ = Path(dir_).expanduser()
     dir_.mkdir(exist_ok=True)
     save_method = np.savez_compressed if compress else np.savez
     name = date.today().isoformat() + '_' + name
-    save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw, occ=occ_layer)
+    save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw, occ=occ_layer, temperature=T)
 
 
 def _get_iter(file_object) -> int:
@@ -265,9 +265,6 @@ def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, functi
     for ii in range(it0, n_iter+it0):
         result = function(gf_layer_iw, self_layer_iw, occ_layer, it=ii, **kwds)
         gf_layer_iw, self_layer_iw, occ_layer = result
-        # TODO: also save error
-        save_gf(gf_layer_iw, self_layer_iw, occ_layer,
-                dir_=OUTPUT_DIR, name=f'layer_iter{ii}')
     return result
 
 
@@ -347,6 +344,9 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
             self_layer_iw[:] = np.mean(self_layer_iw, axis=0)
 
         gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
+        # TODO: also save error
+        save_gf(gf_layer_iw, self_layer_iw, occ_layer, T=prm.T,
+                dir_=OUTPUT_DIR, name=f'layer_iter{it}')
         return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
     return sweep_update
@@ -370,8 +370,9 @@ def load_last_iteration() -> Tuple[LayerIterData, int]:
         gf_layer_iw = data['gf_iw']
         self_layer_iw = data['self_iw']
         occ_layer = data['occ']
+        temperature = data['temperature']
     result = LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
-    return result, last_iter
+    return result, last_iter, temperature
 
 
 @partial(np.vectorize, signature='(n),(n),(m)->(m)')
@@ -483,7 +484,7 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1,
     #
     if resume:
         LOGGER.info("Reading old Green's function and self energy")
-        (gf_layer_iw, self_layer_iw, occ_layer), last_it = load_last_iteration()
+        (gf_layer_iw, self_layer_iw, occ_layer), last_it, __ = load_last_iteration()
         start = last_it + 1
     else:
         LOGGER.info('Start from Hartree')
@@ -537,7 +538,7 @@ class Runner:
         #
         if resume:
             LOGGER.info("Reading old Green's function and self energy")
-            (gf_layer_iw, self_layer_iw, occ_layer), last_it = load_last_iteration()
+            (gf_layer_iw, self_layer_iw, occ_layer), last_it, data_T = load_last_iteration()
             start = last_it + 1
         else:
             LOGGER.info('Start from Hartree')
