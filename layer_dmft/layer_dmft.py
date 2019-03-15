@@ -405,7 +405,7 @@ def hartree_solution(prm: Hubbard_Parameters, iw_n: int) -> LayerIterData:
     else:  # nonsense case
         # start with non-interacting solution
         self_layer_iw = np.zeros((2, N_l, N_iw), dtype=np.complex)
-        occ_layer = occ0
+        occ_layer = occ0.x
     return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
 
