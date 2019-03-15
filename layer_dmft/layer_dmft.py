@@ -324,7 +324,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
                 z=iw_points, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
                 only_interacting=False
             )
-            interacting_siams = (siams[lay] for lay in layers)
+            interacting_siams = (siams[lay] for lay in interacting_layers)
 
         for lay, siam in zip(interacting_layers, interacting_siams):
             LOGGER.log(PROGRESS, 'iter %s: starting layer %s with U = %s (%s)',
