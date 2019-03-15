@@ -11,6 +11,7 @@ FORCE_PARAMAGNET: bool
 import warnings
 import logging
 
+from functools import partial
 from typing import Tuple
 from pathlib import Path
 from weakref import finalize
@@ -19,6 +20,7 @@ from collections import OrderedDict, namedtuple, defaultdict
 
 import numpy as np
 import gftools as gt
+from scipy.interpolate import UnivariateSpline
 
 from . import __version__, charge
 from .model import Hubbard_Parameters
@@ -370,6 +372,29 @@ def load_last_iteration() -> Tuple[LayerIterData, int]:
         occ_layer = data['occ']
     result = LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
     return result, last_iter
+
+
+@partial(np.vectorize, signature='(n),(n),(m)->(m)')
+def interpolate(x_in, fct_in, x_out):
+    """Calculate complex interpolation of `fct_in` and evaluate it at `x_out`.
+
+    `x_in` and `x_out` can either be both real or imaginary, arbitrary contours
+    are not supported.
+
+    """
+    if np.all(np.isreal(x_in)):
+        x_out = x_out.real
+    elif np.all(np.isreal(1j*x_in)):
+        x_in = x_in.imag
+        x_out = x_out.imag
+    else:
+        raise ValueError("Arbitrary complex numbers are not supported.\n"
+                         "'x' has to be either real of imaginary.")
+    smothening = len(x_in) * 1e-11
+    Spline = partial(UnivariateSpline, s=smothening)
+    fct_out = 1j*Spline(x_in, fct_in.imag)(x_out)
+    fct_out += Spline(x_in, fct_in.real)(x_out)
+    return fct_out
 
 
 def hartree_solution(prm: Hubbard_Parameters, iw_n: int) -> LayerIterData:
