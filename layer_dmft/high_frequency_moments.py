@@ -37,7 +37,7 @@ def self_m1(U, occ):
     U : float
         On-site interacting strength (Hubbard U)
     occ : (2, ) float np.ndarray
-        Occupation numbers
+        Occupation numbers of the opposite spin channel
 
     Returns
     -------
@@ -45,7 +45,7 @@ def self_m1(U, occ):
         The high-frequency moment
 
     """
-    occ_other = occ[::-1]  # other spin channel is relevant
+    occ_other = occ  # other spin channel is relevant
     return U**2 * occ_other * (1 - occ_other)
 
 
@@ -73,7 +73,7 @@ def gf_lattice_m3_subtract(self_mod_m0, eps_2):
 
     Parameters
     ----------
-    self_mod_m0
+    self_mod_m0 : (..., N, N) float np.ndarray
         The *modified* zeroth moment (static part) of the self-energy.
         Modified means here, that it incorporates the single particle Hamiltonian
         (on-site energies and hopping).
@@ -82,11 +82,11 @@ def gf_lattice_m3_subtract(self_mod_m0, eps_2):
 
     Returns
     -------
-    G_m3 - Σ_m1
+    G_m3 - Σ_m1 : (..., N, N) float np.ndarray
         The high-frequency moment without leading self-energy term.
 
     """
-    idx = np.eye(*self_mod_m0.shape)
+    idx = np.eye(*self_mod_m0.shape[-2:])
     return self_mod_m0@self_mod_m0 + eps_2*idx
 
 
@@ -95,24 +95,21 @@ def gf_lattice_m3(self_mod_m0, self_m1, eps_2):
 
     Parameters
     ----------
-    self_mod_m0
+    self_mod_m0 : (..., N, N) float np.ndarray
         The *modified* zeroth moment (static part) of the self-energy.
         Modified means here, that it incorporates the single particle Hamiltonian
         (on-site energies and hopping).
-    self_mod_m1
+    self_m1 : (..., N, N) float np.ndarray
         The first high-frequency moment of the self-energy.
     eps_2 : float
         The second epsilon moment of the DOS
 
     Returns
     -------
-    G_m3
+    G_m3 : (..., N, N) float np.ndarray
         The high-frequency moment
 
     """
-    self_m1 = np.asarray(self_m1)
-    if self_m1.ndim <= 1:
-        self_m1 = np.diagflat(self_m1)
     return self_m1 + gf_lattice_m3_subtract(self_mod_m0, eps_2)
 
 
@@ -121,29 +118,25 @@ def gf_lattice_m4_subtract(self_mod_m0, self_m1, eps_2):
 
     Parameters
     ----------
-    self_mod_m0
+    self_mod_m0 : (..., N, N) float np.ndarray
         The *modified* zeroth moment (static part) of the self-energy.
         Modified means here, that it incorporates the single particle Hamiltonian
         (on-site energies and hopping).
-    self_mod_m1
+    self_m1 : (..., N, N) float np.ndarray
         The first high-frequency moment of the self-energy.
     eps_2 : float
         The second epsilon moment of the DOS
 
     Returns
     -------
-    G_m4 - Σ_m2
+    G_m4 - Σ_m2 : (..., N, N) float np.ndarray
         The high-frequency moment
 
     """
-    self_m1 = np.asarray(self_m1)
-    if self_m1.ndim == 1:
-        self_m1 = np.diagflat(self_m1)
-    elif self_m1.ndim == 0:
-        self_m1 = np.eye(*self_mod_m0.shape) * self_m1
     self_01 = self_mod_m0@self_m1 + self_m1@self_mod_m0
     eps_2_self_0 = 3*eps_2*self_mod_m0
-    self_1_pow3 = np.linalg.matrix_power(self_mod_m0, 3)
+    matrix_power = np.vectorize(np.linalg.matrix_power, signature='(n,n),()->(n,n)')
+    self_1_pow3 = matrix_power(self_mod_m0, 3)
     return self_01 + eps_2_self_0 + self_1_pow3
 
 
