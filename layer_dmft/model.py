@@ -20,6 +20,7 @@ Most likely you want to import this module like::
 """
 import warnings
 
+from functools import partial
 from typing import Tuple
 
 import numpy as np
@@ -28,6 +29,7 @@ import gftools.matrix as gtmatrix
 
 from numpy import newaxis
 
+from . import high_frequency_moments as hfm
 from .util import SpinResolvedArray, Spins
 from .fft import dft_iw2tau
 
@@ -113,7 +115,7 @@ class SIAM:
         if not np.allclose(z, gt.matsubara_frequencies(np.arange(z.size), self.beta)):
             raise RuntimeError("The given frequencies `z` do not correspond to"
                                " the Matsubara frequencies.")
-        return dft_iw2tau(self.hybrid_fct, beta=self.beta, moment=self.hybrid_mom)
+        return dft_iw2tau(self.hybrid_fct, beta=self.beta, moments=self.hybrid_mom)
 
     def gf0(self, hartree=False):
         """Return the non-interacting Green's function.
@@ -648,8 +650,10 @@ class Hubbard_Parameters:
                 gf_out_sp[..., ii] = gf_dec.reconstruct(kind=diag_dic[diagonal])
         return gf_out
 
-    def hybrid_fct_m1(self, occ):
-        r"""Return the first high-frequency moment of the hybridization function.
+    def hybrid_fct_moments(self, occ):
+        r"""Return the first high-frequency moments of the hybridization function.
+
+        Currently the first and the second moment are implemented, thus N_moments = 2.
 
         The moment is the first order term of the high-frequency expansion of
         the hybridization function :math:`Δ(z)`. It can be obtained
@@ -663,15 +667,26 @@ class Hubbard_Parameters:
 
         Returns
         -------
-        m1 : ([2,] N_l) complex ndarray
+        mom : (N_moments, [2,] N_l) complex ndarray
+            Array of the high-frequency moments.
 
         """
-        hamil = self.hamiltonian(hartree=occ[::-1])
-        hoppingterm = {}
-        hoppingterm = np.diagonal(hamil @ hamil, axis1=-2, axis2=-1) \
-            - np.diagonal(hamil, axis1=-2, axis2=-1)**2
-        dos_m2 = self.hilbert_transform.m2(self.D)
-        return dos_m2 + hoppingterm
+        self_mod_0 = self.hamiltonian(hartree=occ[::-1])
+        idx = np.eye(*self_mod_0.shape[-2:])
+        self_1 = hfm.self_m1(self.U, occ[::-1])[..., newaxis] * idx
+        eps_m2 = self.hilbert_transform.m2(self.D)
+
+        diag = partial(np.diagonal, axis1=-2, axis2=-1)
+
+        gf_2 = diag(hfm.gf_lattice_m2(self_mod_0))
+        gf_3_sub = diag(hfm.gf_lattice_m3_subtract(self_mod_0, eps_m2))
+        gf_3 = diag(hfm.gf_lattice_m3(self_mod_0, self_1, eps_m2))
+        gf_4_sub = diag(hfm.gf_lattice_m4_subtract(self_mod_0, self_1, eps_m2))
+
+        hyb_m1 = hfm.hybridization_m1(gf_2, gf_3_sub)
+        hyb_m2 = hfm.hybridization_m2(gf_2, gf_3, gf_4_sub)
+
+        return np.array((hyb_m1, hyb_m2))
 
     def assert_valid(self):
         """Raise error if attributes are not valid.
@@ -787,13 +802,13 @@ class Hubbard_Parameters:
             gf_z = self.gf_dmft_s(z, self_z=self_z, diagonal=True)
         e_onsite = self.onsite_energy()
         hybrid_z = z + e_onsite[..., newaxis] - self_z - 1./gf_z
-        hybrid_mom = self.hybrid_fct_m1(occ)
+        hybrid_mom = self.hybrid_fct_moments(occ)
         if only_interacting:
             layers = self.U.nonzero()[0]
         else:
             layers = range(self.mu.size)
         impurity_models = tuple(SIAM(e_onsite[:, ll], U=self.U[ll], T=self.T,
-                                     z=z, hybrid_fct=hybrid_z[:, ll], hybrid_mom=hybrid_mom[:, ll])
+                                     z=z, hybrid_fct=hybrid_z[:, ll], hybrid_mom=hybrid_mom[:, :, ll])
                                 for ll in layers)
         return impurity_models
 
