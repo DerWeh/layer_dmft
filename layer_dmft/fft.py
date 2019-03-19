@@ -36,7 +36,7 @@ def bare_dft_iw2tau(gf_iw, beta):
     return gf_tau_res
 
 
-def dft_iw2tau(gf_iw, beta, moment=1., dft_backend=bare_dft_iw2tau):
+def dft_iw2tau(gf_iw, beta, moments=(1.,), dft_backend=bare_dft_iw2tau):
     """DFT from iω to τ, needing the 1/iw tail `moment`.
 
     Parameters
@@ -57,9 +57,27 @@ def dft_iw2tau(gf_iw, beta, moment=1., dft_backend=bare_dft_iw2tau):
         The Fourier transform of `gf_iw` on the interval [0, β].
 
     """
-    moment = np.asarray(moment)[..., np.newaxis]
+    moments = np.asarray(moments)[..., np.newaxis]
     iws = gt.matsubara_frequencies(np.arange(gf_iw.shape[-1]), beta=beta)
-    gf_iw = gf_iw - moment/iws
+    if len(moments) == 1:
+        gf_iw = gf_iw - moments[0]/iws
+        mom_tau = -.5*moments[0]
+    elif len(moments) == 2:
+        pole = moments[1]/moments[0]
+        gf_iw = gf_iw - moments[0]/(iws - pole)
+        tau = np.linspace(0, beta, num=2*gf_iw.shape[-1] + 1, endpoint=True)
+        mom_tau = moments[0] * ft_pole2tau(tau, pole=pole, beta=beta)
+    else:
+        raise NotImplementedError()
     gf_tau = dft_backend(gf_iw, beta)
-    gf_tau = gf_tau - .5*moment
+    gf_tau += mom_tau
     return gf_tau
+
+
+def ft_pole2tau(tau, pole, beta):
+    """Fourier transform of 1/(iw - pole)."""
+    assert np.all((tau >= 0) & (tau <= beta)), 'Only implemented for tau in [0, beta]'
+    max_exp = np.where(tau > beta, beta - tau, beta)  # avoid overflows
+    return -np.exp((beta - tau - max_exp)*pole)/(np.exp((beta - max_exp)*pole) + np.exp(-max_exp*pole))
+
+
