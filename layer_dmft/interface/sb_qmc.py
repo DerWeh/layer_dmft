@@ -233,7 +233,7 @@ def setup(siam: SIAM, dir_='.', **kwds):
     hybrid_mom = siam.hybrid_mom
     init_content = PARAM_TEMPLATE.format(T=siam.T, U=siam.U,
                                          ef=-on_site_e.up + SIGMA.up*h_l, h=h_l,
-                                         V2_up=hybrid_mom.up, V2_dn=hybrid_mom.dn,
+                                         V2_up=1, V2_dn=1,  # not in use
                                          **kwds)
     (dir_ / INIT_FILE).write_text(init_content)
 
