@@ -337,25 +337,26 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
 
     vprint('optimize'.center(SMALL_WIDTH, '='))
     # TODO: check tol of density for target tol
+    if kind == 'occ':
+        if occ0 is None:
+            gf_iw = params.gf0(iw_array)
+            occ0 = params.occ0(gf_iw, return_err=False)
+        optimizer = partial(update_occupation, i_omega=iw_array, params=params,
+                            out_dict=output)
+        solve = partial(_occ_root, fun=optimizer, occ0=occ0, tol=tol, verbose=True)
+    elif kind == 'occ_lsq':
+        if occ0 is None:
+            gf_iw = params.gf0(iw_array)
+            occ0 = params.occ0(gf_iw, return_err=False)
+        optimizer = partial(update_occupation, i_omega=iw_array, params=params,
+                            out_dict=output)
+        solve = partial(_occ_least_square, fun=optimizer, occ0=occ0, tol=tol, verbose=2)
+    elif kind == 'V':
+        optimizer = partial(update_potential, i_omega=iw_array, params=params,
+                            out_dict=output)
+        solve = partial(_pot_root, fun=optimizer, pot0=params.V[:], tol=tol, verbose=True)
     try:
-        if kind == 'occ':
-            if occ0 is None:
-                gf_iw = params.gf0(iw_array)
-                occ0 = params.occ0(gf_iw, return_err=False)
-            optimizer = partial(update_occupation, i_omega=iw_array, params=params,
-                                out_dict=output)
-            sol = _occ_root(optimizer, occ0=occ0, tol=tol, verbose=True)
-        elif kind == 'occ_lsq':
-            if occ0 is None:
-                gf_iw = params.gf0(iw_array)
-                occ0 = params.occ0(gf_iw, return_err=False)
-            optimizer = partial(update_occupation, i_omega=iw_array, params=params,
-                                out_dict=output)
-            sol = _occ_least_square(optimizer, occ0=occ0, tol=tol, verbose=2)
-        elif kind == 'V':
-            optimizer = partial(update_potential, i_omega=iw_array, params=params,
-                                out_dict=output)
-            sol = _pot_root(optimizer, pot0=params.V[:], tol=tol, verbose=True)
+        sol = solve()
     except KeyboardInterrupt as key_err:
         print('Optimization canceled -- trying to continue')
         try:
