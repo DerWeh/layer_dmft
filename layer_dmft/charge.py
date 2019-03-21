@@ -8,6 +8,7 @@
 # encoding: utf-8
 """Handles the charge self-consistency loop of the combined scheme."""
 import warnings
+import logging
 
 from functools import partial, wraps
 from collections import namedtuple
@@ -22,47 +23,8 @@ import gftools as gt
 from . import plot
 from .capacitor_formula import potential_energy_vector
 
-VERBOSE = True
+LOGGER = logging.getLogger(__name__)
 SMALL_WIDTH = 50
-
-
-class _vprint:
-    __slots__ = ('_printer', )
-
-    def __call__(self, *args, **kwds):
-        self._printer(*args, **kwds)
-
-
-vprint = _vprint()
-
-
-def verbose_print(func):
-    """Decorate `func` to print, only if `func.verbose` or `VERBOSE` if not set.
-
-    The `vprint` in `func` will be executed if `func.verbose` has been set to `True`.
-    If `func.verbose` is set to `False` the function is silenced.
-    If no attribute `verbose` has been set, the global variable `VERBOSE` is
-    used as default.
-    """
-    def silent_print(*_, **__):
-        pass
-
-    print_choice = {
-        True: print,
-        False: silent_print,
-    }
-
-    @wraps(func)
-    def wrapper(*args, **kwds):
-        try:
-            verbose = wrapper.verbose
-        except AttributeError:  # no attribute func.verbose
-            verbose = VERBOSE
-        vprint._printer = print_choice[verbose]
-        result = func(*args, **kwds)
-        del vprint._printer
-        return result
-    return wrapper
 
 
 def counter(func):
@@ -204,31 +166,31 @@ def update_potential(V_init, i_omega, params, out_dict):
 
 
 @counter
-def print_status(x, dx):
-    """Intermediate print output for `optimize.root`."""
+def log_status(x, dx):
+    """Intermediate output for `optimize.root`."""
     del x
-    if print_status.count == 1:  # print heading in first iteration
-        print('_____________________')
-        print('| iteration | change ')
-    print('| {: >{width}} | {}'.format(print_status.count, np.linalg.norm(dx),
-                                       width=len('iteration')))
+    if log_status.count == 1:  # print heading in first iteration
+        LOGGER.progress('_____________________')
+        LOGGER.progress('| iteration | change ')
+    LOGGER.progress('| %*i | %s', len('iteration'), log_status.count, np.linalg.norm(dx))
 
 
-def _occ_root(fun, occ0, tol, verbose=True):
+def _occ_root(fun, occ0, tol):
     """Wrap root finding for occupation.
 
     From a few test cases `krylov` performs best by far. `broyden1` and
     `df-sane` seem to also be decent options.
     """
+    log_status.count = 0
     sol = optimize.root(fun=fun, x0=occ0,
                         # method='broyden1',
                         method='krylov',
                         # method='df-sane',
                         tol=tol,
                         # options={'nit': 3},
-                        callback=print_status if verbose else None,
+                        callback=log_status,
                         )
-    print_status.count = 0
+    log_status.count = 0
     return sol
 
 
@@ -258,24 +220,24 @@ def _occ_least_square(fun, occ0, tol, verbose=2):
     return sol
 
 
-def _pot_root(fun, pot0, tol, verbose=True):
+def _pot_root(fun, pot0, tol):
     """Wrap root finding of potential."""
+    log_status.count = 0
     sol = optimize.root(fun=fun, x0=pot0,
                         # method='broyden1',
                         method='krylov',
                         # method='df-sane',
                         tol=tol,
                         # options={'nit': 3},
-                        callback=print_status if verbose else None,
+                        callback=log_status,
                         )
-    print_status.count = 0
+    log_status.count = 0
     return sol
 
 
 ChargeSelfconsistency = namedtuple('ChargeSelfconsistency', ['sol', 'occ', 'V'])
 
 
-@verbose_print
 def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
                             n_points=2**11):
     """Charge self-consistency using root-finding algorithm.
@@ -335,20 +297,18 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
         params.V[:] = V0
     output = {}
 
-    vprint('optimize'.center(SMALL_WIDTH, '='))
     # TODO: check tol of density for target tol
     if kind.startswith('occ'):
         if occ0 is None:
             gf_iw = params.gf0(iw_array)
             occ0 = params.occ0(gf_iw, return_err=False)
-        optimizer = partial(update_occupation, i_omega=iw_array, params=params,
-                            out_dict=output)
+        optimizer = partial(update_occupation, i_omega=iw_array, params=params, out_dict=output)
         root_finder = _occ_least_square if kind == 'occ_lsq' else _occ_root
-        solve = partial(root_finder, fun=optimizer, occ0=occ0, tol=tol, verbose=True)
+        solve = partial(root_finder, fun=optimizer, occ0=occ0, tol=tol)
     elif kind == 'V':
-        optimizer = partial(update_potential, i_omega=iw_array, params=params,
-                            out_dict=output)
-        solve = partial(_pot_root, fun=optimizer, pot0=params.V[:], tol=tol, verbose=True)
+        optimizer = partial(update_potential, i_omega=iw_array, params=params, out_dict=output)
+        solve = partial(_pot_root, fun=optimizer, pot0=params.V[:], tol=tol)
+    LOGGER.progress("Search self-consistent occupation number")
     try:
         sol = solve()
     except KeyboardInterrupt as key_err:
@@ -367,10 +327,8 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
     # finalize
     gf_iw = params.gf0(iw_array, hartree=hartree_occ)
     occ = params.occ0(gf_iw, hartree=hartree_occ, return_err=True)
-    vprint("".center(SMALL_WIDTH, '='))
-    vprint(f"Success: {sol.success}")
-    vprint(sol.message)
-    vprint("".center(SMALL_WIDTH, '='))
+    LOGGER.info("Success of finding self-consistent occupation: %s", sol.success)
+    LOGGER.info("%s", sol.message)
     return ChargeSelfconsistency(sol=sol, occ=occ, V=params.V)
 
 
