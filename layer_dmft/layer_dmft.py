@@ -27,8 +27,6 @@ from .model import Hubbard_Parameters
 from .interface import sb_qmc
 
 # setup logging
-PROGRESS = logging.INFO - 5
-logging.addLevelName(PROGRESS, 'PROGRESS')
 LOGGER = logging.getLogger(__name__)
 LOG_FMT = logging.Formatter('%(asctime)s|%(name)s|%(levelname)s: %(message)s')
 HANDLER = logging.StreamHandler()
@@ -331,8 +329,8 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
         # solve impurity model for the relevant layers
         #
         for lay, siam in zip(interacting_layers, interacting_siams):
-            LOGGER.log(PROGRESS, 'iter %s: starting layer %s with U = %s (%s)',
-                       it, lay, siam.U, solver_kwds)
+            LOGGER.progress('iter %s: starting layer %s with U = %s (%s)',
+                            it, lay, siam.U, solver_kwds)
             if data_T is not None and not np.allclose(siam.T, data_T):
                 if data_T > siam.T:
                     LOGGER.info("Interpolate hybridization fct (iter %s: lay %s) from T=%s to T=%s",
@@ -351,8 +349,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
             occ_layer[:, lay] = -data['gf_tau'][:, -1]
 
         if layer_config is not None:
-            LOGGER.log(PROGRESS, 'Using calculated self-energies on layers %s',
-                       list(layer_config))
+            LOGGER.progress('Using calculated self-energies on layers %s', list(layer_config))
             self_layer_iw = self_layer_iw[:, layer_config]
 
         if FORCE_PARAMAGNET and np.all(prm.h == 0):
@@ -506,7 +503,7 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1,
     else:
         LOGGER.info('Start from Hartree')
         gf_layer_iw, self_layer_iw, occ_layer = hartree_solution(prm, iw_n=iw_points)
-        LOGGER.log(PROGRESS, 'DONE: calculated starting point')
+        LOGGER.progress('DONE: calculated starting point')
         start = 0
 
     #
@@ -560,7 +557,7 @@ class Runner:
         else:
             LOGGER.info('Start from Hartree')
             gf_layer_iw, self_layer_iw, occ_layer = hartree_solution(prm, iw_n=self.iw_points)
-            LOGGER.log(PROGRESS, 'DONE: calculated starting point')
+            LOGGER.progress('DONE: calculated starting point')
             start = 0
             data_T = prm.T
         self.iter_nr = start
