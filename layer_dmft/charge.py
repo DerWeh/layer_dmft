@@ -175,14 +175,14 @@ def log_status(x, dx):
     LOGGER.progress('| %*i | %s', len('iteration'), log_status.count, np.linalg.norm(dx))
 
 
-def _occ_root(fun, occ0, tol):
-    """Wrap root finding for occupation.
+def _root(fun, x0, tol):
+    """Wrap root finding.
 
     From a few test cases `krylov` performs best by far. `broyden1` and
     `df-sane` seem to also be decent options.
     """
     log_status.count = 0
-    sol = optimize.root(fun=fun, x0=occ0,
+    sol = optimize.root(fun=fun, x0=x0,
                         # method='broyden1',
                         method='krylov',
                         # method='df-sane',
@@ -194,7 +194,7 @@ def _occ_root(fun, occ0, tol):
     return sol
 
 
-def _occ_least_square(fun, occ0, tol, verbose=2):
+def _occ_least_square(fun, x0, tol, verbose=2):
     """Wrap least square optimization of occupation.
 
     Least square allows boundaries on the possible values of the occupation.
@@ -205,6 +205,7 @@ def _occ_least_square(fun, occ0, tol, verbose=2):
     To test: use least square for initial estimate (low accuracy) than switch
     to root finding algorithm.
     """
+    occ0 = x0
     occ0 = np.asarray(occ0)
     shape = occ0.shape
 
@@ -217,21 +218,6 @@ def _occ_least_square(fun, occ0, tol, verbose=2):
     sol = optimize.least_squares(wrapped, x0=occ0.reshape(-1), bounds=(0., 1.),
                                  xtol=tol, method='dogbox', loss='cauchy',
                                  verbose=verbose,)
-    return sol
-
-
-def _pot_root(fun, pot0, tol):
-    """Wrap root finding of potential."""
-    log_status.count = 0
-    sol = optimize.root(fun=fun, x0=pot0,
-                        # method='broyden1',
-                        method='krylov',
-                        # method='df-sane',
-                        tol=tol,
-                        # options={'nit': 3},
-                        callback=log_status,
-                        )
-    log_status.count = 0
     return sol
 
 
@@ -303,11 +289,11 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
             gf_iw = params.gf0(iw_array)
             occ0 = params.occ0(gf_iw, return_err=False)
         optimizer = partial(update_occupation, i_omega=iw_array, params=params, out_dict=output)
-        root_finder = _occ_least_square if kind == 'occ_lsq' else _occ_root
-        solve = partial(root_finder, fun=optimizer, occ0=occ0, tol=tol)
+        root_finder = _occ_least_square if kind == 'occ_lsq' else _root
+        solve = partial(root_finder, fun=optimizer, x0=occ0, tol=tol)
     elif kind == 'V':
         optimizer = partial(update_potential, i_omega=iw_array, params=params, out_dict=output)
-        solve = partial(_pot_root, fun=optimizer, pot0=params.V[:], tol=tol)
+        solve = partial(_root, fun=optimizer, x0=params.V[:], tol=tol)
     LOGGER.progress("Search self-consistent occupation number")
     try:
         sol = solve()
