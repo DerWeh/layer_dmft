@@ -337,20 +337,14 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
 
     vprint('optimize'.center(SMALL_WIDTH, '='))
     # TODO: check tol of density for target tol
-    if kind == 'occ':
+    if kind.startswith('occ'):
         if occ0 is None:
             gf_iw = params.gf0(iw_array)
             occ0 = params.occ0(gf_iw, return_err=False)
         optimizer = partial(update_occupation, i_omega=iw_array, params=params,
                             out_dict=output)
-        solve = partial(_occ_root, fun=optimizer, occ0=occ0, tol=tol, verbose=True)
-    elif kind == 'occ_lsq':
-        if occ0 is None:
-            gf_iw = params.gf0(iw_array)
-            occ0 = params.occ0(gf_iw, return_err=False)
-        optimizer = partial(update_occupation, i_omega=iw_array, params=params,
-                            out_dict=output)
-        solve = partial(_occ_least_square, fun=optimizer, occ0=occ0, tol=tol, verbose=2)
+        root_finder = _occ_least_square if kind == 'occ_lsq' else _occ_root
+        solve = partial(root_finder, fun=optimizer, occ0=occ0, tol=tol, verbose=True)
     elif kind == 'V':
         optimizer = partial(update_potential, i_omega=iw_array, params=params,
                             out_dict=output)
