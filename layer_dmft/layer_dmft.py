@@ -409,6 +409,38 @@ def hartree_solution(prm: Hubbard_Parameters, iw_n: int) -> LayerIterData:
     return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
 
+def _hubbard_I_update(occ_init, i_omega, params: Hubbard_Parameters, out_dict):
+    self_iw = gt.hubbard_I_self_z(i_omega, params.U, occ_init[::-1])
+    out_dict['self_iw'] = self_iw = np.moveaxis(self_iw, 0, -1)
+    out_dict['gf'] = gf_iw = params.gf_dmft_s(i_omega, self_z=self_iw, diagonal=True)
+    occ = out_dict['occ'] = params.occ0(gf_iw, hartree=occ_init[::-1], return_err=False)
+    return occ - occ_init
+
+
+def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
+    N_l = prm.mu.size
+    N_iw = iw_n.size
+    gf_layer_iw = prm.gf0(iw_n)  # start with non-interacting Gf
+    occ0 = prm.occ0(gf_layer_iw)
+    if np.any(prm.U != 0):
+        # Non-interacting/Hartree is typically no good starting value!
+        occ0.x[:] = .5
+        output = {}
+        tol = max(np.linalg.norm(occ0.err), 1e-14)
+        root_finder = charge._root
+        optimizer = partial(_hubbard_I_update, i_omega=iw_n, params=prm, out_dict=output)
+        solve = partial(root_finder, fun=optimizer, x0=occ0.x, tol=tol)
+        solve()
+        gf_layer_iw = output['gf']
+        self_layer_iw = output['self_iw']
+        occ_layer = output['occ']
+    else:  # nonsense case
+        # start with non-interacting solution
+        self_layer_iw = np.zeros((2, N_l, N_iw), dtype=np.complex)
+        occ_layer = occ0.x
+    return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
+
+
 # TODO: add resume=None -> "automatic choice"
 def main(prm: Hubbard_Parameters, n_iter, n_process=1,
          qmc_params=sb_qmc.DEFAULT_QMC_PARAMS, resume=True):
