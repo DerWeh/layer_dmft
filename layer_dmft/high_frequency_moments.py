@@ -18,6 +18,9 @@ m{n}_subtract
    Relevant for the moments of the hybridization function.
 self, Σ
    The self-energy :math:`Σ(z) = G_0^{-1}(z) - G^{-1}(z)`
+gf_x_self, G×Σ
+    The product of Green's function and self-energy :math:`G(z)Σ(z)`.
+    The convolution in imaginary time can be measured.
 
 TODO
 ----
@@ -27,6 +30,28 @@ Green's function, thus the variables do *not commute*.
 
 """
 import numpy as np
+
+
+def self_m0(U, occ):
+    """Static part of the self-energy.
+
+    This is the zeroth high-frequency moment :math:`Σ^{(0)}`.
+
+    Parameters
+    ----------
+    U : float
+        On-site interacting strength (Hubbard U)
+    occ : (2, ) float np.ndarray
+        Occupation numbers of the opposite spin channel
+
+    Returns
+    -------
+    Σ_m0 : (2, ) float np.ndarray
+        The static part of the self-energy.
+
+    """
+    occ_other = occ
+    return U*occ_other
 
 
 def self_m1(U, occ):
@@ -179,3 +204,43 @@ def hybridization_m2(gf_m2, gf_m3, gf_m4_sub):
 
     """
     return gf_m4_sub + gf_m2**3 - 2*gf_m3*gf_m2
+
+
+def gf_x_self_m1(self_m0):
+    """Fist high-frequency moment of the product of Green's function and self-energy.
+
+    Parameters
+    ----------
+    self_m0
+        The static part (zeroth high-frequency moment) of the self-energy.
+
+    Returns
+    -------
+    G×Σ_m1
+        The high-frequency moment
+
+    """
+    return self_m0
+
+
+def gf_x_self_m2(self_m0, self_m1, gf_m2):
+    """Second high-frequency moment of the product of Green's function and self-energy.
+
+    This function uses that G_m1 ≡ 1.
+
+    Parameters
+    ----------
+    self_m0
+        The static part (zeroth high-frequency moment) of the self-energy.
+    self_m1
+        The first high-frequency moment of the self-energy.
+    gf_m2
+        The second high-frequency moment of the Green's function.
+
+    Returns
+    -------
+    G×Σ_m2
+        The high-frequency moment
+
+    """
+    return self_m0*gf_m2 + self_m1
