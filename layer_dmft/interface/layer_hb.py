@@ -135,18 +135,20 @@ def load_param(dir_='.') -> model.Hubbard_Parameters:
     out_file = Path(dir_).expanduser() / OUTPUT_FILE
     # FIXME: think about fixing discrepancy with V_l
     assert out_file.is_file()
-    prm = model.Hubbard_Parameters()
     with open(out_file, 'r') as out_fp:
         DOS = find_scaler(out_fp, 'DOS =', dtype=np.int)
-        prm.hilbert_transform = DOS_DICT[DOS]
 
         find(out_fp, 'Layer configuration')
         imp_labels = find_array(out_fp, 'impurity label', dtype=np.int)
         N_l = imp_labels.size
+        prm = model.Hubbard_Parameters(N_l=N_l)
+        prm.hilbert_transform = DOS_DICT[DOS]
+
         find(out_fp, 'transfer label')
         rhs = ' '.join(next(out_fp).strip() for __ in range(N_l))
         t_mat_labels = np.fromstring(rhs, sep=' ', dtype=np.int)
         t_mat_labels = t_mat_labels.reshape(N_l, N_l)
+
         find(out_fp, 'Parameters')
         prm.D = find_scaler(out_fp, 'D =', dtype=np.float)
         line = find(out_fp, 'T =')
