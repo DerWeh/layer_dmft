@@ -480,6 +480,60 @@ def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
     return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
 
+def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None):
+    """Get necessary quantities (G, Σ, n) to start DMFT loop.
+
+    Parameters
+    ----------
+    prm : Hubbard_Parameters
+        The Model parameters, necessary to calculate quantities.
+    kind : {'auto', 'resume', 'Hartree', 'Hubbard-I'}, optional
+        What kind of starting point is used. 'resume' loads previous iteration
+        (layer data with largest iteration number). 'hartree' starts from the
+        static Hartree self-energy. 'hubbard-I' starts from the Hubbard-I
+        approximation, using the atomic self-energy. 'auto' tries 'resume' and
+        falls back to 'hartree'
+    iw_points : (N_iw,) complex np.ndarray, optional
+        The Matsubara frequencies at which the quantities are calculated.
+        Required if `kind` is not 'resume'.
+
+    Returns
+    -------
+    layerdat.gf_iw : (2, N_l, N_iw) complex np.ndarray
+        Diagonal part of lattice Matsubara Green's function.
+    layerdat.self_iw : (2, N_l, N_iw) complex np.ndarray
+        Local self-energy.
+    layerdat.occ : (2, N_l) float np.ndarray
+        Occupation
+    start : int
+        Number of first iteration. Number of loaded iteration plus one if 'resume',
+        else `0`.
+
+    """
+    kind = kind.lower()
+    assert kind in ('auto', 'resume', 'hartree', 'hubbard-i')
+    # FIXME:  implement 'auto'
+    if kind == 'resume':
+        LOGGER.info("Reading old Green's function and self energy")
+        layerdat, last_it, data_T = load_last_iteration()
+        start = last_it + 1
+    elif kind == 'hartree':
+        LOGGER.info('Start from Hartree approximation')
+        layerdat = hartree_solution(prm, iw_n=iw_points)
+        LOGGER.progress('DONE: calculated starting point')
+        start = 0
+        data_T = prm.T
+    elif kind == 'hubbard-i':
+        LOGGER.info('Start from Hubbard-I approximation')
+        layerdat = hubbard_I_solution(prm, iw_n=iw_points)
+        start = 0
+        data_T = prm.T
+    else:
+        raise NotImplementedError('This should not have happened')
+
+    return layerdat, start, data_T
+
+
 # TODO: add resume=None -> "automatic choice"
 def main(prm: Hubbard_Parameters, n_iter, n_process=1,
          qmc_params=sb_qmc.DEFAULT_QMC_PARAMS, resume=True):
@@ -527,7 +581,7 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1,
 class Runner:
     """Run r-DMFT loop using `Runner.iteration`."""
 
-    def __init__(self, prm: Hubbard_Parameters, resume=True):
+    def __init__(self, prm: Hubbard_Parameters, starting_point='auto') -> None:
         """Create runner for the model `prm`.
 
         Parameters
@@ -550,20 +604,12 @@ class Runner:
         #
         # initial condition
         #
-        if resume:
-            LOGGER.info("Reading old Green's function and self energy")
-            (gf_layer_iw, self_layer_iw, occ_layer), last_it, data_T = load_last_iteration()
-            start = last_it + 1
-        else:
-            LOGGER.info('Start from Hartree')
-            gf_layer_iw, self_layer_iw, occ_layer = hartree_solution(prm, iw_n=self.iw_points)
-            LOGGER.progress('DONE: calculated starting point')
-            start = 0
-            data_T = prm.T
+        layerdat, start, data_T = get_initial_condition(prm, kind=starting_point,
+                                                        iw_points=self.iw_points)
         self.iter_nr = start
-        self.gf_iw = gf_layer_iw
-        self.self_iw = self_layer_iw
-        self.occ = occ_layer
+        self.gf_iw = layerdat.gf_iw
+        self.self_iw = layerdat.self_iw
+        self.occ = layerdat.occ
 
         if not np.allclose(data_T, prm.T, atol=1e-14):
             if data_T < prm.T:
