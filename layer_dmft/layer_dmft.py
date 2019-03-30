@@ -12,7 +12,7 @@ import warnings
 import logging
 
 from functools import partial
-from typing import Tuple
+from typing import Tuple, Optional, Callable, Dict
 from pathlib import Path
 from weakref import finalize
 from datetime import date
@@ -60,17 +60,17 @@ def save_gf(gf_iw, self_iw, occ_layer, T, dir_='.', name='layer', compress=True)
     save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw, occ=occ_layer, temperature=T)
 
 
-def _get_iter(file_object) -> int:
+def _get_iter(file_object) -> Optional[int]:
     r"""Return iteration `it` number of file with the name '\*_iter{it}(_*)?.ENDING'."""
     return _get_anystring(file_object, name='iter')
 
 
-def _get_layer(file_object) -> int:
+def _get_layer(file_object) -> Optional[int]:
     r"""Return iteration `it` number of file with the name '\*_lay{it}(_*)?.ENDING'."""
     return _get_anystring(file_object, name='lay')
 
 
-def _get_anystring(file_object, name: str) -> int:
+def _get_anystring(file_object, name: str) -> Optional[int]:
     r"""Return iteration `it` number of file with the name '\*_{`name`}{it}(_*)?.ENDING'."""
     basename = Path(file_object).stem
     ending = basename.split(f'_{name}')[-1]  # select part after '_iter'
@@ -96,12 +96,12 @@ def get_iter(dir_, num) -> Path:
     return paths[0]
 
 
-def get_last_iter(dir_) -> (int, Path):
+def get_last_iter(dir_) -> Tuple[int, Path]:
     """Return number and the file of the output of last iteration."""
     iter_files = Path(dir_).glob('*_iter*.npz')
 
     iters = {_get_iter(file_): file_ for file_ in iter_files}
-    last_iter = max(iters.keys() - {None})  # remove invalid item
+    last_iter: int = max(iters.keys() - {None})  # remove invalid item
     return last_iter, iters[last_iter]
 
 
@@ -113,10 +113,10 @@ def get_all_iter(dir_) -> dict:
     return path_dict
 
 
-def get_all_imp_iter(dir_) -> dict:
-    """Return directory of {int(layer): output} with keu `num`."""
+def get_all_imp_iter(dir_) -> Dict[int, Dict]:
+    """Return directory of {int(layer): output} with key `num`."""
     iter_files = Path(dir_).glob('*_iter*_lay*.npz')
-    path_dict = defaultdict(dict)
+    path_dict: Dict[int, Dict] = defaultdict(dict)
     for iter_f in iter_files:
         it = _get_iter(iter_f)
         lay = _get_layer(iter_f)
@@ -215,7 +215,7 @@ class ImpurityData:
     #     raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
 
 
-def abstract_converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: callable):
+def abstract_converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: Callable):
     """Abstract function as template for the DMFT self-consistency.
 
     Parameters
@@ -266,7 +266,7 @@ def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, functi
     return result
 
 
-def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kwds) -> callable:
+def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kwds) -> Callable:
     """Return a `sweep_update` function, calculating the impurities for all layers.
 
     Parameters
@@ -365,7 +365,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
     return sweep_update
 
 
-def load_last_iteration() -> Tuple[LayerIterData, int]:
+def load_last_iteration() -> Tuple[LayerIterData, int, float]:
     """Load relevant data from last iteration in `OUTPUT_DIR`.
 
     Returns
@@ -411,15 +411,15 @@ def interpolate(x_in, fct_in, x_out):
     return fct_out
 
 
-def hartree_solution(prm: Hubbard_Parameters, iw_n: int) -> LayerIterData:
+def hartree_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
     """Calculate the Hartree solution of `prm` for the r-DMFT loop.
 
     Parameters
     ----------
     prm : Hubbard_Parameters
         The parameters of the Hubbard model.
-    iw_n : int
-        Number of Matsubara frequencies. This determines the output shape,
+    iw_n : complex np.ndarray
+        Matsubara frequencies. This determines the output shape,
         for how many points the Green's function and self-energy are calculated
         as well as the accuracy of the occupation which also enters the
         self-consistency for the Hartree solution.
