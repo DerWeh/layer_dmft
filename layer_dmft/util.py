@@ -1,6 +1,6 @@
 """Utility classes."""
 import sys
-from os import getcwd
+from pathlib import Path
 from enum import IntEnum
 from contextlib import contextmanager
 from collections import namedtuple
@@ -243,7 +243,9 @@ class SelfEnergy(SpinResolvedArray):
 def local_import(dir_=None):
     """Only import modules within `dir_` (default: cwd)."""
     if dir_ is None:
-        dir_ = getcwd()
+        dir_ = Path.cwd()
+    else:
+        dir_ = Path(dir_).absolute().resolve(strict=True)
     import_path0 = sys.path[0]
     sys.path[0] = str(dir_)
     try:
