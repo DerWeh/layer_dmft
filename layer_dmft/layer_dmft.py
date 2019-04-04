@@ -215,34 +215,6 @@ class ImpurityData:
     #     raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
 
 
-def abstract_converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: Callable):
-    """Abstract function as template for the DMFT self-consistency.
-
-    Parameters
-    ----------
-    it0 : int
-        Starting number of the iterations. Needed for filenames.
-    n_iter : int
-        Number of iterations performed.
-    gf_layer_iw0, self_layer_iw0 : (N_s, N_l, N_iw) complex np.ndarray
-        Initial value for local Green's function and self energy. The shape of
-        the arrays is (#spins=2, #layers, #Matsubara frequencies).
-    function : callable
-        The function implementing the self-consistency equations.
-
-    Returns
-    -------
-    gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarray
-        The result for local Green's function and self energy after `n_iter`
-        iterations.
-
-    """
-    del it0, n_iter, gf_layer_iw0, self_layer_iw0, function
-    raise NotImplementedError("Abstract function only!"
-                              " Needs to be overwritten by implementation.")
-    return NotImplemented, NotImplemented  # pylint: disable=unreachable
-
-
 def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, function, **kwds):
     """Iterate the DMFT self-consistency equations.
 
