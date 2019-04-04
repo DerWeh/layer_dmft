@@ -1,5 +1,7 @@
 """Utilities to interact with Junya's **spinboson** code for R-DMFT."""
 import textwrap
+from typing import Dict, Any
+from functools import partial
 
 from pathlib import Path
 from datetime import date, datetime
@@ -9,10 +11,11 @@ import numpy as np
 
 import gftools as gt
 
-from layer_dmft import __version__
+from layer_dmft import __version__, fft, high_frequency_moments as hfm
 from layer_dmft.util import SpinResolvedArray
 from layer_dmft.model import SIAM, SIGMA
 
+N_TAU = 2048
 N_IW = 1024  # TODO: scan code for proper number
 
 SB_EXECUTABLE = Path('~/spinboson-1.10/sb_qmc.out').expanduser()
@@ -156,7 +159,7 @@ def get_path(dir_) -> Path:
     return dir_
 
 
-def write_hybridization_file(hybrid_iw):
+def write_hybridization_iw(hybrid_iw):
     r"""Write 'hybrid_fct' file containing hybridization function of the SIAM.
 
     Parameters
@@ -183,6 +186,28 @@ def write_hybridization_file(hybrid_iw):
                header=header)
 
 
+def write_hybridization_tau(hybrid_tau):
+    r"""Write 'hybrid_tau' file containing hybridization function of the SIAM.
+
+    Parameters
+    ----------
+    hybrid_tau : (2, N_tau) float np.ndarray
+        Hybridization function Δ(τ) evaluated at τ points [0, β].
+        It is necessary to have `N_tau = N_TAU + 1`.
+
+    """
+    assert hybrid_tau.shape == (2, N_TAU + 1)
+    digits = 14
+    fill = 2 + digits + 4
+    header = (
+        'spin up'.ljust(fill)
+        + 'spin dn'.ljust(fill)
+    )
+    np.savetxt("hybrid_tau.dat", hybrid_tau.T,
+               fmt=[f'%+.{digits}e', ]*2, delimiter=' ',
+               header=header)
+
+
 def setup(siam: SIAM, dir_='.', **kwds):
     """Prepare the 'hybrid_fct' file and parameters to use **spinboson** code.
 
@@ -205,13 +230,12 @@ def setup(siam: SIAM, dir_='.', **kwds):
     assert np.allclose(on_site_e.up - SIGMA.up*h_l, on_site_e.dn - SIGMA.dn*h_l,
                        rtol=1e-12, atol=1e-15)
 
-    # trim hybridization function to spinboson code
-    write_hybridization_file(siam.hybrid_fct)
-    hybrid_mom = siam.hybrid_mom
+    write_hybridization_tau(siam.hybrid_tau())
     (dir_ / OUTPUT_DIR).mkdir(exist_ok=True)
+    hybrid_mom = siam.hybrid_mom
     init_content = PARAM_TEMPLATE.format(T=siam.T, U=siam.U,
                                          ef=-on_site_e.up + SIGMA.up*h_l, h=h_l,
-                                         V2_up=hybrid_mom.up, V2_dn=hybrid_mom.dn,
+                                         V2_up=1, V2_dn=1,  # not in use
                                          **kwds)
     (dir_ / INIT_FILE).write_text(init_content)
 
@@ -219,6 +243,7 @@ def setup(siam: SIAM, dir_='.', **kwds):
 def run(dir_=".", n_process=1):
     """Execute the **spinboson** code."""
     from subprocess import Popen
+
     dir_ = get_path(dir_)
     command = f"mpirun -n {n_process} {SB_EXECUTABLE}"
     with open(OUTPUT_FILE, "w") as outfile:
@@ -236,7 +261,7 @@ def solve(siam: SIAM, n_process, output_name, dir_='.', **kwds):
     solver_kwds = ChainMap(kwds, DEFAULT_QMC_PARAMS)
     setup(siam, dir_=dir_, **solver_kwds)
     run(n_process=n_process, dir_=dir_)
-    data = save_data(name=output_name, dir_=dir_, qmc_params=solver_kwds)
+    data = save_data(siam, name=output_name, dir_=dir_, qmc_params=solver_kwds)
     return data
 
 
@@ -449,19 +474,35 @@ def read_occ(dir_='.') -> gt.Result:
     return gt.Result(x=-gf_tau.x[:, -1], err=gf_tau.err[:, -1])
 
 
-def save_data(dir_='.', name='sb', compress=True, qmc_params=DEFAULT_QMC_PARAMS):
+def save_data(siam: SIAM, dir_='.', name='sb', compress=True, qmc_params=DEFAULT_QMC_PARAMS):
     """Read the **spinboson** data and save it as numpy arrays."""
     dir_ = Path(dir_).expanduser()
     dir_.mkdir(exist_ok=True)
-    data = {}
+    data: Dict[str, Any] = {}
     data['solver'] = __name__
     data['__version__'] = __version__
     data['__date__'] = datetime.now().isoformat()
     data['tau'] = read_tau(dir_)
     data['gf_tau'], data['gf_tau_err'] = read_gf_tau(dir_)
     data['gf_x_self_tau'] = read_gf_x_self_tau(dir_)
-    data['gf_iw'] = read_gf_iw(dir_)
-    data['self_energy_iw'] = read_self_energy_iw(dir_)
+
+    occ_other = -data['gf_tau'][::-1, -1]
+    self_m0 = hfm.self_m0(siam.U, occ_other)
+    self_m1 = hfm.self_m1(siam.U, occ_other)
+    gf_m2 = -siam.e_onsite + self_m0
+    gf_x_self_m1 = hfm.gf_x_self_m1(self_m0)
+    gf_x_self_m2 = hfm.gf_x_self_m2(self_m0, self_m1, gf_m2)
+
+    dft = partial(fft.dft_tau2iw, beta=siam.beta)
+    gf_iw = dft(data['gf_tau'], moments=[(1, 1), gf_m2])
+    gf_x_self_iw = dft(data['gf_x_self_tau'], moments=[gf_x_self_m1, gf_x_self_m2])
+
+    data['gf_iw'] = gf_iw
+    data['gf_x_self_iw'] = gf_x_self_iw
+    data['self_energy_iw'] = gf_x_self_iw/gf_iw
+
+    data['gf_iw_solver'] = read_gf_iw(dir_)  # just for debugging
+    data['self_energy_iw_solver'] = read_self_energy_iw(dir_)  # just for debugging
     data['misc'] = np.genfromtxt(output_dir(dir_)/'xx.dat', missing_values='?')
     data['qmc_params'] = dict(qmc_params)
     if 0 < qmc_params['FLAG_TP'] < 3:

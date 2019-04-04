@@ -11,7 +11,8 @@ FORCE_PARAMAGNET: bool
 import warnings
 import logging
 
-from typing import Tuple
+from functools import partial
+from typing import Tuple, Optional, Callable, Dict
 from pathlib import Path
 from weakref import finalize
 from datetime import date
@@ -19,14 +20,13 @@ from collections import OrderedDict, namedtuple, defaultdict
 
 import numpy as np
 import gftools as gt
+from scipy.interpolate import UnivariateSpline
 
 from . import __version__, charge
 from .model import Hubbard_Parameters
 from .interface import sb_qmc
 
 # setup logging
-PROGRESS = logging.INFO - 5
-logging.addLevelName(PROGRESS, 'PROGRESS')
 LOGGER = logging.getLogger(__name__)
 LOG_FMT = logging.Formatter('%(asctime)s|%(name)s|%(levelname)s: %(message)s')
 HANDLER = logging.StreamHandler()
@@ -52,25 +52,25 @@ def log_info(prm: Hubbard_Parameters):
 LayerIterData = namedtuple('layer_iter_data', ['gf_iw', 'self_iw', 'occ'])
 
 
-def save_gf(gf_iw, self_iw, occ_layer, dir_='.', name='layer', compress=True):
+def save_gf(gf_iw, self_iw, occ_layer, T, dir_='.', name='layer', compress=True):
     dir_ = Path(dir_).expanduser()
     dir_.mkdir(exist_ok=True)
     save_method = np.savez_compressed if compress else np.savez
     name = date.today().isoformat() + '_' + name
-    save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw, occ=occ_layer)
+    save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw, occ=occ_layer, temperature=T)
 
 
-def _get_iter(file_object) -> int:
+def _get_iter(file_object) -> Optional[int]:
     r"""Return iteration `it` number of file with the name '\*_iter{it}(_*)?.ENDING'."""
     return _get_anystring(file_object, name='iter')
 
 
-def _get_layer(file_object) -> int:
+def _get_layer(file_object) -> Optional[int]:
     r"""Return iteration `it` number of file with the name '\*_lay{it}(_*)?.ENDING'."""
     return _get_anystring(file_object, name='lay')
 
 
-def _get_anystring(file_object, name: str) -> int:
+def _get_anystring(file_object, name: str) -> Optional[int]:
     r"""Return iteration `it` number of file with the name '\*_{`name`}{it}(_*)?.ENDING'."""
     basename = Path(file_object).stem
     ending = basename.split(f'_{name}')[-1]  # select part after '_iter'
@@ -96,12 +96,12 @@ def get_iter(dir_, num) -> Path:
     return paths[0]
 
 
-def get_last_iter(dir_) -> (int, Path):
+def get_last_iter(dir_) -> Tuple[int, Path]:
     """Return number and the file of the output of last iteration."""
     iter_files = Path(dir_).glob('*_iter*.npz')
 
     iters = {_get_iter(file_): file_ for file_ in iter_files}
-    last_iter = max(iters.keys() - {None})  # remove invalid item
+    last_iter: int = max(iters.keys() - {None})  # remove invalid item
     return last_iter, iters[last_iter]
 
 
@@ -113,10 +113,10 @@ def get_all_iter(dir_) -> dict:
     return path_dict
 
 
-def get_all_imp_iter(dir_) -> dict:
-    """Return directory of {int(layer): output} with keu `num`."""
+def get_all_imp_iter(dir_) -> Dict[int, Dict]:
+    """Return directory of {int(layer): output} with key `num`."""
     iter_files = Path(dir_).glob('*_iter*_lay*.npz')
-    path_dict = defaultdict(dict)
+    path_dict: Dict[int, Dict] = defaultdict(dict)
     for iter_f in iter_files:
         it = _get_iter(iter_f)
         lay = _get_layer(iter_f)
@@ -215,7 +215,7 @@ class ImpurityData:
     #     raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
 
 
-def abstract_converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: callable):
+def abstract_converge(it0, n_iter, gf_layer_iw0, self_layer_iw0, function: Callable):
     """Abstract function as template for the DMFT self-consistency.
 
     Parameters
@@ -263,13 +263,10 @@ def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, functi
     for ii in range(it0, n_iter+it0):
         result = function(gf_layer_iw, self_layer_iw, occ_layer, it=ii, **kwds)
         gf_layer_iw, self_layer_iw, occ_layer = result
-        # TODO: also save error
-        save_gf(gf_layer_iw, self_layer_iw, occ_layer,
-                dir_=OUTPUT_DIR, name=f'layer_iter{ii}')
     return result
 
 
-def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kwds) -> callable:
+def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kwds) -> Callable:
     """Return a `sweep_update` function, calculating the impurities for all layers.
 
     Parameters
@@ -290,7 +287,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
         `sweep_update(gf_layer_iw, self_layer_iw, it) -> gf_layer_iw, self_layer_iw`.
 
     """
-    def sweep_update(gf_layer_iw, self_layer_iw, occ_layer, it, layer_config=None):
+    def sweep_update(gf_layer_iw, self_layer_iw, occ_layer, it, layer_config=None, data_T=None):
         """Perform a sweep update, calculating the impurities for all layers.
 
         Parameters
@@ -310,10 +307,12 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
 
         """
         interacting_layers = np.flatnonzero(prm.U)
+        siam_z = iw_points if data_T is None \
+            else gt.matsubara_frequencies(np.arange(iw_points.size), beta=1./data_T)
         if layer_config is None:
             # TODO: return iterator instead of Tuple?
             interacting_siams = prm.get_impurity_models(
-                z=iw_points, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
+                z=siam_z, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
                 only_interacting=True
             )
         else:
@@ -321,14 +320,28 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
             layers = np.unique(layer_config)
             interacting_layers = layers[np.isin(layers, interacting_layers)]
             siams = prm.get_impurity_models(
-                z=iw_points, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
+                z=siam_z, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
                 only_interacting=False
             )
             interacting_siams = (siams[lay] for lay in interacting_layers)
 
+        #
+        # solve impurity model for the relevant layers
+        #
         for lay, siam in zip(interacting_layers, interacting_siams):
-            LOGGER.log(PROGRESS, 'iter %s: starting layer %s with U = %s (%s)',
-                       it, lay, siam.U, solver_kwds)
+            LOGGER.progress('iter %s: starting layer %s with U = %s (%s)',
+                            it, lay, siam.U, solver_kwds)
+            if data_T is not None and not np.allclose(siam.T, data_T):
+                if data_T > siam.T:
+                    LOGGER.info("Interpolate hybridization fct (iter %s: lay %s) from T=%s to T=%s",
+                                it, lay, data_T, siam.T)
+                    siam.hybrid_fct = interpolate(siam.z, siam.hybrid_fct, iw_points)
+                    siam.z = iw_points
+                else:
+                    raise NotImplementedError(
+                        "Input data corresponds to lower temperatures than calculation.\n"
+                        "Only interpolation for larger temperatures implemented."
+                    )
             data = sb_qmc.solve(siam, n_process=n_process,
                                 output_name=f'iter{it}_lay{lay}', **solver_kwds)
 
@@ -336,8 +349,7 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
             occ_layer[:, lay] = -data['gf_tau'][:, -1]
 
         if layer_config is not None:
-            LOGGER.log(PROGRESS, 'Using calculated self-energies on layers %s',
-                       list(layer_config))
+            LOGGER.progress('Using calculated self-energies on layers %s', list(layer_config))
             self_layer_iw = self_layer_iw[:, layer_config]
 
         if FORCE_PARAMAGNET and np.all(prm.h == 0):
@@ -345,12 +357,15 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
             self_layer_iw[:] = np.mean(self_layer_iw, axis=0)
 
         gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
+        # TODO: also save error
+        save_gf(gf_layer_iw, self_layer_iw, occ_layer, T=prm.T,
+                dir_=OUTPUT_DIR, name=f'layer_iter{it}')
         return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
     return sweep_update
 
 
-def load_last_iteration() -> Tuple[LayerIterData, int]:
+def load_last_iteration() -> Tuple[LayerIterData, int, float]:
     """Load relevant data from last iteration in `OUTPUT_DIR`.
 
     Returns
@@ -368,19 +383,43 @@ def load_last_iteration() -> Tuple[LayerIterData, int]:
         gf_layer_iw = data['gf_iw']
         self_layer_iw = data['self_iw']
         occ_layer = data['occ']
+        temperature = data['temperature']
     result = LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
-    return result, last_iter
+    return result, last_iter, temperature
 
 
-def hartree_solution(prm: Hubbard_Parameters, iw_n: int) -> LayerIterData:
+@partial(np.vectorize, signature='(n),(n),(m)->(m)')
+def interpolate(x_in, fct_in, x_out):
+    """Calculate complex interpolation of `fct_in` and evaluate it at `x_out`.
+
+    `x_in` and `x_out` can either be both real or imaginary, arbitrary contours
+    are not supported.
+
+    """
+    if np.all(np.isreal(x_in)):
+        x_out = x_out.real
+    elif np.all(np.isreal(1j*x_in)):
+        x_in = x_in.imag
+        x_out = x_out.imag
+    else:
+        raise ValueError("Arbitrary complex numbers are not supported.\n"
+                         "'x' has to be either real of imaginary.")
+    smothening = len(x_in) * 1e-11
+    Spline = partial(UnivariateSpline, s=smothening)
+    fct_out = 1j*Spline(x_in, fct_in.imag)(x_out)
+    fct_out += Spline(x_in, fct_in.real)(x_out)
+    return fct_out
+
+
+def hartree_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
     """Calculate the Hartree solution of `prm` for the r-DMFT loop.
 
     Parameters
     ----------
     prm : Hubbard_Parameters
         The parameters of the Hubbard model.
-    iw_n : int
-        Number of Matsubara frequencies. This determines the output shape,
+    iw_n : complex np.ndarray
+        Matsubara frequencies. This determines the output shape,
         for how many points the Green's function and self-energy are calculated
         as well as the accuracy of the occupation which also enters the
         self-consistency for the Hartree solution.
@@ -441,10 +480,65 @@ def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
     return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
 
+def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None):
+    """Get necessary quantities (G, Σ, n) to start DMFT loop.
+
+    Parameters
+    ----------
+    prm : Hubbard_Parameters
+        The Model parameters, necessary to calculate quantities.
+    kind : {'auto', 'resume', 'Hartree', 'Hubbard-I'}, optional
+        What kind of starting point is used. 'resume' loads previous iteration
+        (layer data with largest iteration number). 'hartree' starts from the
+        static Hartree self-energy. 'hubbard-I' starts from the Hubbard-I
+        approximation, using the atomic self-energy. 'auto' tries 'resume' and
+        falls back to 'hartree'
+    iw_points : (N_iw,) complex np.ndarray, optional
+        The Matsubara frequencies at which the quantities are calculated.
+        Required if `kind` is not 'resume'.
+
+    Returns
+    -------
+    layerdat.gf_iw : (2, N_l, N_iw) complex np.ndarray
+        Diagonal part of lattice Matsubara Green's function.
+    layerdat.self_iw : (2, N_l, N_iw) complex np.ndarray
+        Local self-energy.
+    layerdat.occ : (2, N_l) float np.ndarray
+        Occupation
+    start : int
+        Number of first iteration. Number of loaded iteration plus one if 'resume',
+        else `0`.
+
+    """
+    kind = kind.lower()
+    assert kind in ('auto', 'resume', 'hartree', 'hubbard-i')
+    # FIXME:  implement 'auto'
+    if kind == 'resume':
+        LOGGER.info("Reading old Green's function and self energy")
+        layerdat, last_it, data_T = load_last_iteration()
+        start = last_it + 1
+    elif kind == 'hartree':
+        LOGGER.info('Start from Hartree approximation')
+        layerdat = hartree_solution(prm, iw_n=iw_points)
+        LOGGER.progress('DONE: calculated starting point')
+        start = 0
+        data_T = prm.T
+    elif kind == 'hubbard-i':
+        LOGGER.info('Start from Hubbard-I approximation')
+        layerdat = hubbard_I_solution(prm, iw_n=iw_points)
+        start = 0
+        data_T = prm.T
+    else:
+        raise NotImplementedError('This should not have happened')
+
+    return layerdat, start, data_T
+
+
 # TODO: add resume=None -> "automatic choice"
 def main(prm: Hubbard_Parameters, n_iter, n_process=1,
          qmc_params=sb_qmc.DEFAULT_QMC_PARAMS, resume=True):
     """Execute DMFT loop."""
+    warnings.warn("Currently not maintained!")
     log_info(prm)
 
     # technical parameters
@@ -458,12 +552,12 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1,
     #
     if resume:
         LOGGER.info("Reading old Green's function and self energy")
-        (gf_layer_iw, self_layer_iw, occ_layer), last_it = load_last_iteration()
+        (gf_layer_iw, self_layer_iw, occ_layer), last_it, __ = load_last_iteration()
         start = last_it + 1
     else:
         LOGGER.info('Start from Hartree')
         gf_layer_iw, self_layer_iw, occ_layer = hartree_solution(prm, iw_n=iw_points)
-        LOGGER.log(PROGRESS, 'DONE: calculated starting point')
+        LOGGER.progress('DONE: calculated starting point')
         start = 0
 
     #
@@ -487,7 +581,7 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1,
 class Runner:
     """Run r-DMFT loop using `Runner.iteration`."""
 
-    def __init__(self, prm: Hubbard_Parameters, resume=True):
+    def __init__(self, prm: Hubbard_Parameters, starting_point='auto') -> None:
         """Create runner for the model `prm`.
 
         Parameters
@@ -510,19 +604,26 @@ class Runner:
         #
         # initial condition
         #
-        if resume:
-            LOGGER.info("Reading old Green's function and self energy")
-            (gf_layer_iw, self_layer_iw, occ_layer), last_it = load_last_iteration()
-            start = last_it + 1
-        else:
-            LOGGER.info('Start from Hartree')
-            gf_layer_iw, self_layer_iw, occ_layer = hartree_solution(prm, iw_n=self.iw_points)
-            LOGGER.log(PROGRESS, 'DONE: calculated starting point')
-            start = 0
+        layerdat, start, data_T = get_initial_condition(prm, kind=starting_point,
+                                                        iw_points=self.iw_points)
         self.iter_nr = start
-        self.gf_iw = gf_layer_iw
-        self.self_iw = self_layer_iw
-        self.occ = occ_layer
+        self.gf_iw = layerdat.gf_iw
+        self.self_iw = layerdat.self_iw
+        self.occ = layerdat.occ
+
+        if not np.allclose(data_T, prm.T, atol=1e-14):
+            if data_T < prm.T:
+                raise NotImplementedError(
+                    "Input data corresponds to lower temperatures than calculation.\n"
+                    "Only interpolation for larger temperatures implemented."
+                )
+            LOGGER.info("Temperature of loaded data (%s) disagrees with parameters (%s)."
+                        "Data will be interpolated.",
+                        data_T, prm.T)
+            self._temperature_missmatch = True
+            self.data_T = data_T
+        else:
+            self._temperature_missmatch = False
 
         # iteration scheme
         self.converge = bare_iteration
@@ -546,6 +647,10 @@ class Runner:
         """
         iteration = get_sweep_updater(self.prm, iw_points=self.iw_points,
                                       n_process=n_process, **qmc_params)
+        if self._temperature_missmatch:
+            iteration = partial(iteration, data_T=self.data_T)
+            # assuming no errors occur temperatures match as soon as function finishes
+            self._temperature_missmatch = False
 
         # perform self-consistency loop
         data = self.converge(
