@@ -29,11 +29,10 @@ from .interface import sb_qmc
 # setup logging
 LOGGER = logging.getLogger(__name__)
 LOG_FMT = logging.Formatter('%(asctime)s|%(name)s|%(levelname)s: %(message)s')
-HANDLER = logging.StreamHandler()
-# HANDLER = logging.FileHandler("layer_output.txt", mode='a')
+# HANDLER = logging.StreamHandler()
+HANDLER = logging.FileHandler("layer_dmft.log", mode='a')
 HANDLER.setFormatter(LOG_FMT)
 LOGGER.addHandler(HANDLER)
-LOGGER.setLevel(PROGRESS)
 
 
 OUTPUT_DIR = "layer_output"
