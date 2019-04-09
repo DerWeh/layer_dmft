@@ -238,8 +238,9 @@ def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, functi
     return result
 
 
-def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kwds) -> Callable:
-    """Return a `sweep_update` function, calculating the impurities for all layers.
+def sweep_update(prm: Hubbard_Parameters, iw_points,  gf_layer_iw, self_layer_iw, occ_layer,
+                 it, *, layer_config=None, data_T=None, n_process, **solver_kwds):
+    """Perform a sweep update, calculating the impurities for all layers.
 
     Parameters
     ----------
@@ -247,94 +248,79 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
         The model parameters.
     iw_points : (N_iw, ) complex np.ndarray
         The array of Matsubara frequencies.
+    gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarray
+        The local Green's function and self-energy of the lattice.
+    occ_layer : (N_s, N_l) float np.ndarray
+        The local occupation of the *impurities* corresponding to the layers.
+        The occupations have to match the self-energy (moments).
+    it : int
+        The iteration number needed for writing the files.
     n_process : int
         The number of precesses used by the `sb_qmc` code.
-    solver_kwds:
+    solver_kwds
         Parameters passed to the impurity solver, here `sb_qmc`.
 
     Returns
     -------
-    sweep_updater : callable
-        The updater function. Its signature is
-        `sweep_update(gf_layer_iw, self_layer_iw, it) -> gf_layer_iw, self_layer_iw`.
+    gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarry
+        The updated local Green's function and self-energy.
 
     """
-    def sweep_update(gf_layer_iw, self_layer_iw, occ_layer, it, layer_config=None, data_T=None):
-        """Perform a sweep update, calculating the impurities for all layers.
+    interacting_layers = np.flatnonzero(prm.U)
+    siam_z = iw_points if data_T is None \
+        else gt.matsubara_frequencies(np.arange(iw_points.size), beta=1./data_T)
+    if layer_config is None:
+        # TODO: return iterator instead of Tuple?
+        interacting_siams = prm.get_impurity_models(
+            z=siam_z, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
+            only_interacting=True
+        )
+    else:
+        layer_config = np.asarray(layer_config)
+        layers = np.unique(layer_config)
+        interacting_layers = layers[np.isin(layers, interacting_layers)]
+        siams = prm.get_impurity_models(
+            z=siam_z, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
+            only_interacting=False
+        )
+        interacting_siams = (siams[lay] for lay in interacting_layers)
 
-        Parameters
-        ----------
-        gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarray
-            The local Green's function and self-energy of the lattice.
-        occ_layer : (N_s, N_l) float np.ndarray
-            The local occupation of the *impurities* corresponding to the layers.
-            The occupations have to match the self-energy (moments).
-        it : int
-            The iteration number needed for writing the files.
+    #
+    # solve impurity model for the relevant layers
+    #
+    for lay, siam in zip(interacting_layers, interacting_siams):
+        LOGGER.progress('iter %s: starting layer %s with U = %s (%s)',
+                        it, lay, siam.U, solver_kwds)
+        if data_T is not None and not np.allclose(siam.T, data_T):
+            if data_T > siam.T:
+                LOGGER.info("Interpolate hybridization fct (iter %s: lay %s) from T=%s to T=%s",
+                            it, lay, data_T, siam.T)
+                siam.hybrid_fct = interpolate(siam.z, siam.hybrid_fct, iw_points)
+                siam.z = iw_points
+            else:
+                raise NotImplementedError(
+                    "Input data corresponds to lower temperatures than calculation.\n"
+                    "Only interpolation for larger temperatures implemented."
+                )
+        data = sb_qmc.solve(siam, n_process=n_process,
+                            output_name=f'iter{it}_lay{lay}', **solver_kwds)
 
-        Returns
-        -------
-        gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarry
-            The updated local Green's function and self-energy.
+        self_layer_iw[:, lay] = data['self_energy_iw']
+        occ_layer[:, lay] = -data['gf_tau'][:, -1]
 
-        """
-        interacting_layers = np.flatnonzero(prm.U)
-        siam_z = iw_points if data_T is None \
-            else gt.matsubara_frequencies(np.arange(iw_points.size), beta=1./data_T)
-        if layer_config is None:
-            # TODO: return iterator instead of Tuple?
-            interacting_siams = prm.get_impurity_models(
-                z=siam_z, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
-                only_interacting=True
-            )
-        else:
-            layer_config = np.asarray(layer_config)
-            layers = np.unique(layer_config)
-            interacting_layers = layers[np.isin(layers, interacting_layers)]
-            siams = prm.get_impurity_models(
-                z=siam_z, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
-                only_interacting=False
-            )
-            interacting_siams = (siams[lay] for lay in interacting_layers)
+    if layer_config is not None:
+        LOGGER.progress('Using calculated self-energies on layers %s', list(layer_config))
+        self_layer_iw = self_layer_iw[:, layer_config]
 
-        #
-        # solve impurity model for the relevant layers
-        #
-        for lay, siam in zip(interacting_layers, interacting_siams):
-            LOGGER.progress('iter %s: starting layer %s with U = %s (%s)',
-                            it, lay, siam.U, solver_kwds)
-            if data_T is not None and not np.allclose(siam.T, data_T):
-                if data_T > siam.T:
-                    LOGGER.info("Interpolate hybridization fct (iter %s: lay %s) from T=%s to T=%s",
-                                it, lay, data_T, siam.T)
-                    siam.hybrid_fct = interpolate(siam.z, siam.hybrid_fct, iw_points)
-                    siam.z = iw_points
-                else:
-                    raise NotImplementedError(
-                        "Input data corresponds to lower temperatures than calculation.\n"
-                        "Only interpolation for larger temperatures implemented."
-                    )
-            data = sb_qmc.solve(siam, n_process=n_process,
-                                output_name=f'iter{it}_lay{lay}', **solver_kwds)
+    if FORCE_PARAMAGNET and np.all(prm.h == 0):
+        # TODO: think about using shape [1, N_l] arrays for paramagnet
+        self_layer_iw[:] = np.mean(self_layer_iw, axis=0)
 
-            self_layer_iw[:, lay] = data['self_energy_iw']
-            occ_layer[:, lay] = -data['gf_tau'][:, -1]
-
-        if layer_config is not None:
-            LOGGER.progress('Using calculated self-energies on layers %s', list(layer_config))
-            self_layer_iw = self_layer_iw[:, layer_config]
-
-        if FORCE_PARAMAGNET and np.all(prm.h == 0):
-            # TODO: think about using shape [1, N_l] arrays for paramagnet
-            self_layer_iw[:] = np.mean(self_layer_iw, axis=0)
-
-        gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
-        # TODO: also save error
-        save_gf(gf_layer_iw, self_layer_iw, occ_layer, T=prm.T,
-                dir_=OUTPUT_DIR, name=f'layer_iter{it}')
-        return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
-
-    return sweep_update
+    gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
+    # TODO: also save error
+    save_gf(gf_layer_iw, self_layer_iw, occ_layer, T=prm.T,
+            dir_=OUTPUT_DIR, name=f'layer_iter{it}')
+    return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
 
 def load_last_iteration(output_dir=None) -> Tuple[LayerIterData, int, float]:
@@ -546,8 +532,7 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1,
     # iteration scheme
     converge = bare_iteration
     # sweep updates -> calculate all impurities, then update
-    iteration = get_sweep_updater(prm, iw_points=iw_points, n_process=n_process,
-                                  **qmc_params)
+    iteration = partial(sweep_update, prm, iw_points, n_process=n_process, **qmc_params)
 
     # perform self-consistency loop
     converge(
@@ -627,8 +612,8 @@ class Runner:
             Green's function, self-energy and occupation of the iteration.
 
         """
-        iteration = get_sweep_updater(self.prm, iw_points=self.iw_points,
-                                      n_process=n_process, **qmc_params)
+        iteration = partial(sweep_update, self.prm, self.iw_points,
+                            n_process=n_process, **qmc_params)
         if self._temperature_missmatch:
             iteration = partial(iteration, data_T=self.data_T)
             # assuming no errors occur temperatures match as soon as function finishes
