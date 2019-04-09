@@ -148,6 +148,7 @@ class LayerData:
         """Return data of iteration `it`."""
         return self.mmap_dict[it]
 
+    @property
     def iterations(self):
         """Return list of iteration numbers."""
         return self.mmap_dict.keys()
