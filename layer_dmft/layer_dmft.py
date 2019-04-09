@@ -559,26 +559,29 @@ class Runner:
 
         """
         log_info(prm)
-        self.prm = prm
 
         # technical parameters
         N_IW = sb_qmc.N_IW
 
         # dependent parameters
-        self.iw_points = gt.matsubara_frequencies(np.arange(N_IW), prm.beta)
+        iw_points = gt.matsubara_frequencies(np.arange(N_IW), prm.beta)
 
         #
         # initial condition
         #
         layerdat, start, data_T = get_initial_condition(
-            prm, kind=starting_point, iw_points=self.iw_points, output_dir=output_dir,
+            prm, kind=starting_point, iw_points=iw_points, output_dir=output_dir,
         )
-        self.iter_nr = start
-        self.gf_iw = layerdat.gf_iw
-        self.self_iw = layerdat.self_iw
-        self.occ = layerdat.occ
+
+        # iteration scheme: sweep updates -> calculate all impurities, then update
+        self.update: partial = partial(
+            sweep_update, prm=prm, iw_points=iw_points,
+            gf_layer_iw=layerdat.gf_iw, self_layer_iw=layerdat.self_iw, occ_layer=layerdat.occ,
+            it=start
+        )
 
         if not np.allclose(data_T, prm.T, atol=1e-14):
+            # temperatures don't match
             if data_T < prm.T:
                 raise NotImplementedError(
                     "Input data corresponds to lower temperatures than calculation.\n"
@@ -587,14 +590,7 @@ class Runner:
             LOGGER.info("Temperature of loaded data (%s) disagrees with parameters (%s)."
                         "Data will be interpolated.",
                         data_T, prm.T)
-            self._temperature_missmatch = True
-            self.data_T = data_T
-        else:
-            self._temperature_missmatch = False
-
-        # iteration scheme
-        self.converge = bare_iteration
-        # sweep updates -> calculate all impurities, then update
+            self.update.keywords['data_T'] = data_T
 
     def iteration(self, n_process=1, layer_config=None, **qmc_params):
         r"""Perform a DMFT iteration.
@@ -612,20 +608,14 @@ class Runner:
             Green's function, self-energy and occupation of the iteration.
 
         """
-        iteration = partial(sweep_update, self.prm, self.iw_points,
-                            n_process=n_process, **qmc_params)
-        if self._temperature_missmatch:
-            iteration = partial(iteration, data_T=self.data_T)
-            # assuming no errors occur temperatures match as soon as function finishes
-            self._temperature_missmatch = False
-
         # perform self-consistency loop
-        data = self.converge(
-            it0=self.iter_nr, n_iter=1,
-            gf_layer_iw0=self.gf_iw, self_layer_iw0=self.self_iw, occ_layer0=self.occ,
-            function=iteration,
-            layer_config=layer_config
-        )
-        self.gf_iw, self.self_iw, self.occ = data
-        self.iter_nr += 1
+        data = self.update(layer_config=layer_config, n_process=n_process, **qmc_params)
+        update_kdws = self.update.keywords
+        update_kdws.update(gf_layer_iw=data.gf_iw, self_layer_iw=data.self_iw, occ_layer=data.occ)
+
+        if 'data_T' in update_kdws:
+            # previously input data temperature didn't match prm.T
+            del update_kdws['data_T']
+
+        update_kdws['it'] += 1
         return data
