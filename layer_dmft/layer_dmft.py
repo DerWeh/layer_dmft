@@ -12,17 +12,14 @@ import warnings
 import logging
 
 from functools import partial
-from typing import Tuple, Optional, Callable, Dict
-from pathlib import Path
-from weakref import finalize
-from datetime import date
-from collections import OrderedDict, namedtuple, defaultdict
+from typing import Tuple
+from collections import namedtuple
 
 import numpy as np
 import gftools as gt
 from scipy.interpolate import UnivariateSpline
 
-from . import __version__, charge
+from . import __version__, charge, dataio
 from .model import Hubbard_Parameters
 from .interface import sb_qmc
 
@@ -34,8 +31,6 @@ HANDLER = logging.FileHandler("layer_dmft.log", mode='a')
 HANDLER.setFormatter(LOG_FMT)
 LOGGER.addHandler(HANDLER)
 
-
-OUTPUT_DIR = "layer_output"
 
 FORCE_PARAMAGNET = True
 
@@ -52,167 +47,8 @@ LayerIterData = namedtuple('layer_iter_data', ['gf_iw', 'self_iw', 'occ'])
 
 
 def save_gf(gf_iw, self_iw, occ_layer, T, dir_='.', name='layer', compress=True):
-    dir_ = Path(dir_).expanduser()
-    dir_.mkdir(exist_ok=True)
-    save_method = np.savez_compressed if compress else np.savez
-    name = date.today().isoformat() + '_' + name
-    save_method(dir_/name, gf_iw=gf_iw, self_iw=self_iw, occ=occ_layer, temperature=T)
-
-
-def _get_iter(file_object) -> Optional[int]:
-    r"""Return iteration `it` number of file with the name '\*_iter{it}(_*)?.ENDING'."""
-    return _get_anystring(file_object, name='iter')
-
-
-def _get_layer(file_object) -> Optional[int]:
-    r"""Return iteration `it` number of file with the name '\*_lay{it}(_*)?.ENDING'."""
-    return _get_anystring(file_object, name='lay')
-
-
-def _get_anystring(file_object, name: str) -> Optional[int]:
-    r"""Return iteration `it` number of file with the name '\*_{`name`}{it}(_*)?.ENDING'."""
-    basename = Path(file_object).stem
-    ending = basename.split(f'_{name}')[-1]  # select part after '_iter'
-    iter_num = ending.split('_')[0]  # drop everything after possible '_'
-    try:
-        it = int(iter_num)
-    except ValueError:
-        warnings.warn(f"Skipping unprocessable file: {file_object.name}")
-        return None
-    return it
-
-
-def get_iter(dir_, num) -> Path:
-    """Return the file of the output of iteration `num`."""
-    iter_files = Path(dir_).glob(f'*_iter{num}*.npz')
-
-    paths = [iter_f for iter_f in iter_files if _get_iter(iter_f) == num]
-    if not paths:
-        raise AttributeError(f'Iterations {num} cannot be found.')
-    if len(paths) > 1:
-        raise AttributeError(f'Multiple occurrences of iteration {num}:\n'
-                             + '\n'.join(str(element) for element in paths))
-    return paths[0]
-
-
-def get_last_iter(dir_) -> Tuple[int, Path]:
-    """Return number and the file of the output of last iteration."""
-    iter_files = Path(dir_).glob('*_iter*.npz')
-
-    iters = {_get_iter(file_): file_ for file_ in iter_files}
-    last_iter: int = max(iters.keys() - {None})  # remove invalid item
-    return last_iter, iters[last_iter]
-
-
-def get_all_iter(dir_) -> dict:
-    """Return dictionary of files of the output with key `num`."""
-    iter_files = Path(dir_).glob('*_iter*.npz')
-    path_dict = {_get_iter(iter_f): iter_f for iter_f in iter_files
-                 if _get_iter(iter_f) is not None}
-    return path_dict
-
-
-def get_all_imp_iter(dir_) -> Dict[int, Dict]:
-    """Return directory of {int(layer): output} with key `num`."""
-    iter_files = Path(dir_).glob('*_iter*_lay*.npz')
-    path_dict: Dict[int, Dict] = defaultdict(dict)
-    for iter_f in iter_files:
-        it = _get_iter(iter_f)
-        lay = _get_layer(iter_f)
-        if (it is not None) and (lay is not None):
-            path_dict[it][lay] = iter_f
-    return path_dict
-
-
-class LayerData:
-    """Interface to saved layer data."""
-
-    keys = {'gf_iw', 'self_iw', 'occ'}
-
-    def __init__(self, dir_=OUTPUT_DIR):
-        """Mmap all data from directory."""
-        self._filname_dict = get_all_iter(dir_)
-        self.mmap_dict = OrderedDict((key, self._autoclean_load(val, mmap_mode='r'))
-                                     for key, val in sorted(self._filname_dict.items()))
-        self.array = np.array(self.mmap_dict.values(), dtype=object)
-
-    def _autoclean_load(self, *args, **kwds):
-        data = np.load(*args, **kwds)
-
-        def _test():
-            data.close()
-        finalize(self, _test)
-        return data
-
-    def iter(self, it: int):
-        """Return data of iteration `it`."""
-        return self.mmap_dict[it]
-
-    @property
-    def iterations(self):
-        """Return list of iteration numbers."""
-        return self.mmap_dict.keys()
-
-    def __getitem__(self, key):
-        """Emulate structured array behavior."""
-        try:
-            return self.mmap_dict[key]
-        except KeyError:
-            if key in self.keys:
-                return np.array([data[key] for data in self.mmap_dict.values()])
-            else:
-                raise
-
-    def __getattr__(self, item):
-        """Access elements in `keys`."""
-        if item in self.keys:
-            return self[item]
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
-
-
-class ImpurityData:
-    """Interface to saved impurity data."""
-
-    keys = {'gf_iw', 'gf_tau', 'self_iw', 'self_tau'}
-
-    def __init__(self, dir_=sb_qmc.IMP_OUTPUT):
-        """Mmap all data from directory."""
-        self._filname_dict = get_all_imp_iter(dir_)
-        mmap_dict = OrderedDict()
-        for iter_key, iter_dict in sorted(self._filname_dict.items()):
-            mmap_dict[iter_key] = OrderedDict(
-                (key, self._autoclean_load(val, mmap_mode='r'))
-                for key, val in sorted(iter_dict.items())
-            )
-        self.mmap_dict = mmap_dict
-        self.array = np.array(self.mmap_dict.values(), dtype=object)
-
-    def _autoclean_load(self, *args, **kwds):
-        data = np.load(*args, **kwds)
-
-        def _test():
-            data.close()
-        finalize(self, _test)
-        return data
-
-    def iter(self, it: int):
-        """Return data of iteration `it`."""
-        return self.mmap_dict[it]
-
-    @property
-    def iterations(self):
-        """Return list of iteration numbers."""
-        return self.mmap_dict.keys()
-
-    def __getitem__(self, key):
-        """Emulate structured array behavior."""
-        return self.mmap_dict[key]
-
-    # def __getattr__(self, item):
-    #     """Access elements in `keys`."""
-    #     if item in self.keys:
-    #         return self[item]
-    #     raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
+    dataio.save_data(gf_iw=gf_iw, self_iw=self_iw, occ=occ_layer, temperature=T,
+                     dir_=dir_, name=name, compress=compress)
 
 
 def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, function, **kwds):
@@ -319,17 +155,17 @@ def sweep_update(prm: Hubbard_Parameters, iw_points,  gf_layer_iw, self_layer_iw
     gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
     # TODO: also save error
     save_gf(gf_layer_iw, self_layer_iw, occ_layer, T=prm.T,
-            dir_=OUTPUT_DIR, name=f'layer_iter{it}')
+            dir_=dataio.LAY_OUTPUT, name=f'layer_iter{it}')
     return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
 
 def load_last_iteration(output_dir=None) -> Tuple[LayerIterData, int, float]:
-    """Load relevant data from last iteration in `output_dir` (def.: `OUTPUT_DIR`).
+    """Load relevant data from last iteration in `output_dir`.
 
     Parameters
     ----------
     output_dir : str, optional
-        Directory from which data is loaded (default: `OUTPUT_DIR`)
+        Directory from which data is loaded (default: `dataio.LAY_OUTPUT`)
 
     Returns
     -------
@@ -339,7 +175,8 @@ def load_last_iteration(output_dir=None) -> Tuple[LayerIterData, int, float]:
         Number of the last iteration
 
     """
-    last_iter, last_output = get_last_iter(OUTPUT_DIR if output_dir is None else output_dir)
+    last_iter, last_output = dataio.get_last_iter(dataio.LAY_OUTPUT if output_dir is None
+                                                  else output_dir)
     LOGGER.info("Loading iteration %s: %s", last_iter, last_output.name)
 
     with np.load(last_output) as data:
@@ -460,7 +297,8 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
         The Matsubara frequencies at which the quantities are calculated.
         Required if `kind` is not 'resume'.
     output_dir : str, optional
-        Directory from which data is loaded if `kind == 'resume'` (default: `OUTPUT_DIR`)
+        Directory from which data is loaded if `kind == 'resume'`
+        (default: `dataio.LAY_OUTPUT`)
 
     Returns
     -------
@@ -555,7 +393,8 @@ class Runner:
         resume : bool
             If `resume`, load old r-DMFT data, else start from Hartree.
         output_dir : str, optional
-            Directory from which data is loaded if `kind == 'resume'` (default: `OUTPUT_DIR`)
+            Directory from which data is loaded if `kind == 'resume'`
+            (default: `dataio.LAY_OUTPUT`)
 
         """
         log_info(prm)
