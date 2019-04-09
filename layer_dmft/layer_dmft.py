@@ -337,8 +337,13 @@ def get_sweep_updater(prm: Hubbard_Parameters, iw_points, n_process, **solver_kw
     return sweep_update
 
 
-def load_last_iteration() -> Tuple[LayerIterData, int, float]:
-    """Load relevant data from last iteration in `OUTPUT_DIR`.
+def load_last_iteration(output_dir=None) -> Tuple[LayerIterData, int, float]:
+    """Load relevant data from last iteration in `output_dir` (def.: `OUTPUT_DIR`).
+
+    Parameters
+    ----------
+    output_dir : str, optional
+        Directory from which data is loaded (default: `OUTPUT_DIR`)
 
     Returns
     -------
@@ -348,7 +353,7 @@ def load_last_iteration() -> Tuple[LayerIterData, int, float]:
         Number of the last iteration
 
     """
-    last_iter, last_output = get_last_iter(OUTPUT_DIR)
+    last_iter, last_output = get_last_iter(OUTPUT_DIR if output_dir is None else output_dir)
     LOGGER.info("Loading iteration %s: %s", last_iter, last_output.name)
 
     with np.load(last_output) as data:
@@ -452,7 +457,7 @@ def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
     return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
 
-def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None):
+def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, output_dir=None):
     """Get necessary quantities (G, Σ, n) to start DMFT loop.
 
     Parameters
@@ -468,6 +473,8 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None):
     iw_points : (N_iw,) complex np.ndarray, optional
         The Matsubara frequencies at which the quantities are calculated.
         Required if `kind` is not 'resume'.
+    output_dir : str, optional
+        Directory from which data is loaded if `kind == 'resume'` (default: `OUTPUT_DIR`)
 
     Returns
     -------
@@ -487,7 +494,7 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None):
     # FIXME:  implement 'auto'
     if kind == 'resume':
         LOGGER.info("Reading old Green's function and self energy")
-        layerdat, last_it, data_T = load_last_iteration()
+        layerdat, last_it, data_T = load_last_iteration(output_dir)
         start = last_it + 1
     elif kind == 'hartree':
         LOGGER.info('Start from Hartree approximation')
@@ -553,7 +560,7 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1,
 class Runner:
     """Run r-DMFT loop using `Runner.iteration`."""
 
-    def __init__(self, prm: Hubbard_Parameters, starting_point='auto') -> None:
+    def __init__(self, prm: Hubbard_Parameters, starting_point='auto', output_dir=None) -> None:
         """Create runner for the model `prm`.
 
         Parameters
@@ -562,6 +569,8 @@ class Runner:
             Parameters of the Hamiltonian.
         resume : bool
             If `resume`, load old r-DMFT data, else start from Hartree.
+        output_dir : str, optional
+            Directory from which data is loaded if `kind == 'resume'` (default: `OUTPUT_DIR`)
 
         """
         log_info(prm)
@@ -576,8 +585,9 @@ class Runner:
         #
         # initial condition
         #
-        layerdat, start, data_T = get_initial_condition(prm, kind=starting_point,
-                                                        iw_points=self.iw_points)
+        layerdat, start, data_T = get_initial_condition(
+            prm, kind=starting_point, iw_points=self.iw_points, output_dir=output_dir,
+        )
         self.iter_nr = start
         self.gf_iw = layerdat.gf_iw
         self.self_iw = layerdat.self_iw
