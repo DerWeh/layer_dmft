@@ -1,9 +1,12 @@
 """Fourier transforms for Matsubara Green's functions for iω_n ↔ τ."""
+import logging
+
 from collections import namedtuple
 
 import numpy as np
 import gftools as gt
 
+LOGGER = logging.getLogger(__name__)
 FourierFct = namedtuple('FourierFct', ['iw', 'tau'])
 
 
@@ -116,8 +119,9 @@ def dft_tau2iw(gf_tau, beta, moments=(1.,), dft_backend=barde_dft_tau2iw):
 
     """
     m1 = -gf_tau[..., -1] - gf_tau[..., 0]
-    assert np.allclose(m1, moments[0]), \
-        f"First moment {moments[0]} has to be jump {m1}!"
+    if not np.allclose(m1, moments[0]):
+        LOGGER.warning("Provided 1/z moment differs from jump: mom: %s jump: %s",
+                       moments[0], m1)
     mom = get_gf_from_moments(moments, beta, N_iw=(gf_tau.shape[-1]-1)//2)
     gf_tau = gf_tau - mom.tau
     gf_iw = dft_backend(gf_tau, beta)
