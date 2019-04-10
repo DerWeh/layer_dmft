@@ -21,7 +21,7 @@ Most likely you want to import this module like::
 import warnings
 
 from functools import partial
-from typing import Tuple
+from typing import Iterable
 
 import numpy as np
 import gftools as gt
@@ -754,8 +754,7 @@ class Hubbard_Parameters:
         """Return a copy of the Hubbard_Parameters object."""
         return self.__copy__()
 
-    def get_impurity_models(self, z, self_z, gf_z=None, *, occ,
-                            only_interacting=False) -> Tuple[SIAM, ...]:
+    def get_impurity_models(self, z, self_z, gf_z=None, *, occ) -> Iterable[SIAM]:
         """Get effective impurity models.
 
         Parameters
@@ -772,30 +771,25 @@ class Hubbard_Parameters:
             The occupation corresponding to the self-energy `self_z`. This is
             necessary to calculated the high-frequency (:math:`1/z`) of the
             self-energy and thus the hybridization function.
-        only_interacting : bool, optional
-            Weather to only calculate the corresponding to interacting layers
-            or all (default). For DMFT only the interacting layers are relevant.
 
         Returns
         -------
-        impurity_models : Tuple[SIAM, ...]
-            Tuple containing the calculated (see `only_interacting`) single
-            impurity Anderson models.
+        impurity_models : Iterable[SIAM, ...]
+            Iterable containing the calculated single impurity Anderson models
+            for each layer.
 
         Examples
         --------
         Get effective SIAMs for interacting layers as starting point for DMFT:
 
         >>> prm.U = np.array([0. 0., 1., 1.])
-        >>> z = gt.matsub
-        >>> prm.get_impurity_models()
         >>> N_iw = 2**10
         >>> iw = gt.matsubara_frequencies(N_iw, beta=prm.beta)
-        >>> imp_mod_list = prm.get_impurity_models(z=iw, self_z=0, only_interacting=True)
+        >>> imp_mods = prm.get_impurity_models(z=iw, self_z=0)
 
-        Identify corresponding layers
+        Get interacting layers corresponding layers
 
-        >>> imp_mod_dict = {lay: mod for lay, mod in zip(np.flatnonzero(prm.U), imp_mod_list)}
+        >>> imp_mod_dict = {lay: mod for lay, mod in enumerate(imp_mods) if prm.U[lay] != 0}
 
         """
         if gf_z is None:
@@ -803,13 +797,9 @@ class Hubbard_Parameters:
         e_onsite = self.onsite_energy()
         hybrid_z = z + e_onsite[..., newaxis] - self_z - 1./gf_z
         hybrid_mom = self.hybrid_fct_moments(occ)
-        if only_interacting:
-            layers = self.U.nonzero()[0]
-        else:
-            layers = range(self.mu.size)
-        impurity_models = tuple(SIAM(e_onsite[:, ll], U=self.U[ll], T=self.T,
-                                     z=z, hybrid_fct=hybrid_z[:, ll], hybrid_mom=hybrid_mom[:, :, ll])
-                                for ll in layers)
+        impurity_models = (SIAM(e_onsite[:, ll], U=self.U[ll], T=self.T,
+                                z=z, hybrid_fct=hybrid_z[:, ll], hybrid_mom=hybrid_mom[:, :, ll])
+                           for ll in range(self._N_l))
         return impurity_models
 
 

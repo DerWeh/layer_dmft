@@ -128,7 +128,6 @@ def sweep_update(prm: Hubbard_Parameters, iw_points,  gf_layer_iw, self_layer_iw
     interacting_layers = np.flatnonzero(prm.U)
     siam_z = iw_points if data_T is None \
         else gt.matsubara_frequencies(np.arange(iw_points.size), beta=1./data_T)
-    # TODO: return iterator instead of Tuple?
     siams = prm.get_impurity_models(
         z=siam_z, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
     )
@@ -136,12 +135,12 @@ def sweep_update(prm: Hubbard_Parameters, iw_points,  gf_layer_iw, self_layer_iw
         layer_config = np.asarray(layer_config)
         layers = np.unique(layer_config)
         interacting_layers = layers[np.isin(layers, interacting_layers)]
-    interacting_siams = (siams[lay] for lay in interacting_layers)
 
     #
     # solve impurity model for the relevant layers
     #
-    for lay, siam in zip(interacting_layers, interacting_siams):
+    siam_iter = ((lay, siam) for lay, siam in enumerate(siams) if lay in interacting_layers)
+    for lay, siam in siam_iter:
         LOGGER.progress('iter %s: starting layer %s with U = %s (%s)',
                         it, lay, siam.U, solver_kwds)
         if data_T is not None and not np.allclose(siam.T, data_T):
