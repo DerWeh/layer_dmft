@@ -75,10 +75,13 @@ def get_iter(dir_, num) -> Path:
 
 def get_last_iter(dir_) -> Tuple[int, Path]:
     """Return number and the file of the output of last iteration."""
-    iter_files = Path(dir_).glob('*_iter*.npz')
+    iter_files = Path(dir_).expanduser().glob('*_iter*.npz')
 
     iters = {_get_iter(file_): file_ for file_ in iter_files}
-    last_iter: int = max(iters.keys() - {None})  # remove invalid item
+    try:
+        last_iter: int = max(iters.keys() - {None})  # remove invalid item
+    except ValueError:
+        raise IOError(f"No valid iteration data available in {Path(dir_).expanduser()}")
     return last_iter, iters[last_iter]
 
 

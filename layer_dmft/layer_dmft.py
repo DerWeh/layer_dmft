@@ -360,7 +360,14 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
     """
     kind = kind.lower()
     assert kind in ('auto', 'resume', 'hartree', 'hubbard-i')
-    # FIXME:  implement 'auto'
+    if kind == 'auto':
+        try:
+            dataio.get_last_iter(dataio.LAY_OUTPUT if output_dir is None else output_dir)
+            kind = 'resume'
+        except IOError:
+            LOGGER.info('No previous iterations found')
+            kind = 'hartree'
+
     if kind == 'resume':
         LOGGER.info("Reading old Green's function and self energy")
         layerdat, last_it, data_T = load_last_iteration(output_dir)
@@ -382,11 +389,10 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
     return layerdat, start, data_T
 
 
-# TODO: add resume=None -> "automatic choice"
 def main(prm: Hubbard_Parameters, n_iter, n_process=1,
-         qmc_params=sb_qmc.DEFAULT_QMC_PARAMS, resume=True):
+         qmc_params=sb_qmc.DEFAULT_QMC_PARAMS, starting_point='auto'):
     """Execute DMFT loop."""
-    warnings.warn("Currently not maintained!")
+    warnings.warn("Currently not maintained! Will lack functionality but should work.")
     log_info(prm)
 
     # technical parameters
@@ -398,15 +404,9 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1,
     #
     # initial condition
     #
-    if resume:
-        LOGGER.info("Reading old Green's function and self energy")
-        (gf_layer_iw, self_layer_iw, occ_layer), last_it, __ = load_last_iteration()
-        start = last_it + 1
-    else:
-        LOGGER.info('Start from Hartree')
-        gf_layer_iw, self_layer_iw, occ_layer = hartree_solution(prm, iw_n=iw_points)
-        LOGGER.progress('DONE: calculated starting point')
-        start = 0
+    (gf_layer_iw, self_layer_iw, occ_layer), start, __ = get_initial_condition(
+        prm, kind=starting_point, iw_points=iw_points,
+    )
 
     #
     # r-DMFT
