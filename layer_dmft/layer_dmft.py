@@ -83,7 +83,7 @@ def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, functi
     return result
 
 
-def sweep_update(prm: Hubbard_Parameters, iw_points,  gf_layer_iw, self_layer_iw, occ_layer,
+def sweep_update(prm: Hubbard_Parameters, iw_points, gf_layer_iw, self_layer_iw, occ_layer,
                  it, *, layer_config=None, data_T=None, n_process, **solver_kwds) -> LayerIterData:
     """Perform a sweep update, calculating the impurities for all layers.
 
@@ -126,15 +126,31 @@ def sweep_update(prm: Hubbard_Parameters, iw_points,  gf_layer_iw, self_layer_iw
 
     """
     interacting_layers = np.flatnonzero(prm.U)
-    siam_z = iw_points if data_T is None \
+    data_iw = iw_points if data_T is None \
         else gt.matsubara_frequencies(np.arange(iw_points.size), beta=1./data_T)
     siams = prm.get_impurity_models(
-        z=siam_z, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
+        z=data_iw, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
     )
-    if layer_config:
+    solve = partial(sb_qmc.solve, n_process=n_process, **solver_kwds)
+
+    if layer_config:  # handle mapping layers -> SIAMs (symmetry considerations)
         layer_config = np.asarray(layer_config)
         layers = np.unique(layer_config)
         interacting_layers = layers[np.isin(layers, interacting_layers)]
+
+    # handle temperature mismatch
+    if data_T is not None and not np.allclose(prm.T, data_T):
+        if data_T < prm.T:
+            raise NotImplementedError(
+                "Input data corresponds to lower temperatures than calculation.\n"
+                "Only interpolation for larger temperatures implemented."
+            )
+        LOGGER.info("Input data temperature T=%s differs from calculation T=%s"
+                    "\nHybridization functions will be interpolated.",
+                    data_T, prm.T)
+        interpolate_temperature = partial(interpolate, x_in=data_iw, x_out=iw_points)
+    else:
+        interpolate_temperature = None
 
     #
     # solve impurity model for the relevant layers
@@ -143,19 +159,11 @@ def sweep_update(prm: Hubbard_Parameters, iw_points,  gf_layer_iw, self_layer_iw
     for lay, siam in siam_iter:
         LOGGER.progress('iter %s: starting layer %s with U = %s (%s)',
                         it, lay, siam.U, solver_kwds)
-        if data_T is not None and not np.allclose(siam.T, data_T):
-            if data_T > siam.T:
-                LOGGER.info("Interpolate hybridization fct (iter %s: lay %s) from T=%s to T=%s",
-                            it, lay, data_T, siam.T)
-                siam.hybrid_fct = interpolate(siam.z, siam.hybrid_fct, iw_points)
-                siam.z = iw_points
-            else:
-                raise NotImplementedError(
-                    "Input data corresponds to lower temperatures than calculation.\n"
-                    "Only interpolation for larger temperatures implemented."
-                )
-        data = sb_qmc.solve(siam, n_process=n_process,
-                            output_name=f'iter{it}_lay{lay}', **solver_kwds)
+        if interpolate_temperature:
+            LOGGER.progress("Interpolate hybridization fct (iter %s: lay %s)", it, lay)
+            siam.hybrid_fct = interpolate_temperature(fct_in=siam.hybrid_fct)
+            siam.z = iw_points
+        data = solve(siam, output_name=f'iter{it}_lay{lay}')
 
         self_layer_iw[:, lay] = data['self_energy_iw']
         occ_layer[:, lay] = -data['gf_tau'][:, -1]
@@ -467,9 +475,6 @@ class Runner:
                     "Input data corresponds to lower temperatures than calculation.\n"
                     "Only interpolation for larger temperatures implemented."
                 )
-            LOGGER.info("Temperature of loaded data (%s) disagrees with parameters (%s)."
-                        "Data will be interpolated.",
-                        data_T, prm.T)
             self.update.keywords['data_T'] = data_T
 
     def iteration(self, n_process=1, layer_config=None, **qmc_params):
