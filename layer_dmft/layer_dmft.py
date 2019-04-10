@@ -31,7 +31,6 @@ HANDLER = logging.FileHandler("layer_dmft.log", mode='a')
 HANDLER.setFormatter(LOG_FMT)
 LOGGER.addHandler(HANDLER)
 
-
 FORCE_PARAMAGNET = True
 
 
@@ -54,11 +53,21 @@ def save_gf(gf_iw, self_iw, occ_layer, T, dir_='.', name='layer', compress=True)
 def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, function, **kwds):
     """Iterate the DMFT self-consistency equations.
 
-    This is an implementation of `converge`.
-
     Parameters
     ----------
-    see `converge`
+    it0 : int
+        Starting number of the iterations. Needed for filenames.
+    n_iter : int
+        Number of iterations performed.
+    gf_layer_iw0, self_layer_iw0 : (N_s, N_l, N_iw) complex np.ndarray
+        Initial values for local Green's function and self energy. The shape of
+        the arrays is (#spins=2, #layers, #Matsubara frequencies).
+    occ_layer0 : (N_s, N_l) float np.ndarray
+        Initial value for the occupation.
+    function : callable
+        The function implementing the self-consistency equations.
+    kwds
+        Additional keyword parameters passed to `function`
 
     Returns
     -------
@@ -75,7 +84,7 @@ def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, functi
 
 
 def sweep_update(prm: Hubbard_Parameters, iw_points,  gf_layer_iw, self_layer_iw, occ_layer,
-                 it, *, layer_config=None, data_T=None, n_process, **solver_kwds):
+                 it, *, layer_config=None, data_T=None, n_process, **solver_kwds) -> LayerIterData:
     """Perform a sweep update, calculating the impurities for all layers.
 
     Parameters
@@ -91,6 +100,16 @@ def sweep_update(prm: Hubbard_Parameters, iw_points,  gf_layer_iw, self_layer_iw
         The occupations have to match the self-energy (moments).
     it : int
         The iteration number needed for writing the files.
+    layer_config : array_like of int, optional
+        Mapping from the impurity models to the layers. For each layer an int
+        is given which corresponds to the impurity model.
+        E.g. for a symmetric setup of 4 layers `layer_config=(0, 1, 1, 0)`
+        can be used to only solve 2 impurity models and symmetrically use the
+        self energy for the related layers.
+    data_T : float, optional
+        The temperature corresponding to the input data `gf_layer_iw`, `self_layer_iw`
+        and `occ_layer` if it differs from `prm.T`. This can be given, to interpolate
+        the data to lower temperatures if `data_T > prm.T`.
     n_process : int
         The number of precesses used by the `sb_qmc` code.
     solver_kwds
@@ -98,8 +117,12 @@ def sweep_update(prm: Hubbard_Parameters, iw_points,  gf_layer_iw, self_layer_iw
 
     Returns
     -------
-    gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarry
+    data.gf_iw, data.self_iw : (N_s, N_l, N_iw) complex np.ndarry
         The updated local Green's function and self-energy.
+    data.occ : (N_s, N_l, N_iw) float np.ndarray
+        Occupation obtained from the impurity models. As long as the DMFT is
+        not converged, this *not* necessarily matches the occupation obtained
+        from `data.gf_iw`.
 
     """
     interacting_layers = np.flatnonzero(prm.U)
@@ -169,10 +192,12 @@ def load_last_iteration(output_dir=None) -> Tuple[LayerIterData, int, float]:
 
     Returns
     -------
-    layer_data: tuple
+    layer_data : LayerIterData
         Green's function, self-energy and occupation
-    last_iter: int
+    last_iter : int
         Number of the last iteration
+    temperature : float
+        Temperature corresponding to the layer_data
 
     """
     last_iter, last_output = dataio.get_last_iter(dataio.LAY_OUTPUT if output_dir is None
@@ -212,7 +237,7 @@ def interpolate(x_in, fct_in, x_out):
 
 
 def hartree_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
-    """Calculate the Hartree solution of `prm` for the r-DMFT loop.
+    """Calculate the Hartree approximation of `prm` for the r-DMFT loop.
 
     Parameters
     ----------
@@ -242,7 +267,7 @@ def hartree_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
         self_layer_iw[:] = opt_res.occ.x[::-1, :, np.newaxis] * prm.U[np.newaxis, :, np.newaxis]
         occ_layer = opt_res.occ.x
     else:  # nonsense case
-        # start with non-interacting solution
+        # non-interacting solution
         self_layer_iw = np.zeros((2, N_l, N_iw), dtype=np.complex)
         occ_layer = occ0.x
     return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
@@ -257,6 +282,24 @@ def _hubbard_I_update(occ_init, i_omega, params: Hubbard_Parameters, out_dict):
 
 
 def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
+    """Calculate the Hubbard I approximation of `prm` for the r-DMFT loop.
+
+    Parameters
+    ----------
+    prm : Hubbard_Parameters
+        The parameters of the Hubbard model.
+    iw_n : complex np.ndarray
+        Matsubara frequencies. This determines the output shape,
+        for how many points the Green's function and self-energy are calculated
+        as well as the accuracy of the occupation which also enters the
+        self-consistency for the Hartree solution.
+
+    Returns
+    -------
+    hubbard_I_solution : tuple
+        The Green's function, self-energy and occupation.
+
+    """
     N_l = prm.mu.size
     N_iw = iw_n.size
     gf_layer_iw = prm.gf0(iw_n)  # start with non-interacting Gf
@@ -280,7 +323,8 @@ def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
     return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
 
-def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, output_dir=None):
+def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, output_dir=None
+                          ) ->Tuple[LayerIterData, int, float]:
     """Get necessary quantities (G, Σ, n) to start DMFT loop.
 
     Parameters
@@ -390,8 +434,12 @@ class Runner:
         ----------
         prm : Hubbard_Parameters
             Parameters of the Hamiltonian.
-        resume : bool
-            If `resume`, load old r-DMFT data, else start from Hartree.
+        starting_point : {'auto', 'resume', 'Hartree', 'Hubbard-I'}, optional
+            What kind of starting point is used. 'resume' loads previous iteration
+            (layer data with largest iteration number). 'hartree' starts from the
+            static Hartree self-energy. 'hubbard-I' starts from the Hubbard-I
+            approximation, using the atomic self-energy. 'auto' tries 'resume' and
+            falls back to 'hartree'
         output_dir : str, optional
             Directory from which data is loaded if `kind == 'resume'`
             (default: `dataio.LAY_OUTPUT`)
@@ -436,10 +484,7 @@ class Runner:
 
         Parameters
         ----------
-        n_process : int
-            How many cores should be used.
-        \*\*qmc_params :
-            Parameters passed to the impurity solver, here `sb_qmc`.
+        see `sweep_update`
 
         Returns
         -------
