@@ -231,7 +231,6 @@ def setup(siam: SIAM, dir_='.', **kwds):
 
     write_hybridization_tau(siam.hybrid_tau())
     (dir_ / OUTPUT_DIR).mkdir(exist_ok=True)
-    hybrid_mom = siam.hybrid_mom
     init_content = PARAM_TEMPLATE.format(T=siam.T, U=siam.U,
                                          ef=-on_site_e.up + SIGMA.up*h_l, h=h_l,
                                          V2_up=1, V2_dn=1,  # not in use

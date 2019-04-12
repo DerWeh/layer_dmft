@@ -12,7 +12,7 @@ import warnings
 import logging
 
 from functools import partial
-from typing import Tuple
+from typing import Tuple, Optional, Dict
 from collections import namedtuple
 
 import numpy as np
@@ -148,7 +148,7 @@ def sweep_update(prm: Hubbard_Parameters, iw_points, gf_layer_iw, self_layer_iw,
         LOGGER.info("Input data temperature T=%s differs from calculation T=%s"
                     "\nHybridization functions will be interpolated.",
                     data_T, prm.T)
-        interpolate_temperature = partial(interpolate, x_in=data_iw, x_out=iw_points)
+        interpolate_temperature: Optional[partial] = partial(interpolate, x_in=data_iw, x_out=iw_points)
     else:
         interpolate_temperature = None
 
@@ -308,7 +308,7 @@ def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
     if np.any(prm.U != 0):
         # Non-interacting/Hartree is typically no good starting value!
         occ0.x[:] = .5
-        output = {}
+        output: Dict[str, np.ndarray] = {}
         tol = max(np.linalg.norm(occ0.err), 1e-14)
         root_finder = charge._root
         optimizer = partial(_hubbard_I_update, i_omega=iw_n, params=prm, out_dict=output)
@@ -462,7 +462,7 @@ class Runner:
         )
 
         # iteration scheme: sweep updates -> calculate all impurities, then update
-        self.update: partial = partial(
+        self.update = partial(
             sweep_update, prm=prm, iw_points=iw_points,
             gf_layer_iw=layerdat.gf_iw, self_layer_iw=layerdat.self_iw, occ_layer=layerdat.occ,
             it=start
