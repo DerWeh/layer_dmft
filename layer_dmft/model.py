@@ -18,8 +18,6 @@ Most likely you want to import this module like::
     from model import prm, SIGMA, Spins
 
 """
-import warnings
-
 from functools import partial
 from typing import Iterable
 
@@ -33,8 +31,6 @@ from . import high_frequency_moments as hfm
 from .util import SpinResolvedArray, Spins
 from .fft import dft_iw2tau
 
-
-warnings.simplefilter('always', DeprecationWarning)
 
 SIGMA = SpinResolvedArray(up=0.5, dn=-0.5)
 SIGMA.flags.writeable = False
@@ -222,26 +218,18 @@ class Hubbard_Parameters:
 
     __slots__ = ('_N_l', 'T', 'D', 'mu', 'V', 'h', 'U', 't_mat', 'hilbert_transform')
 
-    def __init__(self, N_l: int = None) -> None:
+    def __init__(self, N_l: int) -> None:
         """Empty initialization creating of according shape filled with zeros."""
         self._N_l = N_l
         self.T: float
         self.D: float
         self.hilbert_transform = callable
         del self.hilbert_transform
-        if N_l is None:
-            warnings.warn("Deprecated, use 'N_l' to state the size.", DeprecationWarning)
-            self.mu: np.ndarray
-            self.V: np.ndarray
-            self.h: np.ndarray
-            self.U: np.ndarray
-            self.t_mat: np.ndarray
-        else:
-            self.mu = np.zeros(N_l)
-            self.V = np.zeros(N_l)
-            self.h = np.zeros(N_l)
-            self.U = np.zeros(N_l)
-            self.t_mat = np.zeros((N_l, N_l))
+        self.mu = np.zeros(N_l)
+        self.V = np.zeros(N_l)
+        self.h = np.zeros(N_l)
+        self.U = np.zeros(N_l)
+        self.t_mat = np.zeros((N_l, N_l))
 
     @property
     def beta(self) -> float:
@@ -849,8 +837,3 @@ hilbert_transform['chain'].m2 = lambda D: 0
 
 rev_dict_hilbert_transfrom = {transform: name for name, transform
                               in hilbert_transform.items()}
-
-
-with warnings.catch_warnings():
-    warnings.simplefilter('ignore', DeprecationWarning)
-    prm = Hubbard_Parameters()
