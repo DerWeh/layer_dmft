@@ -1,9 +1,11 @@
 """Utility classes."""
 import sys
+import uuid
 from pathlib import Path
 from enum import IntEnum
 from contextlib import contextmanager
 from collections import namedtuple
+from importlib.util import module_from_spec, spec_from_file_location
 
 import numpy as np
 
@@ -252,3 +254,31 @@ def local_import(dir_=None):
         yield
     finally:
         sys.path[0] = import_path0
+
+
+def import_file(file, content=None):
+    """Try importing `file` as module avoiding name clashes.
+
+    If `content` is given `content = import_file('file.py', 'content')`
+    roughly corresponds to `from file import content`
+    else `file = import_file('file.py')`
+    roughly corresponds to `import file`.
+
+    Parameters
+    ----------
+    file : str or Path
+        The Python file corresponding to the module.
+    content : str, optional
+        What to import from the module (optional).
+
+    """
+    file = Path(file).expanduser().resolve(strict=True)
+    print(file)
+    spec = spec_from_file_location(file.stem + str(uuid.uuid4()), str(file))
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if content:
+        print(module)
+        return getattr(module, content)
+    else:
+        return module
