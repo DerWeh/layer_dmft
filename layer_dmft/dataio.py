@@ -112,6 +112,8 @@ class LayerData:
 
     def __init__(self, dir_=LAY_OUTPUT):
         """Mmap all data from directory."""
+        if not Path(dir_).is_dir():
+            raise NotADirectoryError(str(dir_))
         self._filname_dict = get_all_iter(dir_)
         self.mmap_dict = OrderedDict((key, self._autoclean_load(val, mmap_mode='r'))
                                      for key, val in sorted(self._filname_dict.items()))
@@ -160,6 +162,8 @@ class ImpurityData:
 
     def __init__(self, dir_=IMP_OUTPUT):
         """Mmap all data from directory."""
+        if not Path(dir_).is_dir():
+            raise NotADirectoryError(str(dir_))
         self._filname_dict = get_all_imp_iter(dir_)
         mmap_dict = OrderedDict()
         for iter_key, iter_dict in sorted(self._filname_dict.items()):
