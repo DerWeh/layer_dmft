@@ -4,7 +4,7 @@ from typing import Dict, Any
 from functools import partial
 
 from pathlib import Path
-from datetime import date, datetime
+from datetime import datetime
 from collections import ChainMap, Mapping, namedtuple
 
 import numpy as np
@@ -26,7 +26,7 @@ GF_IW_FILE = "00-Gf_omega.dat"
 GF_TAU_FILE = "00-Gf_tau.dat"
 SELF_FILE = "00-self.dat"
 SUSCEPT_IW_FILE = "00-chi_omega.dat"
-SUSCEPT_TAU_FILE = "00-chi_omega.dat"
+SUSCEPT_TAU_FILE = "00-chi_tau.dat"
 
 IM_STEP = 2
 
@@ -510,5 +510,6 @@ def save_data(siam: SIAM, dir_='.', name='sb', compress=True, qmc_params=DEFAULT
         data['spin_susceptibility_tau_err'] = suscept_tau.spin.err
         data['charge_susceptibility_tau'] = suscept_tau.charge.x
         data['charge_susceptibility_tau_err'] = suscept_tau.charge.err
-    dataio.save_data(dir_=Path(dir_).expanduser()/dataio.IMP_OUTPUT, name=name, **data)
+    dataio.save_data(dir_=Path(dir_).expanduser()/dataio.IMP_OUTPUT, name=name,
+                     compress=compress, **data)
     return data

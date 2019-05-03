@@ -273,12 +273,10 @@ def import_file(file, content=None):
 
     """
     file = Path(file).expanduser().resolve(strict=True)
-    print(file)
     spec = spec_from_file_location(file.stem + str(uuid.uuid4()), str(file))
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     if content:
-        print(module)
         return getattr(module, content)
     else:
         return module
