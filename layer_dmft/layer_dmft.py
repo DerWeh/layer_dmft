@@ -8,19 +8,18 @@ FORCE_PARAMAGNET: bool
 
 """
 # encoding: utf-8
-import warnings
 import logging
 
 from functools import partial
-from typing import Tuple, Optional, Dict
+from typing import Tuple, Optional, Dict, Iterable, Any, NamedTuple
 from collections import namedtuple
 
 import numpy as np
 import gftools as gt
 from scipy.interpolate import UnivariateSpline
 
-from . import __version__, charge, dataio
-from .model import Hubbard_Parameters
+from . import __version__, charge, dataio, high_frequency_moments as hfm
+from .model import Hubbard_Parameters, SIAM
 from .interface import sb_qmc
 
 # setup logging
@@ -43,6 +42,8 @@ def log_info(prm: Hubbard_Parameters):
 
 # DATA necessary for the DMFT iteration
 LayerIterData = namedtuple('layer_iter_data', ['gf_iw', 'self_iw', 'occ'])
+Sigma = namedtuple('sigma', ['iw', 'moments'])
+SolverResult = NamedTuple("SolverResult", [('self', Sigma), ('data', Dict[str, Any])])
 
 
 def save_gf(gf_iw, self_iw, occ_layer, T, dir_='.', name='layer', compress=True):
@@ -50,41 +51,24 @@ def save_gf(gf_iw, self_iw, occ_layer, T, dir_='.', name='layer', compress=True)
                      dir_=dir_, name=name, compress=compress)
 
 
-def bare_iteration(it0, n_iter, gf_layer_iw0, self_layer_iw0, occ_layer0, function, **kwds):
-    """Iterate the DMFT self-consistency equations.
-
-    Parameters
-    ----------
-    it0 : int
-        Starting number of the iterations. Needed for filenames.
-    n_iter : int
-        Number of iterations performed.
-    gf_layer_iw0, self_layer_iw0 : (N_s, N_l, N_iw) complex np.ndarray
-        Initial values for local Green's function and self energy. The shape of
-        the arrays is (#spins=2, #layers, #Matsubara frequencies).
-    occ_layer0 : (N_s, N_l) float np.ndarray
-        Initial value for the occupation.
-    function : callable
-        The function implementing the self-consistency equations.
-    kwds
-        Additional keyword parameters passed to `function`
-
-    Returns
-    -------
-    gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarray
-        The result for local Green's function and self energy after `n_iter`
-        iterations.
-
-    """
-    gf_layer_iw, self_layer_iw, occ_layer = gf_layer_iw0, self_layer_iw0, occ_layer0
-    for ii in range(it0, n_iter+it0):
-        result = function(gf_layer_iw, self_layer_iw, occ_layer, it=ii, **kwds)
-        gf_layer_iw, self_layer_iw, occ_layer = result
-    return result
+def interpolate_siam_temperature(siams: Iterable[SIAM], iw_n) -> Iterable[SIAM]:
+    """Wrap interpolation of `SIAM.hybrid_tau` to continue different temperature."""
+    interpolate_temperature: Optional[partial] = partial(interpolate, x_out=iw_n)
+    for lay, siam in enumerate(siams):
+        if siam.z[-1] < iw_n[-1]:
+            # better message
+            raise NotImplementedError(
+                "Input data corresponds to lower temperatures than calculation.\n"
+                "Only interpolation for larger temperatures implemented."
+            )
+        LOGGER.progress("Interpolate hybridization fct (lay %s)", lay)
+        siam.hybrid_fct = interpolate_temperature(x_in=siam.z, fct_in=siam.hybrid_fct)
+        siam.z = iw_n
+        yield siam
 
 
-def sweep_update(prm: Hubbard_Parameters, iw_points, gf_layer_iw, self_layer_iw, occ_layer,
-                 it, *, layer_config=None, data_T=None, n_process, **solver_kwds) -> LayerIterData:
+def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
+                 it, *, layer_config=None, n_process, **solver_kwds) -> LayerIterData:
     """Perform a sweep update, calculating the impurities for all layers.
 
     Parameters
@@ -93,11 +77,6 @@ def sweep_update(prm: Hubbard_Parameters, iw_points, gf_layer_iw, self_layer_iw,
         The model parameters.
     iw_points : (N_iw, ) complex np.ndarray
         The array of Matsubara frequencies.
-    gf_layer_iw, self_layer_iw : (N_s, N_l, N_iw) complex np.ndarray
-        The local Green's function and self-energy of the lattice.
-    occ_layer : (N_s, N_l) float np.ndarray
-        The local occupation of the *impurities* corresponding to the layers.
-        The occupations have to match the self-energy (moments).
     it : int
         The iteration number needed for writing the files.
     layer_config : array_like of int, optional
@@ -106,10 +85,6 @@ def sweep_update(prm: Hubbard_Parameters, iw_points, gf_layer_iw, self_layer_iw,
         E.g. for a symmetric setup of 4 layers `layer_config=(0, 1, 1, 0)`
         can be used to only solve 2 impurity models and symmetrically use the
         self energy for the related layers.
-    data_T : float, optional
-        The temperature corresponding to the input data `gf_layer_iw`, `self_layer_iw`
-        and `occ_layer` if it differs from `prm.T`. This can be given, to interpolate
-        the data to lower temperatures if `data_T > prm.T`.
     n_process : int
         The number of precesses used by the `sb_qmc` code.
     solver_kwds
@@ -126,61 +101,62 @@ def sweep_update(prm: Hubbard_Parameters, iw_points, gf_layer_iw, self_layer_iw,
 
     """
     interacting_layers = np.flatnonzero(prm.U)
-    data_iw = iw_points if data_T is None \
-        else gt.matsubara_frequencies(np.arange(iw_points.size), beta=1./data_T)
-    siams = prm.get_impurity_models(
-        z=data_iw, self_z=self_layer_iw, gf_z=gf_layer_iw, occ=occ_layer,
-    )
+    map_lay2imp = np.arange(prm._N_l) if layer_config is None else np.asarray(layer_config)
+    unique_layers, map_imp2lay = np.unique(map_lay2imp[np.isin(map_lay2imp, interacting_layers)],
+                                           return_inverse=True)
+    # need better error handling
+    assert interacting_layers.size == map_imp2lay.size
+
     solve = partial(sb_qmc.solve, n_process=n_process, **solver_kwds)
 
-    if layer_config:  # handle mapping layers -> SIAMs (symmetry considerations)
-        layer_config = np.asarray(layer_config)
-        layers = np.unique(layer_config)
-        interacting_layers = layers[np.isin(layers, interacting_layers)]
+    def _solve(siam: SIAM, lay: int) -> SolverResult:
+        LOGGER.progress('iter %s: starting layer %s with U = %s (%s)',
+                        it, lay, siam.U, solver_kwds)
+        data = solve(siam, output_name=f'iter{it}_lay{lay}')
+        occ = -data['gf_tau'][:, -1]
+        sm0 = hfm.self_m0(siam.U, occ[::-1])
+        sm1 = hfm.self_m1(siam.U, occ[::-1])
+        return SolverResult(self=Sigma(iw=data['self_energy_iw'], moments=[sm0, sm1]),
+                            data=data)
 
-    # handle temperature mismatch
-    if data_T is not None and not np.allclose(prm.T, data_T):
-        if data_T < prm.T:
-            raise NotImplementedError(
-                "Input data corresponds to lower temperatures than calculation.\n"
-                "Only interpolation for larger temperatures implemented."
-            )
-        LOGGER.info("Input data temperature T=%s differs from calculation T=%s"
-                    "\nHybridization functions will be interpolated.",
-                    data_T, prm.T)
-        interpolate_temperature: Optional[partial] = partial(interpolate, x_in=data_iw, x_out=iw_points)
-    else:
-        interpolate_temperature = None
-
+    self_layer_iw = np.zeros((2, prm._N_l, iw_points.size), dtype=np.complex)
+    occ_imp = np.zeros((2, prm._N_l))
     #
     # solve impurity model for the relevant layers
     #
-    siam_iter = ((lay, siam) for lay, siam in enumerate(siams) if lay in interacting_layers)
-    for lay, siam in siam_iter:
-        LOGGER.progress('iter %s: starting layer %s with U = %s (%s)',
-                        it, lay, siam.U, solver_kwds)
-        if interpolate_temperature:
-            LOGGER.progress("Interpolate hybridization fct (iter %s: lay %s)", it, lay)
-            siam.hybrid_fct = interpolate_temperature(fct_in=siam.hybrid_fct)
-            siam.z = iw_points
-        data = solve(siam, output_name=f'iter{it}_lay{lay}')
-
-        self_layer_iw[:, lay] = data['self_energy_iw']
-        occ_layer[:, lay] = -data['gf_tau'][:, -1]
+    siam_iter = ((lay, siam) for lay, siam in enumerate(siams) if lay in unique_layers)
+    solutions = list(_solve(siam, lay) for lay, siam in siam_iter)
 
     if layer_config is not None:
-        LOGGER.progress('Using calculated self-energies on layers %s', list(layer_config))
-        self_layer_iw = self_layer_iw[:, layer_config]
+        LOGGER.progress('Using calculated self-energies from %s on layers %s',
+                        list(unique_layers), list(interacting_layers))
 
+    for lay, imp in zip(interacting_layers, map_imp2lay):
+        LOGGER.debug("Assigning impurity %s (from %s) to layer %s",
+                     imp, unique_layers[imp], lay)
+        self_layer_iw[:, lay] = solutions[imp].self.iw
+        occ_imp[:, lay] = -solutions[imp].data['gf_tau'][:, -1]
+
+    # average over spin if not magnetic
     if FORCE_PARAMAGNET and np.all(prm.h == 0):
         # TODO: think about using shape [1, N_l] arrays for paramagnet
         self_layer_iw[:] = np.mean(self_layer_iw, axis=0)
+        occ_imp[:] = np.mean(occ_imp, axis=0)
 
     gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
-    # TODO: also save error
-    save_gf(gf_layer_iw, self_layer_iw, occ_layer, T=prm.T,
+
+    if interacting_layers.size < prm._N_l:
+        # calculated density from Gf for non-interacting layers
+        occ = prm.occ0(gf_layer_iw, hartree=occ_imp[::-1], return_err=False)
+        for lay, imp in zip(interacting_layers, map_imp2lay):
+            occ[:, lay] = occ_imp[:, lay]
+    else:
+        occ = occ_imp
+
+    # TODO: also save error, version, ...
+    save_gf(gf_layer_iw, self_layer_iw, occ, T=prm.T,
             dir_=dataio.LAY_OUTPUT, name=f'layer_iter{it}')
-    return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
+    return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ)
 
 
 def load_last_iteration(output_dir=None) -> Tuple[LayerIterData, int, float]:
@@ -391,38 +367,13 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
 
 def main(prm: Hubbard_Parameters, n_iter, n_process=1,
          qmc_params=sb_qmc.DEFAULT_QMC_PARAMS, starting_point='auto'):
-    """Execute DMFT loop."""
-    warnings.warn("Currently not maintained! Will lack functionality but should work.")
-    log_info(prm)
+    """Execute DMFT loop.
 
-    # technical parameters
-    N_IW = sb_qmc.N_IW
-
-    # dependent parameters
-    iw_points = gt.matsubara_frequencies(np.arange(N_IW), prm.beta)
-
-    #
-    # initial condition
-    #
-    (gf_layer_iw, self_layer_iw, occ_layer), start, __ = get_initial_condition(
-        prm, kind=starting_point, iw_points=iw_points,
-    )
-
-    #
-    # r-DMFT
-    #
-    # TODO: use numpy self-consistency mixing
-    # iteration scheme
-    converge = bare_iteration
-    # sweep updates -> calculate all impurities, then update
-    iteration = partial(sweep_update, prm, iw_points, n_process=n_process, **qmc_params)
-
-    # perform self-consistency loop
-    converge(
-        it0=start, n_iter=n_iter,
-        gf_layer_iw0=gf_layer_iw, self_layer_iw0=self_layer_iw, occ_layer0=occ_layer,
-        function=iteration
-    )
+    Legacy method, prefer using `Runner` directly.
+    """
+    runner = Runner(prm, starting_point=starting_point)
+    for __ in range(n_iter):
+        runner.iteration(n_process=n_process, **qmc_params)
 
 
 class Runner:
@@ -451,22 +402,17 @@ class Runner:
         # technical parameters
         N_IW = sb_qmc.N_IW
 
-        # dependent parameters
-        iw_points = gt.matsubara_frequencies(np.arange(N_IW), prm.beta)
-
         #
         # initial condition
         #
+        iw_points = gt.matsubara_frequencies(np.arange(N_IW), prm.beta)
         layerdat, start, data_T = get_initial_condition(
             prm, kind=starting_point, iw_points=iw_points, output_dir=output_dir,
         )
+        iw_points = gt.matsubara_frequencies(np.arange(N_IW), 1./data_T)
 
-        # iteration scheme: sweep updates -> calculate all impurities, then update
-        self.update = partial(
-            sweep_update, prm=prm, iw_points=iw_points,
-            gf_layer_iw=layerdat.gf_iw, self_layer_iw=layerdat.self_iw, occ_layer=layerdat.occ,
-            it=start
-        )
+        siams = prm.get_impurity_models(iw_points, self_z=layerdat.self_iw,
+                                        gf_z=layerdat.gf_iw, occ=layerdat.occ)
 
         if not np.allclose(data_T, prm.T, atol=1e-14):
             # temperatures don't match
@@ -475,7 +421,16 @@ class Runner:
                     "Input data corresponds to lower temperatures than calculation.\n"
                     "Only interpolation for larger temperatures implemented."
                 )
-            self.update.keywords['data_T'] = data_T
+            LOGGER.info("Input data temperature T=%s differs from calculation T=%s"
+                        "\nHybridization functions will be interpolated.",
+                        data_T, prm.T)
+            # iw_points = gt.matsubara_frequencies(np.arange(N_IW), prm.beta)
+            siams = interpolate_siam_temperature(siams, prm.T)
+
+        # iteration scheme: sweep updates -> calculate all impurities, then update
+        self.update = partial(sweep_update, prm=prm, siams=siams, iw_points=iw_points,
+                              it=start)
+        self.get_impurity_models = partial(prm.get_impurity_models, z=iw_points)
 
     def iteration(self, n_process=1, layer_config=None, **qmc_params):
         r"""Perform a DMFT iteration.
@@ -492,12 +447,9 @@ class Runner:
         """
         # perform self-consistency loop
         data = self.update(layer_config=layer_config, n_process=n_process, **qmc_params)
+
         update_kdws = self.update.keywords
-        update_kdws.update(gf_layer_iw=data.gf_iw, self_layer_iw=data.self_iw, occ_layer=data.occ)
-
-        if 'data_T' in update_kdws:
-            # previously input data temperature didn't match prm.T
-            del update_kdws['data_T']
-
+        siams = self.get_impurity_models(self_z=data.self_iw, gf_z=data.gf_iw, occ=data.occ)
+        update_kdws.update(siams=siams)
         update_kdws['it'] += 1
         return data
