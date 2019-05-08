@@ -44,6 +44,7 @@ def log_info(prm: Hubbard_Parameters):
 LayerIterData = namedtuple('layer_iter_data', ['gf_iw', 'self_iw', 'occ'])
 Sigma = namedtuple('sigma', ['iw', 'moments'])
 SolverResult = NamedTuple("SolverResult", [('self', Sigma), ('data', Dict[str, Any])])
+MapLayer = namedtuple("MapLayer", ['interacting', 'unique', 'imp2lay', 'unchanged'])
 
 
 def save_gf(gf_iw, self_iw, occ_layer, T, dir_='.', name='layer', compress=True):
@@ -67,8 +68,76 @@ def interpolate_siam_temperature(siams: Iterable[SIAM], iw_n) -> Iterable[SIAM]:
         yield siam
 
 
+def mapping_lay_imp(prm_U, layer_config=None)->MapLayer:
+    """Handle custom mapping between layers and impurity models.
+
+    Parameters
+    ----------
+    prm_U : (N_l, ) float np.ndarray
+        Hubbard U of the model.
+    layer_config : (N_l, ) int array_like, optional
+        The custom mapping between layers and impurity models. Entries corresponding
+        to *non-interacting* layers (U==0) will be *ignored*. For *interacting*
+        layers, the number is the *index* of the layer from which the impurity
+        model will be solved.
+        If the number is *negative*, the results won't be changed (previous
+        self-energy is reused).
+
+    Returns
+    -------
+    mlayer.interacting : int np.ndarray
+        Indices of interacting layers (U != 0)
+    mlayer.unique : int np.ndarray
+        Layers which will be mapped to a SIAM.
+    mlayer.imp2lay : int np.ndarray
+        Mapping for which layers each impurity model will be used.
+    mlayer.unchanged : int np.ndarray
+        Indices of layers, where the old self-energy will be reused.
+
+    Raises
+    ------
+    ValueError
+        If `layer_config` doesn't conform.
+
+    Examples
+    --------
+    For a given model
+
+    >>> prm = model.Hubbard_Parameters(5)
+    >>> prm.U[:] = [0, 2, 2, 2, 0]
+    >>> prm.t_mat = model.hopping_matrix(5, 1.)
+
+    Values of `layer_config` for layers 0 and 4 will be ignored, as they are
+    non-interacting. Layers 1 and 3 are equal due to symmetry, so we should
+    map them to the same impurity model. Thus a meaningful choice would be
+
+    >>> layer_config = [0, 1, 2, 1, 0]
+
+    If the self energy for layer 2 is already accurate and we only want to
+    improve layer 1 and 3, we can reuse the old result with
+
+    >>> layer_config = [0, 1, -1, 1, 0]
+
+    """
+    N_l = len(prm_U)
+    interacting_layers = np.flatnonzero(prm_U)
+    map_lay2imp = np.arange(N_l) if layer_config is None else np.asarray(layer_config, dtype=int)
+    if len(map_lay2imp) != N_l:
+        raise ValueError(f"'layer_config' has wrong number of elements ({map_lay2imp.size}), "
+                         f"expected: {N_l}")
+    if np.any(map_lay2imp > N_l - 1):
+        raise ValueError("'layer_config' doesn't point to valid layers"
+                         f" (max: {N_l}): {layer_config}")
+    unique_layers, map_imp2lay = np.unique(map_lay2imp[np.isin(map_lay2imp, interacting_layers)],
+                                           return_inverse=True)
+    assert interacting_layers.size >= map_imp2lay.size
+    unchanged = np.argwhere(map_lay2imp < 0)
+    return MapLayer(interacting_layers, unique_layers, map_imp2lay, unchanged)
+
+
 def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
-                 it, *, layer_config=None, n_process, **solver_kwds) -> LayerIterData:
+                 it, *, layer_config=None, self_iw=None, occ=None,
+                 n_process, **solver_kwds) -> LayerIterData:
     """Perform a sweep update, calculating the impurities for all layers.
 
     Parameters
@@ -100,12 +169,7 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
         from `data.gf_iw`.
 
     """
-    interacting_layers = np.flatnonzero(prm.U)
-    map_lay2imp = np.arange(prm._N_l) if layer_config is None else np.asarray(layer_config)
-    unique_layers, map_imp2lay = np.unique(map_lay2imp[np.isin(map_lay2imp, interacting_layers)],
-                                           return_inverse=True)
-    # need better error handling
-    assert interacting_layers.size == map_imp2lay.size
+    mlayer = mapping_lay_imp(prm.U, layer_config)
 
     solve = partial(sb_qmc.solve, n_process=n_process, **solver_kwds)
 
@@ -124,18 +188,23 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
     #
     # solve impurity model for the relevant layers
     #
-    siam_iter = ((lay, siam) for lay, siam in enumerate(siams) if lay in unique_layers)
+    siam_iter = ((lay, siam) for lay, siam in enumerate(siams) if lay in mlayer.unique)
     solutions = list(_solve(siam, lay) for lay, siam in siam_iter)
 
     if layer_config is not None:
         LOGGER.progress('Using calculated self-energies from %s on layers %s',
-                        list(unique_layers), list(interacting_layers))
+                        list(mlayer.unique), list(mlayer.imp2lay))
 
-    for lay, imp in zip(interacting_layers, map_imp2lay):
+    for lay, imp in zip(mlayer.interacting, mlayer.imp2lay):
         LOGGER.debug("Assigning impurity %s (from %s) to layer %s",
-                     imp, unique_layers[imp], lay)
+                     imp, mlayer.unique[imp], lay)
         self_layer_iw[:, lay] = solutions[imp].self.iw
         occ_imp[:, lay] = -solutions[imp].data['gf_tau'][:, -1]
+    for lay in mlayer.unchanged:
+        LOGGER.debug("Reusing old values for layer %s", lay)
+        self_layer_iw[:, lay] = self_iw[:, lay]
+        occ_imp[:, lay] = occ[:, lay]
+
 
     # average over spin if not magnetic
     if FORCE_PARAMAGNET and np.all(prm.h == 0):
@@ -144,11 +213,10 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
 
     gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
 
-    if interacting_layers.size < prm._N_l:
+    if mlayer.interacting.size < prm._N_l:
         # calculated density from Gf for non-interacting layers
         occ = prm.occ0(gf_layer_iw, hartree=occ_imp[::-1], return_err=False)
-        for lay, imp in zip(interacting_layers, map_imp2lay):
-            occ[:, lay] = occ_imp[:, lay]
+        occ[:, mlayer.interacting] = occ_imp[:, mlayer.interacting]
     else:
         occ = occ_imp
 
@@ -428,7 +496,7 @@ class Runner:
 
         # iteration scheme: sweep updates -> calculate all impurities, then update
         self.update = partial(sweep_update, prm=prm, siams=siams, iw_points=iw_points,
-                              it=start)
+                              it=start, self_iw=layerdat.self_iw, occ=layerdat.occ)
         self.get_impurity_models = partial(prm.get_impurity_models, z=iw_points)
 
     def iteration(self, n_process=1, layer_config=None, **qmc_params):
@@ -437,6 +505,8 @@ class Runner:
         Parameters
         ----------
         see `sweep_update`
+        layer_config
+            see `mapping_lay_imp`
 
         Returns
         -------
@@ -449,6 +519,6 @@ class Runner:
 
         update_kdws = self.update.keywords
         siams = self.get_impurity_models(self_z=data.self_iw, gf_z=data.gf_iw, occ=data.occ)
-        update_kdws.update(siams=siams)
+        update_kdws.update(siams=siams, self_iw=data.self_iw, occ=data.occ)
         update_kdws['it'] += 1
         return data
