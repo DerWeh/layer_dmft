@@ -263,13 +263,12 @@ class Hubbard_Parameters:
             The (layer dependent) on-site energy :math:`μ + U/2 - V - σh`.
 
         """
+        if np.all(self.h == 0):
+            sigma = np.mean(sigma, keepdims=True)
         onsite_energy = +np.multiply.outer(sigma, self.h)
         onsite_energy += self.mu + 0.5*self.U - self.V
-        if hartree is not False:
-            assert (len(hartree.shape) == 1
-                    if isinstance(sigma, float) else
-                    len(hartree) == 2 == len(hartree.shape)), \
-                f"hartree as no matching shape: {hartree.shape}"
+        if np.any(hartree):
+            assert hartree.ndim <= onsite_energy.ndim
             onsite_energy -= hartree * self.U
         if isinstance(sigma, SpinResolvedArray):
             return onsite_energy.view(type=SpinResolvedArray)
@@ -320,19 +319,14 @@ class Hubbard_Parameters:
             The Green's function for spin up and down.
 
         """
-        if hartree is False:  # for common loop
-            hartree = (False, False)
-        else:  # first axis needs to be spin such that loop is possible
-            assert hartree.shape[0] == 2
-        gf_0 = {}
-        for sp, occ in zip(Spins, hartree):
-            gf_0_inv = -self.hamiltonian(sigma=SIGMA[sp], hartree=occ)
-            gf_decomp = gtmatrix.decompose_hamiltonian(gf_0_inv)
+        gf_0_inv = -self.hamiltonian(hartree=hartree)
+        gf_out = []
+        for gf_inv_sp in gf_0_inv:
+            gf_decomp = gtmatrix.decompose_hamiltonian(gf_inv_sp)
             xi_bar = self.hilbert_transform(np.add.outer(gf_decomp.xi, omega),
                                             half_bandwidth=self.D)
-            gf_0[sp.name] = gf_decomp.reconstruct(xi_bar, kind=diag_dic[diagonal])
-
-        return SpinResolvedArray(**gf_0)
+            gf_out.append(gf_decomp.reconstruct(xi_bar, kind=diag_dic[diagonal]))
+        return np.array(gf_out)
 
     def occ0(self, gf_iw, hartree=False, return_err=True, total=False):
         """Return occupation for the non-interacting (mean-field) model.
@@ -364,24 +358,20 @@ class Hubbard_Parameters:
             If `return_err`, the truncation error of occupation
 
         """
-        occ0 = {}
-        occ0_err = {}
-        if hartree is False:
-            hartree = (False, False)
-        for sp, hartree_sp in zip(Spins, hartree):
-            ham = self.hamiltonian(sigma=SIGMA[sp], hartree=hartree_sp)
-            occ0_ = gt.density(gf_iw[sp], potential=-ham, beta=self.beta,
-                               return_err=return_err, matrix=True, total=total)
-            if return_err is True:
-                occ0[sp.name], occ0_err[sp.name] = occ0_
-            else:
-                occ0[sp.name] = occ0_
-
-        if return_err is True:
-            return gt.Result(x=SpinResolvedArray(**occ0),
-                             err=SpinResolvedArray(**occ0_err))
+        ham = self.hamiltonian(hartree=hartree)
+        signature = '(l,w),(l,l)->' + ('({out}),({out})' if return_err else '({out})')
+        if total:
+            signature = signature.format(out='')
         else:
-            return SpinResolvedArray(**occ0)
+            signature = signature.format(out='l')
+        density = np.vectorize(gt.density, signature=signature,
+                               excluded={'beta', 'return_err', 'matrix', 'total'})
+
+        dens = density(gf_iw, -ham, beta=self.beta, return_err=return_err, matrix=True, total=total)
+        if return_err:
+            return gt.Result(*dens)
+        else:
+            return dens
 
     def occ0_eps(self, eps, hartree=False):
         r"""Return the :math:`ϵ`-resolved occupation for the non-interacting (mean-field) model.
@@ -509,7 +499,6 @@ class Hubbard_Parameters:
 
         """
         assert z.size == self_z.shape[-1], "Same number of frequencies"
-        assert len(Spins) == self_z.shape[0], "Two spin components"
         gf_inv_diag = z + self.onsite_energy()[:, :, newaxis] - self_z
         return self._z_dep_inversion(gf_inv_diag, diagonal=diagonal)
 
@@ -618,24 +607,24 @@ class Hubbard_Parameters:
             The Green's function.
 
         """
-        shape = diag_z.shape
-        assert len(shape) == 3  # (# Spin, # Layer, # z)
-        if diagonal:
-            gf_out = SpinResolvedArray(np.zeros_like(diag_z, dtype=np.complex))
-        else:
-            gf_out = SpinResolvedArray(
-                np.zeros((shape[0], shape[1], shape[1], shape[2]),
-                         dtype=np.complex256)
-            )
+        assert diag_z.ndim >= 2  # (..., N_l, #z), typically (#Spin, ...)
+        N_l = diag_z.shape[-2]
+
         gf_bare_inv = -self.t_mat.astype(np.complex256)
-        diag = np.diag_indices_from(gf_bare_inv)
-        # TODO reshape diag_z_sp to see if there is speedup
-        for diag_z_sp, gf_out_sp in zip(diag_z, gf_out):  # iterate spins
-            for ii in range(shape[-1]):  # iterate z-values
-                gf_bare_inv[diag] = diag_z_sp[:, ii]
-                gf_dec = gtmatrix.decompose_gf_omega(gf_bare_inv)
-                gf_dec.apply(self.hilbert_transform, half_bandwidth=self.D)
-                gf_out_sp[..., ii] = gf_dec.reconstruct(kind=diag_dic[diagonal])
+        diag_indices = np.diag_indices_from(gf_bare_inv)
+        diag_z = np.moveaxis(diag_z, -2, -1)
+        newshape = diag_z.shape
+        diag_z = diag_z.reshape(-1, N_l)  # (..., N_l)
+
+        out = []
+        for diag_el in diag_z:
+            gf_bare_inv[diag_indices] = diag_el
+            gf_dec = gtmatrix.decompose_gf_omega(gf_bare_inv)
+            gf_dec.apply(self.hilbert_transform, half_bandwidth=self.D)
+            out.append(gf_dec.reconstruct(kind=diag_dic[diagonal]))
+        last_axes = out[0].shape
+        gf_out = np.array(out).reshape(newshape[:-1] + last_axes)
+        gf_out = np.moveaxis(gf_out, -(len(last_axes) + 1), -1)  # (..., #z)
         return gf_out
 
     def hybrid_fct_moments(self, occ):

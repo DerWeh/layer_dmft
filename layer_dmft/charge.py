@@ -119,7 +119,7 @@ def update_occupation(occ_init, i_omega, params, out_dict):
         Has the same shape as `occ_init`.
 
     """
-    assert occ_init.shape[0] == 2
+    assert occ_init.shape[0] <= 2
     assert len(occ_init.shape) == 2
     params.V[:] = out_dict['V'] = get_V(occ_init.sum(axis=0) - np.average(occ_init.sum(axis=0)))
     out_dict['Gf'] = gf_iw = params.gf0(i_omega, hartree=occ_init[::-1])

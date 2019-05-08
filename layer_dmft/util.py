@@ -15,11 +15,15 @@ spins = ('up', 'dn')
 
 
 class Spins(IntEnum):
-    """Spins 'up'/'dn' with their corresponding index."""
+    """Spins 'up'/'dn' with their corresponding index.
+
+    Down spins is index -1 (the last one). Thus we can use the same element for
+    spin up and down in the paramagnetic case.
+    """
 
     __slots__ = ()
     up = 0
-    dn = 1
+    dn = -1
 
 
 class SpinResolved(namedtuple('Spin', ('up', 'dn'))):

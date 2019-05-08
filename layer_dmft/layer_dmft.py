@@ -139,9 +139,8 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
 
     # average over spin if not magnetic
     if FORCE_PARAMAGNET and np.all(prm.h == 0):
-        # TODO: think about using shape [1, N_l] arrays for paramagnet
-        self_layer_iw[:] = np.mean(self_layer_iw, axis=0)
-        occ_imp[:] = np.mean(occ_imp, axis=0)
+        self_layer_iw = np.mean(self_layer_iw, axis=0, keepdims=True)
+        occ_imp = np.mean(occ_imp, axis=0, keepdims=True)
 
     gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
 
