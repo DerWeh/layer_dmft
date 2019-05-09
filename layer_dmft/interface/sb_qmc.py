@@ -168,7 +168,7 @@ def write_hybridization_iw(hybrid_iw):
         frequencies. It is necessary to have `N_iw >= N_IW`.
 
     """
-    hybrid_iw = hybrid_iw[:, :N_IW]
+    hybrid_iw = np.broadcast_to(hybrid_iw[:, :N_IW], (2, N_IW))
     assert hybrid_iw.ndim == 2, f"Dimension must be 2: (N_spins, N_iw), ndim: {hybrid_iw.ndim}"
     assert hybrid_iw.shape[0] == 2, ("First dimension must be of length 2=#Spins, "
                                      f"here: {hybrid_iw.shape[0]}")
@@ -195,7 +195,7 @@ def write_hybridization_tau(hybrid_tau):
         It is necessary to have `N_tau = N_TAU + 1`.
 
     """
-    assert hybrid_tau.shape == (2, N_TAU + 1)
+    hybrid_tau = np.broadcast_to(hybrid_tau, (2, N_TAU+1))
     digits = 14
     fill = 2 + digits + 4
     header = (
