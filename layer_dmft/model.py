@@ -3,7 +3,7 @@
 # File              : model.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 01.08.2018
-# Last Modified Date: 14.03.2019
+# Last Modified Date: 09.05.2019
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Module to define the layered Hubbard model in use.
 
@@ -268,8 +268,9 @@ class Hubbard_Parameters:
         onsite_energy = +np.multiply.outer(sigma, self.h)
         onsite_energy += self.mu + 0.5*self.U - self.V
         if np.any(hartree):
-            assert hartree.ndim <= onsite_energy.ndim
-            onsite_energy -= hartree * self.U
+            # assert hartree.ndim <= onsite_energy.ndim
+            # backward compatibility
+            onsite_energy = onsite_energy - hartree * self.U
         if isinstance(sigma, SpinResolvedArray):
             return onsite_energy.view(type=SpinResolvedArray)
         return onsite_energy

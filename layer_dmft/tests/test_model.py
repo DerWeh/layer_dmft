@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# File              : tests/test_model.py
+# File              : test_model.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 01.08.2018
-# Last Modified Date: 01.08.2018
+# Last Modified Date: 09.05.2019
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 """Tests for the Hubbard model related building blocks."""
 from __future__ import absolute_import, unicode_literals
@@ -11,7 +11,7 @@ from __future__ import absolute_import, unicode_literals
 import pytest
 import numpy as np
 
-import gftools
+import gftools as gt
 
 from .context import model, util
 
@@ -75,7 +75,7 @@ def test_compare_greensfunction():
     t = 0.2
     prm.t_mat = model.hopping_matrix(N, nearest_neighbor=t)
 
-    iw = gftools.matsubara_frequencies(np.arange(100), beta=prm.beta)
+    iw = gt.matsubara_frequencies(np.arange(100), beta=prm.beta)
     gf0 = prm.gf0(iw)
     gf_dmft = prm.gf_dmft_s(iw, np.zeros_like(gf0))
     assert np.allclose(gf0, gf_dmft)
@@ -93,7 +93,7 @@ def test_non_interacting_siam():
     t = 0.2
     prm.t_mat = model.hopping_matrix(N_l, nearest_neighbor=t)
 
-    iw = gftools.matsubara_frequencies(np.arange(1024), beta=prm.beta)
+    iw = gt.matsubara_frequencies(np.arange(1024), beta=prm.beta)
     gf_layer = prm.gf0(iw)
     occ = prm.occ0(gf_layer)
     siams = prm.get_impurity_models(iw, self_z=0, gf_z=gf_layer, occ=occ.x)
@@ -130,12 +130,13 @@ def test_2x2_matrix():
     prm.t_mat[0, 1] = prm.t_mat[1, 0] = 1.3
     prm.mu = np.array([0, 1.73])
     prm.h = np.array([0, -0.3])
-    prm.U = 0
-    prm.V = 0
+    prm.U[:] = 0
+    prm.V[:] = 0
     prm.D = None
     prm.hilbert_transform = model.hilbert_transform['chain']
+    prm.assert_valid()
 
-    omegas = gftools.matsubara_frequencies(np.arange(100), prm.beta)
+    omegas = gt.matsubara_frequencies(np.arange(100), prm.beta)
     gf_prm = prm.gf0(omegas, diagonal=False)
     gf_2x2_up = np.array([gf_2x2(iw, prm.t_mat, prm.onsite_energy(sigma=model.SIGMA.up))
                           for iw in omegas])
@@ -145,3 +146,22 @@ def test_2x2_matrix():
                           for iw in omegas])
     gf_2x2_dn = gf_2x2_dn.transpose(1, 2, 0)  # adjuste axis order (2, 2, omegas)
     assert np.allclose(gf_2x2_dn, gf_prm.dn)
+
+
+def test_particle_hole_symmtery():
+    """Compare particle hole-symmetric case in the most simple example N_l=1."""
+    prm = model.Hubbard_Parameters(1)
+    prm.T = 0.0137
+    prm.U[:] = 6
+    prm.D = 1.37
+    prm.hilbert_transform = model.hilbert_transform['bethe']
+    prm.assert_valid()
+
+    iws = gt.matsubara_frequencies(np.arange(1024), beta=prm.beta)
+    assert prm.onsite_energy(hartree=[.5,]) == 0.
+    occ = prm.occ0(prm.gf0(iws, hartree=[.5,]), hartree=[.5,])
+    assert occ.x - occ.err <= .5 <= occ.x + occ.err
+
+    omega = np.linspace(-2*prm.D, 2*prm.D, num=1000) + 1e-6j
+    gf_iw = prm.gf0(omega, hartree=[.5])
+    assert np.allclose(gf_iw, gt.bethe_gf_omega(omega, half_bandwidth=prm.D))
