@@ -44,7 +44,7 @@ def log_info(prm: Hubbard_Parameters):
 LayerIterData = namedtuple('layer_iter_data', ['gf_iw', 'self_iw', 'occ'])
 Sigma = namedtuple('sigma', ['iw', 'moments'])
 SolverResult = NamedTuple("SolverResult", [('self', Sigma), ('data', Dict[str, Any])])
-MapLayer = namedtuple("MapLayer", ['interacting', 'unique', 'imp2lay', 'unchanged'])
+MapLayer = namedtuple("MapLayer", ['interacting', 'unique', 'imp2lay', 'updated', 'unchanged'])
 
 
 def save_gf(gf_iw, self_iw, occ_layer, T, dir_='.', name='layer', compress=True):
@@ -92,6 +92,8 @@ def mapping_lay_imp(prm_U, layer_config=None)->MapLayer:
     mlayer.imp2lay : int np.ndarray
         Mapping for which layers each impurity model will be used.
     mlayer.unchanged : int np.ndarray
+        Indices of layers, where new self-energy will be calculated.
+    mlayer.unchanged : int np.ndarray
         Indices of layers, where the old self-energy will be reused.
 
     Raises
@@ -131,8 +133,10 @@ def mapping_lay_imp(prm_U, layer_config=None)->MapLayer:
     unique_layers, map_imp2lay = np.unique(map_lay2imp[np.isin(map_lay2imp, interacting_layers)],
                                            return_inverse=True)
     assert interacting_layers.size >= map_imp2lay.size
-    unchanged = np.argwhere(map_lay2imp < 0)
-    return MapLayer(interacting_layers, unique_layers, map_imp2lay, unchanged)
+    unchanged = np.flatnonzero(map_lay2imp < 0)
+    updated = np.flatnonzero(map_lay2imp >= 0)
+    assert updated.size == map_imp2lay.size
+    return MapLayer(interacting_layers, unique_layers, map_imp2lay, updated, unchanged)
 
 
 def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
@@ -195,7 +199,7 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
         LOGGER.progress('Using calculated self-energies from %s on layers %s',
                         list(mlayer.unique), list(mlayer.imp2lay))
 
-    for lay, imp in zip(mlayer.interacting, mlayer.imp2lay):
+    for lay, imp in zip(mlayer.updated, mlayer.imp2lay):
         LOGGER.debug("Assigning impurity %s (from %s) to layer %s",
                      imp, mlayer.unique[imp], lay)
         self_layer_iw[:, lay] = solutions[imp].self.iw
