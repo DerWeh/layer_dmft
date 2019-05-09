@@ -320,13 +320,14 @@ class Hubbard_Parameters:
 
         """
         gf_0_inv = -self.hamiltonian(hartree=hartree)
+        assert gf_0_inv.ndim == 3
         gf_out = []
         for gf_inv_sp in gf_0_inv:
             gf_decomp = gtmatrix.decompose_hamiltonian(gf_inv_sp)
             xi_bar = self.hilbert_transform(np.add.outer(gf_decomp.xi, omega),
                                             half_bandwidth=self.D)
             gf_out.append(gf_decomp.reconstruct(xi_bar, kind=diag_dic[diagonal]))
-        return np.array(gf_out)
+        return np.array(gf_out).view(type=SpinResolvedArray)
 
     def occ0(self, gf_iw, hartree=False, return_err=True, total=False):
         """Return occupation for the non-interacting (mean-field) model.

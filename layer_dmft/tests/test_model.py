@@ -61,8 +61,8 @@ def test_SpinResolvedArray_iteration():
 
 def test_compare_greensfunction():
     """Non-interacting and DMFT should give the same for self-energy=0."""
-    prm = model.prm
     N = 13
+    prm = model.Hubbard_Parameters(N)
     prm.T = 0.137
     prm.D = 1.  # half-bandwidth
     prm.mu = np.zeros(N)  # with respect to half filling
@@ -73,10 +73,7 @@ def test_compare_greensfunction():
     prm.U = np.zeros(N)
     prm.hilbert_transform = model.hilbert_transform['bethe']
     t = 0.2
-    prm.t_mat = np.zeros((N, N))
-    diag, _ = np.diag_indices_from(prm.t_mat)
-    sdiag = diag[:-1]
-    prm.t_mat[sdiag+1, sdiag] = prm.t_mat[sdiag, sdiag+1] = t
+    prm.t_mat = model.hopping_matrix(N, nearest_neighbor=t)
 
     iw = gftools.matsubara_frequencies(np.arange(100), beta=prm.beta)
     gf0 = prm.gf0(iw)
@@ -112,7 +109,7 @@ def test_2x2_matrix():
 
     Done for the 1D chain of sites.
     """
-    prm = model.prm
+    prm = model.Hubbard_Parameters(2)
 
     def gf_2x2(omega, t_mat, onsite_energys):
         assert np.all(np.diag(t_mat) == 0.), \
@@ -135,6 +132,7 @@ def test_2x2_matrix():
     prm.h = np.array([0, -0.3])
     prm.U = 0
     prm.V = 0
+    prm.D = None
     prm.hilbert_transform = model.hilbert_transform['chain']
 
     omegas = gftools.matsubara_frequencies(np.arange(100), prm.beta)
