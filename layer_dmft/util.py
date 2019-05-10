@@ -245,6 +245,15 @@ class SelfEnergy(SpinResolvedArray):
         return self_pade
 
 
+def attribute(**kwds):
+    """Add an attribute to a function in a way working with linters."""
+    def wrapper(func):
+        for key, value in kwds.items():
+            setattr(func, key, value)
+        return func
+    return wrapper
+
+
 @contextmanager
 def local_import(dir_=None):
     """Only import modules within `dir_` (default: cwd)."""

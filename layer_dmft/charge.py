@@ -22,6 +22,7 @@ import gftools as gt
 
 from . import plot
 from .capacitor_formula import potential_energy_vector
+from .util import attribute
 
 LOGGER = logging.getLogger(__name__)
 SMALL_WIDTH = 50
@@ -35,15 +36,6 @@ def counter(func):
         return func(*args, **kwds)
 
     wrapper.count = 0
-    return wrapper
-
-
-def attribute(**kwds):
-    """Add an attribute to a function in a way working with linters."""
-    def wrapper(func):
-        for key, value in kwds.items():
-            setattr(func, key, value)
-        return func
     return wrapper
 
 
