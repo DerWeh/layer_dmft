@@ -25,6 +25,18 @@ PARAMAGNETIC = False if np.count_nonzero(prm.h) or not layer_dmft.FORCE_PARAMAGN
 MARKERS = {'o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X'}
 
 
+def get_difference_figure(fig_name):
+    if PARAMAGNETIC:
+        plt.figure(num=fig_name)
+        axes = (plt.gca(),)
+    else:
+        __, axes = plt.subplots(2, sharex=True, sharey=True, num=fig_name)
+
+    for axis in axes:
+        axis.axhline(y=0., color='black', linewidth=.3)
+    return axes
+
+
 lay_data = dataio.LayerData(dir_=LAY_OUT)
 imp_data = dataio.ImpurityData(dir_=IMP_OUT)
 
@@ -72,16 +84,9 @@ plt.tight_layout()
 #
 # Distance between imaginary part of iω_0 of layer and impurity Green's function
 #
-fig_name = 'Difference iω_0'
+axes = get_difference_figure('Difference iω_0')
 sp_text = ('↑', '↓')
-if PARAMAGNETIC:
-    plt.figure(num=fig_name)
-    axes = (plt.gca(),)
-else:
-    __, axes = plt.subplots(2, sharex=True, sharey=True, num=fig_name)
 
-for axis in axes:
-    axis.axhline(y=0., color='black', linewidth=.3)
 
 marker_cycle = cycle(MARKERS - {'D'})
 for lay in layers:
@@ -113,16 +118,8 @@ plt.tight_layout()
 #
 # Distance of occupation
 #
-fig_name = 'Difference n_l'
+axes = get_difference_figure('Difference n_l')
 sp_text = ('↑', '↓')
-if PARAMAGNETIC:
-    plt.figure(num=fig_name)
-    axes = (plt.gca(),)
-else:
-    __, axes = plt.subplots(2, sharex=True, sharey=True, num=fig_name)
-
-for axis in axes:
-    axis.axhline(y=0., color='black', linewidth=.3)
 
 marker_cycle = cycle(MARKERS - {'D'})
 for lay in layers:
@@ -140,13 +137,13 @@ for lay in layers:
         occ_imp_err = occ_imp_err.mean(axis=-1)
         occ_lay_err = occ_lay_err.mean(axis=-1)
         err = abs(occ_imp_err/occ_lay) + abs(occ_lay_err*occ_imp/occ_lay**2)
-        plot.err_plot(lay_iterations, (occ_lay-occ_imp)/occ_lay, yerr=err,
+        plot.err_plot(lay_iterations, (occ_lay-occ_imp)/occ_lay, yerr=err, axis=axes[0],
                       linestyle=':', label=str(lay), marker=next(marker_cycle))
     else:
         diff = (occ_lay-occ_imp)/occ_lay
         err = abs(occ_imp_err/occ_lay) + abs(occ_lay_err*occ_imp/occ_lay**2)
         for sp in (0, -1):
-            axes[sp].plot(lay_iterations, diff[:, sp], yerr=err,
+            plot.err_plot(lay_iterations, diff[:, sp], yerr=err[:, sp], axis=axes[sp],
                           linestyle=':', label=str(lay), marker=next(marker_cycle))
 
 for sp, axis in enumerate(axes):
