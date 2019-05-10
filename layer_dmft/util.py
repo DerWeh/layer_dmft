@@ -90,7 +90,7 @@ class SpinResolvedArray(np.ndarray):
                                **kwargs).view(cls)
             else:
                 raise TypeError("Invalid construction: " + str(type_err))
-        assert obj.shape[0] == 2
+        assert obj.shape[0] in (1, 2), "Either values for spin up and dn, or both equal"
         return obj
 
     def __getitem__(self, element):
@@ -130,7 +130,7 @@ class SpinResolvedArray(np.ndarray):
     @property
     def total(self):
         """Sum of up and down spin."""
-        return np.sum(self.view(type=np.ndarray), axis=0)
+        return (self[Spins.up] + self[Spins.dn]).view(type=np.ndarray)
 
 
 class SelfEnergy(SpinResolvedArray):
