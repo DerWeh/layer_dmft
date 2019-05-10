@@ -18,9 +18,86 @@ from numpy import newaxis
 from wrapt import decorator
 
 import gftools as gt
+from gftools import pade
 
 from .util import SpinResolvedArray, Spins
 
+
+def sorted_eigvals(a, **eigvals_kwds):
+    """Sort the eigenvalues of the matrix `a` according to their real part.
+
+    Warnings
+    --------
+    This is a rather ad-hoc way to establish order, as the eigenvalues are complex
+    in general.
+
+    """
+    eigvals = la.eigvals(a, **eigvals_kwds)
+    sort = eigvals.real.argsort()
+    return eigvals[sort]
+
+
+def layer_phase_fcts(gf_z_in, z_in, n_min: int, n_max: int, valid_z, threshold=1e-8):
+    """Return list of functions that return the phase factor for each layer.
+
+    Pade is performed for the eigenvalues, the average is taken after
+    calculating the phase.
+
+    TODO: add proper documentation
+    """
+    coeffs = pade.coefficients(z_in, gf_z_in)
+
+    kind = pade.KindGf(n_min, n_max)
+    test_pade = (kind.islice(pade.calc_iterator(z_out=valid_z, z_in=z_in, coeff=coeff_layer))
+                 for coeff_layer in coeffs)
+    is_valid = [[np.all(pade_.imag < threshold) for pade_ in pade_layer]
+                for pade_layer in test_pade]
+    n_valid = np.count_nonzero(is_valid, axis=0)
+    if np.any(n_valid == 0):
+        ll = list(np.argwhere(n_valid == 0))
+        raise RuntimeError(f"For layer(s) {ll} no Pade fulfills requirements.")
+    elif np.any(n_valid == 1):
+        ll = list(np.argwhere(n_valid == 1))
+
+        from warnings import warn
+
+        warn(f"For layer(s) {ll} only one Pade fulfills requirements.\n"
+             "It is thus not possible to give a variance.")
+
+    # @jit(nopython=True)
+    # def phase(z, pade_z, eps):
+    #     number = z - pade_z - eps
+    #     return np.arctan2(number.imag, number.real)/np.pi
+
+    # Averager = partial(pade.Mod_Averager, z_in=z_in, mod_fct=phase, kind=kind, vectorized=True)
+
+    def Averager(coeff, valid_pades):
+        # TODO: write function putting kind + valid_pades as input to determine
+        # Pade array directly -> turn complete averaged except reshaping, gt.Result
+        # into jit function
+
+        def averaged(z, eps):
+            z = np.asarray(z)
+            scalar_input = False
+            if z.ndim == 0:
+                z = z[np.newaxis]
+                scalar_input = True
+
+            pade_iter = kind.islice(pade.calc_iterator(z, z_in, coeff=coeff))
+            pades = np.array([pade_ for pade_, valid in zip(pade_iter, valid_pades) if valid])
+
+            number = z - pades - eps
+            phase_pi = np.arctan2(number.imag, number.real)
+            phase_avg = np.average(phase_pi, axis=0)/np.pi
+            std = np.std(phase_pi, axis=0, ddof=1)/np.pi
+
+            if scalar_input:
+                return gt.Result(x=np.squeeze(phase_avg), err=np.squeeze(std))
+            return gt.Result(x=phase_avg, err=std)
+        return averaged
+
+    return [Averager(coeff=coeff_layer, valid_pades=is_valid_layer)
+            for coeff_layer, is_valid_layer in zip(coeffs, is_valid)]
 
 @decorator
 def spin_resolved(wrapped, instance, args, kwds):
