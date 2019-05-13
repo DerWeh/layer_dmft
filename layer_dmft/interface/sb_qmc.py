@@ -481,6 +481,7 @@ def save_data(siam: SIAM, dir_='.', name='sb', compress=True, qmc_params=DEFAULT
     data['tau'] = read_tau(dir_)
     data['gf_tau'], data['gf_tau_err'] = read_gf_tau(dir_)
     data['gf_x_self_tau'] = read_gf_x_self_tau(dir_)
+    data['hybrid_iw'] = siam.hybrid_fct
 
     occ_other = -data['gf_tau'][::-1, -1]
     self_m0 = hfm.self_m0(siam.U, occ_other)
