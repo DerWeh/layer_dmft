@@ -495,8 +495,8 @@ class Runner:
             LOGGER.info("Input data temperature T=%s differs from calculation T=%s"
                         "\nHybridization functions will be interpolated.",
                         data_T, prm.T)
-            # iw_points = gt.matsubara_frequencies(np.arange(N_IW), prm.beta)
-            siams = interpolate_siam_temperature(siams, prm.T)
+            iw_points = gt.matsubara_frequencies(np.arange(N_IW), prm.beta)
+            siams = interpolate_siam_temperature(siams, iw_points)
 
         # iteration scheme: sweep updates -> calculate all impurities, then update
         self.update = partial(sweep_update, prm=prm, siams=siams, iw_points=iw_points,
