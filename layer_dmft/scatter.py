@@ -8,19 +8,32 @@
 """Scattering formalism for inhomogeneous many-body problems.
 
 Formulas are mostly from the Byczuk paper on the Friedel sum rule.
+
 """
 import inspect
+import logging
 
+from functools import partial
+
+import numba
 import numpy as np
 import scipy.linalg as la
 
 from numpy import newaxis
+import numba.types as nb_t
+from scipy import LowLevelCallable
+from scipy.integrate import quad
 from wrapt import decorator
 
 import gftools as gt
+import gftools.numba as gt_numba
 from gftools import pade
 
+from .model import rev_dict_hilbert_transfrom, Hubbard_Parameters
 from .util import SpinResolvedArray, Spins
+
+LOGGER = logging.getLogger(__name__)
+LOGGER.addHandler(logging.NullHandler())
 
 
 def sorted_eigvals(a, **eigvals_kwds):
@@ -98,6 +111,131 @@ def layer_phase_fcts(gf_z_in, z_in, n_min: int, n_max: int, valid_z, threshold=1
 
     return [Averager(coeff=coeff_layer, valid_pades=is_valid_layer)
             for coeff_layer, is_valid_layer in zip(coeffs, is_valid)]
+
+
+def _integrand_function(integrand_function):
+    """Wrap `integrand_function` as a `LowLevelCallable` to be used with quad.
+
+    `integrand_function` has to have the signature (float, complex) -> float.
+
+    This speeds up integration by removing call overhead. However only float
+    arguments can be passed to and from the function.
+
+    """
+    @numba.cfunc(nb_t.float64(nb_t.intc, nb_t.CPointer(nb_t.float64)))
+    def wrapped(__, xx):
+        return integrand_function(xx[0], xx[1] + xx[2])
+    return LowLevelCallable(wrapped.ctypes)
+
+
+def HomPhaseIntegW(prm: Hubbard_Parameters, self_z, z_in, n_min, n_max,
+                   valid_z, threshold=1e-8):
+    r"""Generate function that calculates the ϵ-integrated phase for a homogeneous system.
+
+    .. math:: ϕ(ω) = ∫dϵ DOS(ϵ) \arg G(ϵ, ω)
+
+    Pade is performed for the self-energy + onsite-energy, the average over the
+    approximants is taken after calculating and integrating the phase.
+
+    Currently this is only implemented for a single spin and for Bethe DOS...
+
+    FIXME: currently only implemented for h==0
+
+    Parameters
+    ----------
+    prm : Hubbard_Parameters
+        Parameters.
+    self_z : (N_sp, N_iw) complex np.ndarray
+        Self-energy, first axis corresponds to the spins.
+    z_in : (N_iw,) complex np.ndarray
+        Input frequencies of the self-energy.
+    n_min, n_max : int
+        Minimal and maximal number of included Matsubara frequencies.
+    valid_z : (M,) complex np.ndarray
+        Frequencies at which the imaginary part of the self-energy is checked to
+        be positive (thus `valid_z.imag` > 0).
+    threshold : float, optional
+        Threshold, how negative values are allowed.
+
+    Returns
+    -------
+    averaged
+        Return function (complex) -> Result(float, float) which returns for
+        given frequency the ϵ-integrated Phase and its variance from Pade.
+
+    """
+    assert np.all(prm.h == 0)
+    assert self_z.shape[0] <= 2
+    self_z = self_z.mean(axis=0)  # average over spins
+    coeffs = pade.coefficients(z_in, self_z)
+
+    # prepare Pade
+    kind = pade.KindSelf(n_min, n_max)
+    test_pade = kind.islice(pade.calc_iterator(z_out=valid_z, z_in=z_in, coeff=coeffs))
+    is_valid = np.array([np.all(pade_.imag < threshold) for pade_ in test_pade])
+    assert is_valid.shape[:-1] == self_z.shape[:-1]
+    n_valid = np.count_nonzero(is_valid, axis=-1)
+    if np.any(n_valid == 0):
+        ll = list(np.argwhere(n_valid == 0))
+        raise RuntimeError(f"For layer(s) {ll} no Pade fulfills requirements.")
+    elif np.any(n_valid == 1):
+        LOGGER.warning("For layer(s) %s only one Pade fulfills requirements.\n"
+                       "It is thus not possible to give a variance.",
+                       list(np.argwhere(n_valid == 1)))
+
+    # prepare numba compiled integral
+    assert rev_dict_hilbert_transfrom[prm.hilbert_transform] == 'bethe'
+    D = prm.D
+
+    @numba.jit(nopython=True)
+    def kernel(eps, z_self_z):
+        """Integration kernel."""
+        gf_eps_inv = (z_self_z - eps)
+        phase = np.arctan2(gf_eps_inv.imag, gf_eps_inv.real)
+        return gt_numba.bethe_dos(eps, D)*phase
+
+    lowlevel_kernel = _integrand_function(kernel)
+    phase_quad = partial(quad, lowlevel_kernel, a=-prm.D, b=prm.D)
+
+    assert coeffs.ndim == 1 == is_valid.ndim
+
+    def avg_eps_integ_phase(z) -> gt.Result:
+        """ϵ-integrated phase from averaged Pade and its variance.
+
+        Parameters
+        ----------
+        z : complex or complex array_like
+            Frequencies at which the analytic continuation is evaluated.
+
+        Returns
+        -------
+        eps_integ_phase.x, eps_integ_phase.err : complex or complex np.ndarray
+            ϵ-integrated phase and the corresponding variance.
+
+        """
+        z = np.asarray(z)
+        # TODO: check if this is really necessary
+        scalar_input = False
+        if z.ndim == 0:
+            z = z[np.newaxis]
+            scalar_input = True
+
+        pade_iter = kind.islice(pade.calc_iterator(z, z_in, coeff=coeffs))
+        pades = np.array([pade_ for pade_, valid in zip(pade_iter, is_valid) if valid])
+
+        arg = z - pades
+        shape = arg.shape
+        phase_pi = np.array([phase_quad(args=(arg_ii.real, arg_ii.imag))[:2]
+                             for arg_ii in arg.reshape(-1)])
+        phase_pi = phase_pi.reshape(*shape, 2)
+        phase_avg = np.average(phase_pi, axis=0)/np.pi
+        std = np.std(phase_pi, axis=0, ddof=1)/np.pi
+        if scalar_input:
+            return gt.Result(x=np.squeeze(phase_avg), err=np.squeeze(std))
+        return gt.Result(x=phase_avg, err=std)
+
+    return avg_eps_integ_phase
+
 
 @decorator
 def spin_resolved(wrapped, instance, args, kwds):
