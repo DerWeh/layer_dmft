@@ -231,8 +231,9 @@ def HomPhaseIntegEps(prm: Hubbard_Parameters, self_z, z_in, n_min, n_max,
         phase_avg = np.average(phase_pi, axis=0)/np.pi
         std = np.std(phase_pi, axis=0, ddof=1)/np.pi
         if scalar_input:
-            return gt.Result(x=np.squeeze(phase_avg), err=np.squeeze(std))
-        return gt.Result(x=phase_avg, err=std)
+            phase_avg = np.squeeze(phase_avg)
+            std = np.squeeze(std)
+        return gt.Result(x=phase_avg[..., 0], err=std.sum(axis=-1) + phase_avg[..., 1])
 
     return avg_eps_integ_phase
 
