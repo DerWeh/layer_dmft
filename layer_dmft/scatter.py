@@ -167,7 +167,7 @@ def HomPhaseIntegEps(prm: Hubbard_Parameters, self_z, z_in, n_min, n_max,
     assert np.all(prm.h == 0)
     assert self_z.shape[0] <= 2
     self_z = self_z.mean(axis=0)  # average over spins
-    coeffs = pade.coefficients(z_in, self_z)
+    coeffs = pade.coefficients(z_in, self_z - prm.onsite_energy(sigma=0))
 
     # prepare Pade
     kind = pade.KindSelf(n_min, n_max)
@@ -195,7 +195,7 @@ def HomPhaseIntegEps(prm: Hubbard_Parameters, self_z, z_in, n_min, n_max,
         return gt_numba.bethe_dos(eps, D)*phase
 
     lowlevel_kernel = _integrand_function(kernel)
-    phase_quad = partial(quad, lowlevel_kernel, a=-prm.D, b=prm.D)
+    phase_quad = partial(quad, lowlevel_kernel, a=-D, b=D)
 
     assert coeffs.ndim == 1 == is_valid.ndim
 
@@ -227,7 +227,7 @@ def HomPhaseIntegEps(prm: Hubbard_Parameters, self_z, z_in, n_min, n_max,
         shape = arg.shape
         phase_pi = np.array([phase_quad(args=(arg_ii.real, arg_ii.imag))[:2]
                              for arg_ii in arg.reshape(-1)])
-        phase_pi = phase_pi.reshape(*shape, 2)
+        phase_pi = phase_pi.reshape(*shape, 2)  # (..., {x, err})
         phase_avg = np.average(phase_pi, axis=0)/np.pi
         std = np.std(phase_pi, axis=0, ddof=1)/np.pi
         if scalar_input:
