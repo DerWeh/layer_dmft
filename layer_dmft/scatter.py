@@ -128,8 +128,8 @@ def _integrand_function(integrand_function):
     return LowLevelCallable(wrapped.ctypes)
 
 
-def HomPhaseIntegW(prm: Hubbard_Parameters, self_z, z_in, n_min, n_max,
-                   valid_z, threshold=1e-8):
+def HomPhaseIntegEps(prm: Hubbard_Parameters, self_z, z_in, n_min, n_max,
+                     valid_z, threshold=1e-8):
     r"""Generate function that calculates the ϵ-integrated phase for a homogeneous system.
 
     .. math:: ϕ(ω) = ∫dϵ DOS(ϵ) \arg G(ϵ, ω)
