@@ -67,7 +67,12 @@ gf_imp_w = pade_gf(fct_z=gf_imp_iw)
 # create figure
 #
 rows, cols = gf_lay_iw.shape[:-1]
-fig, axes = plt.subplots(nrows=rows, ncols=cols, sharex=True, sharey="row", squeeze=False)
+if SPLIT_PLOTS:
+    axes = np.array([plt.subplots(nrows=rows, sharex=True, squeeze=False)[1][:, 0]
+                     for __ in range(cols)]).T
+    print(axes.shape)
+else:
+    __, axes = plt.subplots(nrows=rows, ncols=cols, sharex=True, sharey="row", squeeze=False)
 for axis in axes.flatten():
     axis.grid(True)
     axis.axhline(0, color="black", linewidth=1)
