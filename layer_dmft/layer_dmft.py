@@ -9,9 +9,11 @@ FORCE_PARAMAGNET: bool
 """
 # encoding: utf-8
 import logging
+import types
 
+from itertools import tee
 from functools import partial
-from typing import Tuple, Optional, Dict, Iterable, Any, NamedTuple
+from typing import Tuple, Optional, Dict, Iterable, Any, NamedTuple, Iterator
 from collections import namedtuple
 
 import numpy as np
@@ -447,6 +449,41 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1,
         runner.iteration(n_process=n_process, **qmc_params)
 
 
+def mixed_siams(mixing: float, new: Iterable[SIAM], old: Iterable[SIAM]) -> Iterator[SIAM]:
+    """Mix the hybridization function of `new` and `old` SIAMs.
+
+    The `SIAM` objects from `old` will be consumed, while the new SIAMs
+    remain unchanged.
+
+    Parameters
+    ----------
+    mixing : float
+        How much of the `new` hybridization function will be used, `1.` would
+        mean only the new one, `0.` only the old one.
+    new, old
+        Iterables containing the new (old) SIAMs.
+
+    Yields
+    ------
+    mixed_siam : SIAM
+        The SIAM with the mixed hybridization function in *τ* space.
+        No data in *iω* exists! This object can *only* be used to obtain
+        onsite energies and hybridization function of *τ* Δ(τ).
+
+    """
+    assert 0. <= mixing <= 1.
+    for siam_old, siam_new in zip(new, old):
+        assert siam_old.T == siam_new.T
+        assert siam_old.U == siam_new.U
+        assert siam_old.e_onsite == siam_new.e_onsite
+        hyb_mixed = mixing*siam_new.hybrid_tau() + (1-mixing)*siam_old.hybrid_tau()
+        siam_old.hybrid_tau = types.MethodType(lambda self, __=hyb_mixed: __, siam_old.hybrid_tau)
+        del siam_old.hybrid_fct
+        del siam_old.hybrid_mom
+        del siam_old.z
+        yield siam_old
+
+
 class Runner:
     """Run r-DMFT loop using `Runner.iteration`."""
 
@@ -525,4 +562,14 @@ class Runner:
         siams = self.get_impurity_models(self_z=data.self_iw, gf_z=data.gf_iw, occ=data.occ)
         update_kdws.update(siams=siams, self_iw=data.self_iw, occ=data.occ)
         update_kdws['it'] += 1
+        return data
+
+    def mixed_iteration(self, mixing, n_process=1, layer_config=None, **qmc_params):
+        """Call `Runner.iteration` and mix the hybridization functions **afterwards**."""
+        update_kdws = self.update.keywords  # pylint: disable=no-member
+        siams, old_siams = tee(update_kdws['siams'])
+        update_kdws['siams'] = siams
+        data = self.iteration(n_process=n_process, layer_config=layer_config, **qmc_params)
+        new_siams = update_kdws['siams']
+        update_kdws['siams'] = mixed_siams(mixing, new=new_siams, old=old_siams)
         return data
