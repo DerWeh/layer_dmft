@@ -11,9 +11,10 @@ import numpy as np
 
 import gftools as gt
 
-from layer_dmft import __version__, fft, high_frequency_moments as hfm, dataio
+from layer_dmft import fft, high_frequency_moments as hfm, dataio
 from layer_dmft.util import SpinResolvedArray
 from layer_dmft.model import SIAM, SIGMA
+from layer_dmft._version import get_versions
 
 N_TAU = 2048
 N_IW = 1024  # TODO: scan code for proper number
@@ -480,7 +481,7 @@ def save_data(siam: SIAM, dir_='.', name='sb', compress=True, qmc_params=DEFAULT
     """Read the **spinboson** data and save it as numpy arrays."""
     data: Dict[str, Any] = {}
     data['solver'] = __name__
-    data['__version__'] = __version__
+    data['__version__'] = get_versions()['version']
     data['__date__'] = datetime.now().isoformat()
     data['tau'] = read_tau(dir_)
     data['gf_tau'], data['gf_tau_err'] = read_gf_tau(dir_)

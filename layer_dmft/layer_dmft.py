@@ -20,7 +20,7 @@ import numpy as np
 import gftools as gt
 from scipy.interpolate import UnivariateSpline
 
-from . import __version__, charge, dataio, high_frequency_moments as hfm
+from . import charge, dataio, high_frequency_moments as hfm
 from .model import Hubbard_Parameters, SIAM
 from .interface import sb_qmc
 
@@ -37,7 +37,8 @@ FORCE_PARAMAGNET = True
 
 def log_info(prm: Hubbard_Parameters):
     """Log basic information for r-DMFT."""
-    LOGGER.info("layer_dmft version: %s", __version__)
+    from ._version import get_versions
+    LOGGER.info("layer_dmft version: %s", get_versions()['version'])
     LOGGER.info("gftools version:    %s", gt.__version__)
     LOGGER.info("%s", prm.pstr())
 
