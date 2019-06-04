@@ -70,9 +70,9 @@ iws = gt.matsubara_frequencies(np.arange(N_iw), beta=prm.beta)
 SPLIT_PLOTS = False
 PARAMAGNETIC = False if np.count_nonzero(prm.h) or not layer_dmft.FORCE_PARAMAGNET else True
 SHIFT: complex = 0.2*iws[0]
-SHIFT *= 4  # FIXME
+# SHIFT *= 4  # FIXME
 THRESHOLD: float = SHIFT.imag/2
-# THRESHOLD = np.infty  # FIXME
+THRESHOLD = np.infty  # FIXME
 
 
 if PARAMAGNETIC:  # average over spins
@@ -91,14 +91,6 @@ pade_gf = partial(pade.avg_no_neg_imag, z_in=iws, z_out=omega, kind=kind_gf, thr
 # perform Pade
 gf_lay_w = pade_gf(fct_z=gf_lay_iw)
 gf_imp_w = pade_gf(fct_z=gf_imp_iw)
-
-#
-# IMPURITY GREEN'S FUNCTION FROM SELF-ENERGY
-#
-# FIXME: save hybridization function with data
-lay_data_prev = lay_obj.iter(iteration-1)
-siams = prm.get_impurity_models(z=iws, self_z=lay_data_prev['self_iw'],
-                                gf_z=lay_data_prev['gf_iw'], occ=lay_data_prev['occ'])
 
 #
 # create figure
@@ -135,24 +127,6 @@ for ax, gf_imp_ll, gf_imp_ll_err in zip(axes.reshape((-1)), gf_imp_w.x.reshape((
                                         gf_imp_w.err.reshape((-1, N_w))):
     plot.err_plot(x=omega.real, y=gf_imp_ll.imag, yerr=gf_imp_ll_err.imag, axis=ax,
                   fmt='--', label='Gf_imp')
-for lay, siam_ll in enumerate(siams):
-    siam_ll: model.SIAM
-    if lay not in layers:
-        break
-    self_iw = lay_data['self_iw'][:, lay]
-    coeff = pade.coefficients(iws, fct_z=siam_ll.hybrid_fct + self_iw)
-    kind_self = pade.KindSelf(N_iw//10, 8*N_iw//10)
-    valid = no_neg_imag(omega, kind_self.islice(
-        pade.calc_iterator(omega, z_in=iws, coeff=coeff)))
-
-    def _mod(z, pade_z):
-        return 1/(z - pade_z + siam_ll.e_onsite[..., np.newaxis])
-
-    gf_hyb = pade.Mod_Averager(z_in=iws, coeff=coeff, mod_fct=_mod,
-                               valid_pades=valid, kind=kind_self)(omega)
-    for ax, sp in zip(axes[:,lay], model.Spins):
-        plot.err_plot(x=omega.real, y=gf_hyb.x[sp].imag, yerr=gf_hyb.err[sp].imag,
-                      axis=ax, fmt='--', label=r'Gf_hyb[$\Sigma$]')
 
 
 spin_strs = ('↑', '↓')
