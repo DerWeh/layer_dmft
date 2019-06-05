@@ -94,7 +94,7 @@ def mapping_lay_imp(prm_U, layer_config=None)->MapLayer:
         Layers which will be mapped to a SIAM.
     mlayer.imp2lay : int np.ndarray
         Mapping for which layers each impurity model will be used.
-    mlayer.unchanged : int np.ndarray
+    mlayer.updated : int np.ndarray
         Indices of layers, where new self-energy will be calculated.
     mlayer.unchanged : int np.ndarray
         Indices of layers, where the old self-energy will be reused.
@@ -132,13 +132,15 @@ def mapping_lay_imp(prm_U, layer_config=None)->MapLayer:
                          f"expected: {N_l}")
     if np.any(map_lay2imp > N_l - 1):
         raise ValueError("'layer_config' doesn't point to valid layers"
-                         f" (max: {N_l}): {layer_config}")
-    unique_layers, map_imp2lay = np.unique(map_lay2imp[np.isin(map_lay2imp, interacting_layers)],
-                                           return_inverse=True)
-    assert interacting_layers.size >= map_imp2lay.size
-    unchanged = np.flatnonzero(map_lay2imp < 0)
-    updated = np.flatnonzero(map_lay2imp >= 0)
-    assert updated.size == map_imp2lay.size
+                         f" (max: {N_l-1}): {layer_config}")
+    map_lay2imp_int = map_lay2imp[interacting_layers]
+    unique_layers, map_imp2lay = np.unique(map_lay2imp_int, return_inverse=True)
+    assert interacting_layers.size >= map_imp2lay.size, \
+        "There have to be more interacting layers than impurities"
+    unchanged = interacting_layers[np.flatnonzero(map_lay2imp_int < 0)]
+    updated = interacting_layers[np.flatnonzero(map_lay2imp_int >= 0)]
+    assert updated.size == map_imp2lay.size, \
+        "Every updated layer must be mapped to an impurity model"
     return MapLayer(interacting_layers, unique_layers, map_imp2lay, updated, unchanged)
 
 
