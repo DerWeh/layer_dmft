@@ -3,7 +3,11 @@ import logging
 
 from functools import partial, partialmethod
 
-from ._version import get_versions
+# pylint: disable=unused-import
+from layer_dmft.model import Hubbard_Parameters, SIAM
+from layer_dmft._version import get_versions
+from layer_dmft.layer_dmft import Runner
+
 __version__ = get_versions()['version']
 del get_versions
 
