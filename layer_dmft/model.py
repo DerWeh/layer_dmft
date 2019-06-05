@@ -218,13 +218,19 @@ class Hubbard_Parameters:
 
     __slots__ = ('_N_l', 'T', 'D', 'mu', 'V', 'h', 'U', 't_mat', 'hilbert_transform')
 
-    def __init__(self, N_l: int) -> None:
+    def __init__(self, N_l: int, lattice: str = None) -> None:
         """Empty initialization creating of according shape filled with zeros."""
         self._N_l = N_l
         self.T: float
         self.D: float
-        self.hilbert_transform = callable
-        del self.hilbert_transform
+        if lattice is None:
+            self.hilbert_transform = callable
+            del self.hilbert_transform
+            import warnings
+            warnings.filterwarnings("default", category=DeprecationWarning, module=__name__)
+            warnings.warn('Deprecated, state lattice at construction', DeprecationWarning)
+        else:
+            self.hilbert_transform = hilbert_transform[lattice]
         self.mu = np.zeros(N_l)
         self.V = np.zeros(N_l)
         self.h = np.zeros(N_l)
@@ -568,7 +574,7 @@ class Hubbard_Parameters:
         """
         eps = np.asarray(eps)
         assert eps.ndim <= 1
-        assert len(self_z.shape) == 3
+        assert self_z.ndim == 3
         assert z.size == self_z.shape[-1]
         shape = self_z.shape
         if diagonal:
@@ -684,6 +690,8 @@ class Hubbard_Parameters:
                 "`t_mat`^† = `t_mat` must be fulfilled.\n"
                 f"t_mat: {self.t_mat}"
             )
+        # check that vales are assigned
+        self.D, self.T  # pylint: disable=pointless-statement
 
     def __repr__(self):
         _str = "Hubbard model parameters: "
