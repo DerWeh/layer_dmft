@@ -452,6 +452,42 @@ def main(prm: Hubbard_Parameters, n_iter, n_process=1,
         runner.iteration(n_process=n_process, **qmc_params)
 
 
+class MockSiam:
+    __slots__ = ('T', 'e_onsite', 'U', 'hybrid_fct', '_hybrid_tau')
+
+    def __init__(self, e_onsite, U: float, T: float, hybrid_fct, hybrid_tau) -> None:
+        r"""Create effective single impurity Anderson model.
+
+        In frequency space the non-interacting Green's function is
+
+        .. math::
+            G_{0\,σ}(z) = (z - ϵ_{σ} - Δ_{σ}(z))^{-1}
+
+        Parameters
+        ----------
+        e_onsite : (2, ) float array_like
+            The onsite energy :math:`ϵ_{σ}` of the impurity.
+        U : float
+            The local interaction strength of the impurity site.
+        T : float
+            The temperature.
+
+        """
+        self.e_onsite = np.asanyarray(e_onsite)
+        self.U = U
+        self.T = T
+        self.hybrid_fct = hybrid_fct
+        self._hybrid_tau = hybrid_tau
+
+    @property
+    def beta(self):
+        return 1./self.T
+
+    def hybrid_tau(self):
+        """Return given hybridization function."""
+        return self._hybrid_tau
+
+
 def mixed_siams(mixing: float, new: Iterable[SIAM], old: Iterable[SIAM]) -> Iterator[SIAM]:
     """Mix the hybridization function of `new` and `old` SIAMs.
 
@@ -478,13 +514,11 @@ def mixed_siams(mixing: float, new: Iterable[SIAM], old: Iterable[SIAM]) -> Iter
     for siam_old, siam_new in zip(new, old):
         assert siam_old.T == siam_new.T
         assert siam_old.U == siam_new.U
-        assert siam_old.e_onsite == siam_new.e_onsite
-        hyb_mixed = mixing*siam_new.hybrid_tau() + (1-mixing)*siam_old.hybrid_tau()
-        siam_old.hybrid_tau = types.MethodType(lambda self, __=hyb_mixed: __, siam_old.hybrid_tau)
-        del siam_old.hybrid_fct
-        del siam_old.hybrid_mom
-        del siam_old.z
-        yield siam_old
+        assert np.all(siam_old.e_onsite == siam_new.e_onsite)
+        hyb_tau_mixed = mixing*siam_new.hybrid_tau() + (1-mixing)*siam_old.hybrid_tau()
+        hyb_iw_mixed = mixing*siam_new.hybrid_fct + (1-mixing)*siam_old.hybrid_fct
+        yield MockSiam(T=siam_old.T, e_onsite=siam_old.e_onsite, U=siam_old.U,
+                       hybrid_fct=hyb_iw_mixed, hybrid_tau=hyb_tau_mixed)
 
 
 class Runner:
