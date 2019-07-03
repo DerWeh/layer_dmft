@@ -281,8 +281,6 @@ def fit_iw_tail(gf_iw, beta, order) -> FourierFct:
                            p0=(1.,), sigma=to_float(sigma)[START:])
     LOGGER.info('Amplitude of fit: %s', popt)
     LOGGER.debug('Accuracy of fit: %s', np.sqrt(np.diag(pcov)))
-    print('Amplitude of fit: %s', popt)
-    print('Accuracy of fit: %s', np.sqrt(np.diag(pcov)))
     gf_tau_fct = get_order_n_pole(order)
     tail_tau = popt*.5*(gf_tau_fct(tau, CC, beta) + gf_tau_fct(tau, -CC, beta))
     if _has_nan(tail_tau):
