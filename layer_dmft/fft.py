@@ -44,7 +44,7 @@ def bare_dft_iw2tau(gf_iw, beta):
     return gf_tau
 
 
-def barde_dft_tau2iw(gf_tau, beta):
+def bare_dft_tau2iw(gf_tau, beta):
     r"""Perform the discrete Fourier transform on the real function `gf_tau`.
 
     `gf_tau` has to be given on the interval τ in [0, β].
@@ -104,7 +104,7 @@ def dft_iw2tau(gf_iw, beta, moments=(1.,), dft_backend=bare_dft_iw2tau):
     return gf_tau
 
 
-def dft_tau2iw(gf_tau, beta, moments=(1.,), dft_backend=barde_dft_tau2iw):
+def dft_tau2iw(gf_tau, beta, moments=(1.,), dft_backend=bare_dft_tau2iw):
     """DFT from τ to iω, needing the 1/iw tail `moment`.
 
     Parameters
