@@ -129,12 +129,11 @@ class SIAM:
             The Green's function for spin up and down.
 
         """
-        assert hartree is False, "Not implemented yet"
-        if hartree is False:  # for common loop
-            hartree = (False, False)
+        if hartree is False:
+            e_onsite = self.e_onsite
         else:  # first axis needs to be spin such that loop is possible
-            assert hartree.shape[0] == 2
-        gf_0 = 1./(self.z + self.e_onsite[:, newaxis] - self.hybrid_fct)
+            e_onsite = self.e_onsite - hartree*self.U
+        gf_0 = 1./(self.z + e_onsite[:, newaxis] - self.hybrid_fct)
         return gf_0.view(type=SpinResolvedArray)
 
     def occ0(self, gf_iw, hartree=False, return_err=True, total=False):
