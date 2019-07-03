@@ -65,6 +65,43 @@ def bare_dft_iw2tau(gf_iw, beta):
     return gf_tau
 
 
+def soft_dft_iw2tau(gf_iw, beta):
+    r"""Perform the discrete Fourier transform on the Hermitian function `gf_iw`.
+
+    Add a tail letting `gf_iw` go to 0. The tail is just a cosine function to
+    exactly hit the 0.
+    This is unphysical but suppresses oscillations. This methods should be used
+    with care, as it might hide errors.
+
+    Parameters
+    ----------
+    gf_iw : (..., N_iw) complex np.ndarray
+        The function at **fermionic** Matsubara frequencies.
+    beta : float
+        The inverse temperature.
+
+    Returns
+    -------
+    gf_tau : (..., 2*N_iw + 1) float np.ndarray
+        The Fourier transform of `gf_iw` on the interval [0, β].
+
+    """
+    shape = gf_iw.shape
+    gf_iw_extended = np.zeros(shape[:-1] + (shape[-1]*2,), dtype=gf_iw.dtype)
+    gf_iw_extended[..., :shape[-1]] = gf_iw
+    tail_range = np.linspace(0, np.pi, num=shape[-1])
+    tail = .5*(np.cos(tail_range) + 1.)
+    LOGGER.debug("Remaining tail approximated by 'cos': %s", gf_iw[..., -1:])
+    gf_iw_extended[..., shape[-1]:] = tail*gf_iw[..., -1:]
+    N_tau = 2*gf_iw_extended.shape[-1] + 1
+    gf_iw_paded = np.zeros(shape[:-1] + (N_tau,), dtype=gf_iw.dtype)
+    gf_iw_paded[..., 1:-1:2] = gf_iw_extended
+    gf_tau = np.fft.hfft(gf_iw_paded/beta)
+    gf_tau = gf_tau[..., :N_tau:2]  # trim to [0, \beta]
+
+    return gf_tau
+
+
 def bare_dft_tau2iw(gf_tau, beta):
     r"""Perform the discrete Fourier transform on the real function `gf_tau`.
 
@@ -92,7 +129,7 @@ def bare_dft_tau2iw(gf_tau, beta):
     return gf_iw
 
 
-def dft_iw2tau(gf_iw, beta, moments=(1.,), dft_backend=bare_dft_iw2tau):
+def dft_iw2tau(gf_iw, beta, moments=(1.,), dft_backend=soft_dft_iw2tau):
     """DFT from iω to τ, needing the 1/iw tail `moment`.
 
     Parameters
