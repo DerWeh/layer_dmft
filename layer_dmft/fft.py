@@ -4,6 +4,8 @@ import logging
 from collections import namedtuple
 
 import numpy as np
+from scipy.optimize import curve_fit
+from wrapt import decorator
 import gftools as gt
 
 LOGGER = logging.getLogger(__name__)
@@ -92,8 +94,13 @@ def dft_iw2tau(gf_iw, beta, moments=(1.,), dft_backend=bare_dft_iw2tau):
     """
     mom = get_gf_from_moments(moments, beta, N_iw=gf_iw.shape[-1])
     gf_iw = gf_iw - mom.iw
+    order = len(moments)  # these orders are done by moments
+    # fit of tail for real part (even order) and imaginary part (odd order)
+    tail1 = fit_iw_tail(gf_iw, beta=beta, order=order+1)
+    tail2 = fit_iw_tail(gf_iw, beta=beta, order=order+2)
+    gf_iw = gf_iw - tail1.iw - tail2.iw
     gf_tau = dft_backend(gf_iw, beta)
-    gf_tau += mom.tau
+    gf_tau += mom.tau + tail1.tau + tail2.tau
     return gf_tau
 
 
@@ -164,6 +171,65 @@ def get_gf_from_moments(moments, beta, N_iw):
     else:
         raise NotImplementedError()
     return FourierFct(iw=mom_iw, tau=mom_tau)
+
+
+@_return_fourier_fct(otypes=[complex, float], signature='(n),(),()->(n),(m)')
+def fit_iw_tail(gf_iw, beta, order) -> FourierFct:
+    """Fit the tail of `gf_iw` with function behaving as (iw)^{-`order`}.
+
+    Parameters
+    ----------
+    gf_iw : (..., N_iw) complex np.ndarray
+        The function at **fermionic** Matsubara frequencies.
+    beta : float
+        The inverse temperature `beta` = 1/T.
+    order : int
+        Leading order of the high-frequency behavior of the tail.
+
+    Returns
+    -------
+    fit_iw_tail.iw : (..., N_iw) complex np.ndarray
+        The tail fit for the same frequencies as `gf_iw`.
+    fit_iw_tail.tau : (..., 2*N_iw + 1) float np.ndarray
+        The Fourier transform of the tail for τ ∈ [0, β].
+
+    Raises
+    ------
+    RuntimeError
+        If the Fourier transform of the tail contains `np.nan`. This should be
+        fixed and never occur. It indicates a overflow in `get_gf_from_moments()`.
+
+    """
+    N_iw = gf_iw.shape[-1]
+    odd = order % 2
+    # CC = 2.*order  # shift to make the function small for low frequencies
+    CC = 0.
+    iws = gt.matsubara_frequencies(np.arange(N_iw), beta=beta)
+    tau = np.linspace(0, beta, num=2*N_iw + 1, endpoint=True)
+
+    def to_float(number):
+        # scipy only handles np.float64
+        return (number.imag if odd else number.real).astype(np.float64)
+
+    def tail(iws_, moment, return_float=True):
+        tail = moment * .5 * ((iws_ + CC)**-order + (iws_ - CC)**-order)
+        return to_float(tail) if return_float else tail
+
+    sigma = iws**(-order-2)  # next order correction that is odd/even
+
+    # find temperature dependent heuristic
+    START = 0  # from where to fit the tail
+    popt, pcov = curve_fit(tail, iws[START:], ydata=to_float(gf_iw)[START:],
+                           p0=(1.,), sigma=to_float(sigma)[START:])
+    LOGGER.info('Amplitude of fit: %s', popt)
+    LOGGER.debug('Accuracy of fit: %s', np.sqrt(np.diag(pcov)))
+    print('Amplitude of fit: %s', popt)
+    print('Accuracy of fit: %s', np.sqrt(np.diag(pcov)))
+    gf_tau_fct = get_order_n_pole(order)
+    tail_tau = popt*.5*(gf_tau_fct(tau, CC, beta) + gf_tau_fct(tau, -CC, beta))
+    if _has_nan(tail_tau):
+        raise RuntimeError("Calculation of tail-fit field. Most likely a overflow occurred.")
+    return FourierFct(iw=tail(iws, popt, return_float=False), tau=tail_tau)
 
 
 def ft_pole2tau(tau, pole, beta):
