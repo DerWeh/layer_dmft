@@ -242,6 +242,11 @@ class Hubbard_Parameters:
         """Inverse temperature."""
         return 1./self.T
 
+    @property
+    def N_l(self) -> int:
+        """Number of layers"""
+        return self._N_l
+
     @beta.setter
     def beta(self, value):
         self.T = 1./value
