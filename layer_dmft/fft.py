@@ -1,5 +1,6 @@
 """Fourier transforms for Matsubara Green's functions for iω_n ↔ τ."""
 import logging
+from functools import lru_cache
 
 from collections import namedtuple
 
@@ -10,6 +11,26 @@ import gftools as gt
 
 LOGGER = logging.getLogger(__name__)
 FourierFct = namedtuple('FourierFct', ['iw', 'tau'])
+
+
+def _return_fourier_fct(*args, **kwds):
+    """Vectorize function and return result as `FourierFct`."""
+    def decorate(wrapped):
+        vectorized_fct = np.vectorize(wrapped, *args, **kwds)
+
+        # pylint: disable=unused-argument
+        @decorator
+        def wrapper(wrapped, instace, args_, kwds_) -> FourierFct:
+            return FourierFct(*vectorized_fct(*args_, **kwds_))
+
+        return wrapper(wrapped)  # pylint: disable=no-value-for-parameter
+    return decorate
+
+
+def _has_nan(x):
+    """Check for `np.nan` in `x`."""
+    x = x.reshape(-1)
+    return np.isnan(np.dot(x, x))
 
 
 def bare_dft_iw2tau(gf_iw, beta):
@@ -239,3 +260,47 @@ def ft_pole2tau(tau, pole, beta):
     return -np.exp((beta - tau - max_exp)*pole)/(np.exp((beta - max_exp)*pole) + np.exp(-max_exp*pole))
 
 
+
+
+@lru_cache(maxsize=6)
+def get_order_n_pole(order):
+    """Generate function to calculate the Fourier transform `order`-order pole.
+
+    The Fourier transform of :math:`{(z-ϵ)}^{n}` is calculate, where `ϵ` is the
+    position of the pole and `n` the order of the pole.
+
+    Parameters
+    ----------
+    order : int
+        The order of the pole
+
+    Returns
+    -------
+    order_n_pole : Callable
+        The function (tau, pole, beta)->gf_tau calculating the Fourier transform.
+
+    """
+    import theano
+    import theano.tensor as T
+    from theano.ifelse import ifelse
+    from math import factorial
+
+    pole = T.dscalar('pole')
+    beta = T.dscalar('beta')
+    # tau = T.dscalar('tau')
+    tau = T.dscalar('tau')
+    fermi_fct = (1 + T.tanh(-beta*pole/2))/2
+
+    gf_tau = ifelse(
+        pole > 0,  # avoid overflows asserting negative exponent
+        -(1 - fermi_fct)*T.exp(-pole*tau),
+        -fermi_fct*T.exp(pole*(beta-tau)),
+    )
+    n_gf_tau = gf_tau
+    for __ in range(order-1):
+        # n_gf_tau = T.grad(n_gf_tau, pole)
+        n_gf_tau = T.jacobian(n_gf_tau, pole)
+    n_gf_tau = n_gf_tau / factorial(order-1)
+    # resuts, __ = theano.scan(n_gf_tau.)
+    func = theano.function([tau, pole, beta], n_gf_tau)
+    return np.vectorize(func, otypes=[np.float])
