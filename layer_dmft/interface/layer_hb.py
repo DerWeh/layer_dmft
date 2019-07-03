@@ -29,8 +29,8 @@ IM_STEP = 2
 # there are 8 different coulumns per layer and spin
 # 1:\Re Δ(iω_n) 2:\Im Δ(iω_n) 3: 4: 5: 6:\Im F(iω_n) 7: 8:\Im G(iω_n)
 DOS_DICT = {
-    -1: model.hilbert_transform['chain'],
-    1: model.hilbert_transform['bethe']
+    -1: 'chain',
+    1: 'bethe'
 }
 
 
@@ -141,8 +141,7 @@ def load_param(dir_='.') -> model.Hubbard_Parameters:
         find(out_fp, 'Layer configuration')
         imp_labels = find_array(out_fp, 'impurity label', dtype=np.int)
         N_l = imp_labels.size
-        prm = model.Hubbard_Parameters(N_l=N_l)
-        prm.hilbert_transform = DOS_DICT[DOS]
+        prm = model.Hubbard_Parameters(N_l=N_l, lattice=DOS_DICT[DOS])
 
         find(out_fp, 'transfer label')
         rhs = ' '.join(next(out_fp).strip() for __ in range(N_l))
