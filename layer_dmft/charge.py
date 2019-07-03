@@ -3,7 +3,7 @@
 # File              : charge.py
 # Author            : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # Date              : 02.08.2018
-# Last Modified Date: 01.11.2018
+# Last Modified Date: 07.06.2019
 # Last Modified By  : Weh Andreas <andreas.weh@physik.uni-augsburg.de>
 # encoding: utf-8
 """Handles the charge self-consistency loop of the combined scheme."""
@@ -20,9 +20,10 @@ from scipy import optimize
 
 import gftools as gt
 
-from . import plot
+from . import plot, high_frequency_moments as hfm
 from .capacitor_formula import potential_energy_vector
 from .util import attribute
+from .model import Hubbard_Parameters
 
 LOGGER = logging.getLogger(__name__)
 SMALL_WIDTH = 50
@@ -84,7 +85,7 @@ def set_getV(e_schot=None):
 
 
 @counter
-def update_occupation(occ_init, i_omega, params, out_dict):
+def update_occupation(occ_init, i_omega, params, out_dict, self_iw_bare=None):
     r"""Calculate new occupation by setting :math:`V_l` from the method `get_V`.
 
     This methods modifies `params.V`.
@@ -114,7 +115,11 @@ def update_occupation(occ_init, i_omega, params, out_dict):
     assert occ_init.shape[0] <= 2
     assert len(occ_init.shape) == 2
     params.V[:] = out_dict['V'] = get_V(occ_init.sum(axis=0) - np.average(occ_init.sum(axis=0)))
-    out_dict['Gf'] = gf_iw = params.gf0(i_omega, hartree=occ_init[::-1])
+    if self_iw_bare is None:
+        out_dict['Gf'] = gf_iw = params.gf0(i_omega, hartree=occ_init[::-1])
+    else:
+        self_iw = self_iw_bare + hfm.self_m0(params.U, occ_init[::-1])[..., np.newaxis]
+        gf_iw = params.gf_dmft_s(i_omega, self_z=self_iw)
     occ = out_dict['occ'] = params.occ0(gf_iw, hartree=occ_init[::-1], return_err=False)
     return occ - occ_init
 
@@ -308,6 +313,72 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
     LOGGER.info("Success of finding self-consistent occupation: %s", sol.success)
     LOGGER.info("%s", sol.message)
     return ChargeSelfconsistency(sol=sol, occ=occ, V=params.V)
+
+
+def charge_self_consistency_int(prm: Hubbard_Parameters, self_iw, occ0, tol):
+    """Charge self-consistency using root-finding algorithm.
+
+    Parameters
+    ----------
+    parameters : model.Hubbard_Parameters
+        `model.Hubbard_Parameters` object with the parameters set,
+        determining Hamiltonian.
+    tol : float
+        Target tol of the self-consistency. Iteration stops if it is
+        achieved.
+    occ : ndarray, optional
+        Starting value for the occupation.
+
+    Returns
+    -------
+    sol : OptimizedResult
+        The solution of the optimization routine, see `optimize.root`.
+        `x` contains the actual values, and `success` states if convergence was
+        achieved.
+    occ : SpinResolvedArray
+        The final occupation of the converged result.
+    V : ndarray
+        The final potential of the converged result.
+
+    """
+    # TODO: optimize n_points from error guess
+    # TODO: check against given `n` if sum gives right result
+    # TODO: give back self-energy?
+    # optimization: allow mask
+    assert self_iw.shape[-2] == occ0.shape[-1] == prm.N_l
+    iws = gt.matsubara_frequencies(np.arange(self_iw.shape[-1]), beta=prm.beta)
+
+    # subtract Hartree part
+    self_iw_bare = self_iw - hfm.self_m0(prm.U, occ0[::-1])[..., np.newaxis]
+
+    output = {}
+
+    # TODO: check tol of density for target tol
+    optimizer = partial(update_occupation, i_omega=iws, params=prm, out_dict=output,
+                        self_iw_bare=self_iw_bare)
+    solve = partial(_root, fun=optimizer, x0=occ0, tol=tol)
+    LOGGER.progress("Search self-consistent occupation number")
+    try:
+        sol = solve()
+    except KeyboardInterrupt as key_err:
+        print('Optimization canceled -- trying to continue')
+        try:
+            hartree_occ = output['occ'][::-1]
+        except KeyError:
+            print('Failed! No occupation so far.')
+            raise key_err
+        sol = optimize.OptimizeResult()
+        sol.x = output['occ']
+        sol.success = False
+        sol.message = 'Optimization interrupted by user, not terminated.'
+    else:
+        hartree_occ = output['occ'][::-1]
+    # finalize
+    gf_iw = prm.gf_dmft_s(iws, self_z=self_iw_bare + hfm.self_m0(prm.U, hartree_occ)[..., np.newaxis])
+    occ = prm.occ0(gf_iw, hartree=hartree_occ, return_err=True)
+    LOGGER.info("Success of finding self-consistent occupation: %s", sol.success)
+    LOGGER.info("%s", sol.message)
+    return ChargeSelfconsistency(sol=sol, occ=occ, V=prm.V)
 
 
 def plot_results(occ, prm, grid=None):
