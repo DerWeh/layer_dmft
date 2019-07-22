@@ -156,7 +156,7 @@ def write_hybridization_tau(tau, hybrid_tau):
     """
     # w2dynamics expects negative quantity
     N_TAU = DEFAULT_QMC_PARAMS.Ntau
-    hybrid_tau = -hybrid_tau
+    hybrid_tau = -hybrid_tau[..., ::-1]
     assert hybrid_tau.shape[-1] == N_TAU
     digits = 14
     fill = 2 + digits + 4
@@ -241,7 +241,7 @@ def check_consistency(siam: SIAM, h5output, N_iw: int):
     if not np.allclose(siam.hybrid_fct.conj(), h5output['fiw/value'][0, :, N_iw:]):
         LOGGER.warning('Δ(iω_n) of w2dynamics solver and layer_dmft mismatch.')
         consistent = False
-    if not np.allclose(siam.hybrid_tau(), -h5output['ftau/value'][0]):
+    if not np.allclose(siam.hybrid_tau(), -h5output['ftau/value'][0][..., ::-1]):
         LOGGER.warning('Δ(τ) of w2dynamics solver and layer_dmft mismatch.')
         consistent = False
     if not np.allclose(siam.gf0(), h5output['g0iw/value'][0, :, N_iw:]):
@@ -263,9 +263,12 @@ def save_data(siam: SIAM, dir_='.', name='w2d', compress=True, qmc_params=DEFAUL
         output = h5file['stat-last/ineq-001/']
         # only positive frequencies
         data['tau'] = np.linspace(0, siam.beta, num=N_iw, endpoint=True)
-        data['gf_tau'], data['gf_tau_err'] = output['gtau/value'][0], output['gtau/error'][0]
+        data['gf_tau'], data['gf_tau_err'] = -output['gtau/value'][0], output['gtau/error'][0]
+        assert np.all(-data['gf_tau'][..., -1] - data['gf_tau'][..., 0] > 0), "Should be 1"
+
         # data['gf_x_self_tau'] = XXX
         data['hybrid_iw'] = siam.hybrid_fct
+        assert np.all(data['hybrid_iw'][..., 0].imag < 0), "causality -> negative imaginary part"
 
         data['occ'] = np.diagonal(output['occ/value'][0, :, 0, :])
         data['occ_err'] = np.diagonal(output['occ/error'][0, :, 0, :])
@@ -277,12 +280,15 @@ def save_data(siam: SIAM, dir_='.', name='w2d', compress=True, qmc_params=DEFAUL
 
         dft = partial(fft.dft_tau2iw, beta=siam.beta)
         data['gf_iw'] = dft(data['gf_tau'], moments=[(1, 1), gf_m2])
+        assert np.all(data['gf_iw'][..., 0].imag < 0), "causality -> negative imaginary part"
         # gf_x_self_iw = dft(data['gf_x_self_tau'], moments=[gf_x_self_m1, gf_x_self_m2]) XXX
 
         # data['gf_x_self_iw'] = XXX
         # data['self_energy_iw'] = XXX
 
         data['self_energy_iw'] = output['siw/value'][0, :, N_iw:]  # FIXME
+        assert np.all(data['self_energy_iw'][..., 0].imag < 0) \
+            , "causality -> negative imaginary part"
 
         data['gf_iw_solver'] = output['giw/value'][0, :, N_iw:]  # just for debugging
         data['self_energy_iw_solver'] = output['siw/value'][0, :, N_iw:]  # just for debugging
