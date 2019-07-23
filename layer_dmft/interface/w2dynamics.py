@@ -22,10 +22,10 @@ W2DYN_EXECUTABLE = '/home/andreasw/.pyenv/shims/python ' \
 PARAMETERFILE = 'Parameters.in'
 OUTPUT_FILE = "w2d_output.txt"
 
-cfg = configobj.ConfigObj()
+CFG = configobj.ConfigObj()
 
-cfg.filename = PARAMETERFILE
-cfg['General'] = {
+CFG.filename = PARAMETERFILE
+CFG['General'] = {
     'DOS': 'readDelta',
     'DMFTsteps': 0,
     'StatisticSteps': 1,
@@ -34,10 +34,34 @@ cfg['General'] = {
     'magnetism': 'ferro',  # magnetism will be handled by layer_dmft itself
     'FileNamePrefix': 'w2d-data',
 }
-cfg['Atoms'] = {}
-cfg['Atoms']['1'] = {
+CFG['Atoms'] = {}
+CFG['Atoms']['1'] = {
     'Nd': 1,  # single Band
     'Hamiltonian': 'Density',
+}
+CFG['QMC'] = {
+    'MeasGiw': 1,
+    # 'WormMeasGiw': 1,
+    # 'MeasGSigmaiw': 1,  # causes issues
+    # 'WormMeasGSigmaiw': 1,
+}
+
+CFG_WORM = configobj.ConfigObj()
+
+CFG_WORM.filename = PARAMETERFILE
+CFG_WORM['General'] = CFG['General'].copy()
+CFG_WORM['General']['StatisticSteps'] = 0
+CFG_WORM['General']['WormSteps'] = 1
+CFG_WORM['General']['FileNamePrefix'] = 'w2d-data-worm'
+CFG_WORM['Atoms'] = {'1': CFG['Atoms']['1'].copy()}
+CFG_WORM['QMC'] = {
+    'WormMeasGiw': 1,
+    'WormMeasGtau': 1,
+    'WormMeasGSigmaiw': 1,
+    'PercentageWormInsert': 0.3,
+    'PercentageWormReplace': 0.1,
+    'WormComponents': (1, 4),
+    'WormSearchEta': 1,
 }
 
 
@@ -172,7 +196,7 @@ def get_path(dir_) -> Path:
     return dir_
 
 
-def setup(siam: SIAM, dir_='.', **kwds):
+def setup(siam: SIAM, dir_='.', worm=False, **kwds):
     """Prepare the input files to use **w2dynamics** code.
 
     Parameters
@@ -194,9 +218,10 @@ def setup(siam: SIAM, dir_='.', **kwds):
     write_hybridization_tau(tau, hybrid_tau)
     write_hybridization_iw(siam.z, siam.hybrid_fct)
     e_onsite = siam.e_onsite
-    np.savetxt(cfg['General']['muimpFile'], [e_onsite[Spins.up], e_onsite[Spins.dn]])
+    cfg = CFG_WORM if worm else CFG
+    np.savetxt(CFG['General']['muimpFile'], [e_onsite[Spins.up], e_onsite[Spins.dn]])
     # THIS OVERWRITES THE CONFIG!
-    cfg['QMC'] = kwds
+    cfg['QMC'].update(kwds)
     cfg['General']['beta'] = siam.beta
     cfg['Atoms']['1']['Udd'] = siam.U
     cfg.write()
@@ -221,7 +246,7 @@ def run(dir_=".", n_process=1):
             raise CalledProcessError(retcode, proc.args)
 
 
-def get_last_output(dir_='.'):
+def get_last_output(dir_='.', cfg=CFG):
     """Return filename of last hdf5 output solely determined by the date."""
     dir_ = Path(dir_).absolute()
     pattern = cfg['General']['FileNamePrefix']+'*.hdf5'
@@ -295,11 +320,64 @@ def save_data(siam: SIAM, dir_='.', name='w2d', compress=True, qmc_params=DEFAUL
     return data
 
 
-def solve(siam: SIAM, n_process, output_name, dir_='.', **kwds):
+def get_worm(container, mask=()):
+    components = ('00001', '00004')
+    val = np.stack([container[f"{component}/value"][mask] for component
+                    in components])
+    err = np.stack([container[f"{component}/error"][mask] for component
+                    in components])
+    return val, err
+
+
+def save_worm_data(siam: SIAM, dir_='.', name='w2d', compress=True,
+                   qmc_params=DEFAULT_QMC_PARAMS) -> Dict[str, Any]:
+    """Read the **spinboson** data and save it as numpy arrays."""
+    data: Dict[str, Any] = {}
+    data['solver'] = __name__
+    data['__version__'] = __version__
+    data['__date__'] = datetime.now().isoformat()
+    N_iw = qmc_params['Niw']
+    N_tau = qmc_params['Ntau']
+
+    # TODO: write unit test for non-interacting case
+    with h5py.File(get_last_output(dir_, CFG_WORM), mode='r') as h5file:
+        output = h5file['worm-last/ineq-001/']
+        # only positive frequencies
+        data['tau'] = np.linspace(0, siam.beta, num=N_tau, endpoint=True)
+        data['gf_tau'], data['gf_tau_err'] = get_worm(output['gtau-worm'])
+        data['gf_tau'] *= -1
+        assert np.all(-data['gf_tau'][..., -1] - data['gf_tau'][..., 0] > 0), "Should be 1"
+
+        data['hybrid_iw'] = siam.hybrid_fct
+        assert np.all(data['hybrid_iw'][..., 0].imag < 0), "causality -> negative imaginary part"
+
+        data['occ'] = -data['gf_tau'][:, -1]
+        data['occ_err'] = -data['gf_tau_err'][:, -1]
+
+        data['gf_iw'], data['gf_iw_err'] = get_worm(output['giw-worm'], mask=slice(N_iw, None))
+        assert np.all(data['gf_iw'][..., 0].imag < 0), "causality -> negative imaginary part"
+        data['gf_x_self_iw'], data['gf_x_self_iw_err'] = get_worm(output['gsigmaiw-worm'], mask=slice(N_iw, None))
+        # gf_x_self_iw = dft(data['gf_x_self_tau'], moments=[gf_x_self_m1, gf_x_self_m2]) XXX
+
+
+        data['self_energy_iw'] = -data['gf_x_self_iw']/data['gf_iw']
+        assert np.all(data['self_energy_iw'][..., 0].imag < 0) \
+            , "causality -> negative imaginary part"
+
+        data['qmc_params'] = dict(qmc_params)
+        if not check_consistency(siam, output, N_iw=N_iw):
+            raise RuntimeError("Interface seems to be broken.")
+        dataio.save_data(dir_=Path(dir_).expanduser()/dataio.IMP_OUTPUT, name=name,
+                         compress=compress, **data)
+    return data
+
+
+def solve(siam: SIAM, n_process, output_name, dir_='.', worm=False, **kwds):
     if set(kwds.keys()) - QMCParams.slots():
         raise TypeError(f"Unknown keyword arguments: {kwds.keys()-QMCParams.slots()}")
     solver_kwds = ChainMap(kwds, DEFAULT_QMC_PARAMS)
-    setup(siam, dir_=dir_, **solver_kwds)
+    setup(siam, dir_=dir_, worm=worm, **solver_kwds)
     run(n_process=n_process, dir_=dir_)
-    data = save_data(siam, name=output_name, dir_=dir_, qmc_params=solver_kwds)
+    _save_data = save_worm_data if worm else save_data
+    data = _save_data(siam, name=output_name, dir_=dir_, qmc_params=solver_kwds)
     return data
