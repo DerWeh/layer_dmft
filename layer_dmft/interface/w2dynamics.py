@@ -53,7 +53,7 @@ class QMCParams(Mapping):
     __setitem__ = object.__setattr__
 
     def __init__(self, Nwarmups: int, Nmeas: int, NCorr: int,
-                 Ntau: int, Niw: int, NLegMax: int, NLegOrder: int,
+                 Ntau: int, Niw: int,
                  MeasDensityMatrix: int = 1, Eigenbasis: int = 1) -> None:
         """Initialize CT-Hyb parameters defining what will be sampled.
 
@@ -69,10 +69,6 @@ class QMCParams(Mapping):
             Number of τ-points.
         Niw : int
             Number of (positive) Matsubara frequencies.
-        NLegMax : int
-            XXX
-        NLegOrder : int
-            XXX
         MeasDensityMatrix : int
             Measure the density matrix :math:`⟨c^†_i c_j⟩`
         Eigenbasis : int
@@ -84,8 +80,8 @@ class QMCParams(Mapping):
         self.NCorr = NCorr
         self.Ntau = Ntau
         self.Niw = Niw
-        self.NLegMax = NLegMax
-        self.NLegOrder = NLegOrder
+        self.NLegMax = 1
+        self.NLegOrder = 1
         self.MeasDensityMatrix = MeasDensityMatrix
         self.Eigenbasis = Eigenbasis
 
@@ -106,7 +102,6 @@ class QMCParams(Mapping):
 DEFAULT_QMC_PARAMS = QMCParams(
     Nwarmups=10**5, Nmeas=10**5, NCorr=50,
     Ntau=2049, Niw=1024,
-    NLegMax=30, NLegOrder=30,
 )
 
 
