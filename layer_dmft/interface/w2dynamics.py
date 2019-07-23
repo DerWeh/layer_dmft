@@ -278,11 +278,12 @@ def save_data(siam: SIAM, dir_='.', name='w2d', compress=True, qmc_params=DEFAUL
     data['__version__'] = __version__
     data['__date__'] = datetime.now().isoformat()
     N_iw = qmc_params['Niw']
+    N_tau = qmc_params['Ntau']
 
     with h5py.File(get_last_output(dir_), mode='r') as h5file:
         output = h5file['stat-last/ineq-001/']
         # only positive frequencies
-        data['tau'] = np.linspace(0, siam.beta, num=N_iw, endpoint=True)
+        data['tau'] = np.linspace(0, siam.beta, num=N_tau, endpoint=True)
         data['gf_tau'], data['gf_tau_err'] = -output['gtau/value'][0], output['gtau/error'][0]
         assert np.all(-data['gf_tau'][..., -1] - data['gf_tau'][..., 0] > 0), "Should be 1"
 
@@ -293,10 +294,7 @@ def save_data(siam: SIAM, dir_='.', name='w2d', compress=True, qmc_params=DEFAUL
         data['occ'] = np.diagonal(output['occ/value'][0, :, 0, :])
         data['occ_err'] = np.diagonal(output['occ/error'][0, :, 0, :])
         self_m0 = hfm.self_m0(siam.U, data['occ'][::-1])
-        self_m1 = hfm.self_m1(siam.U, data['occ'][::-1])
         gf_m2 = -siam.e_onsite + self_m0
-        gf_x_self_m1 = hfm.gf_x_self_m1(self_m0)
-        gf_x_self_m2 = hfm.gf_x_self_m2(self_m0, self_m1, gf_m2)
 
         dft = partial(fft.dft_tau2iw, beta=siam.beta)
         data['gf_iw'] = dft(data['gf_tau'], moments=[(1, 1), gf_m2])
@@ -306,11 +304,15 @@ def save_data(siam: SIAM, dir_='.', name='w2d', compress=True, qmc_params=DEFAUL
         # data['gf_x_self_iw'] = XXX
         # data['self_energy_iw'] = XXX
 
-        data['self_energy_iw'] = output['siw/value'][0, :, N_iw:]  # FIXME
+        # FIXME: replace by method
+        data['self_energy_iw'] = siam.z + siam.e_onsite[:, np.newaxis] - siam.hybrid_fct \
+            - 1/data['gf_iw']
         assert np.all(data['self_energy_iw'][..., 0].imag < 0) \
             , "causality -> negative imaginary part"
 
-        data['gf_iw_solver'] = output['giw/value'][0, :, N_iw:]  # just for debugging
+        # FIXME: check substantial difference for U=0
+        data['gf_iw_solver'] = output['giw-meas/value'][0, :, N_iw:]  # just for debugging
+        data['gf_iw_solver_err'] = output['giw-meas/error'][0, :, N_iw:]  # just for debugging
         data['self_energy_iw_solver'] = output['siw/value'][0, :, N_iw:]  # just for debugging
         data['qmc_params'] = dict(qmc_params)
         if not check_consistency(siam, output, N_iw=N_iw):
