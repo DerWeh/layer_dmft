@@ -14,6 +14,7 @@ import h5py
 
 from layer_dmft import __version__, SIAM, dataio, fft, high_frequency_moments as hfm
 from layer_dmft.util import Spins
+from layer_dmft.interface.utilities import Params, execute
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ CFG_WORM['QMC'] = {
 }
 
 
-class QMCParams(Mapping):
+class QMCParams(Params):
     """Non-physical parameters passed to **w2dynamics** CT-Hyb.
 
     See `QMCParams.__init__` for the meaning of the arguments.
@@ -73,8 +74,6 @@ class QMCParams(Mapping):
 
     __slots__ = ('Nwarmups', 'Nmeas', 'NCorr', 'Ntau', 'Niw',
                  'NLegMax', 'NLegOrder', 'MeasDensityMatrix', 'Eigenbasis',)
-    __getitem__ = object.__getattribute__
-    __setitem__ = object.__setattr__
 
     def __init__(self, Nwarmups: int, Nmeas: int, NCorr: int,
                  Ntau: int, Niw: int,
@@ -108,19 +107,6 @@ class QMCParams(Mapping):
         self.NLegOrder = 1
         self.MeasDensityMatrix = MeasDensityMatrix
         self.Eigenbasis = Eigenbasis
-
-    def __len__(self):
-        """Return the number of attributes in `__slots__`."""
-        return len(self.__slots__)
-
-    def __iter__(self):
-        """Iterate over attributes in `__slots__`."""
-        return iter(self.__slots__)
-
-    @classmethod
-    def slots(cls) -> set:
-        """Return the set of existing attributes."""
-        return set(cls.__slots__)
 
 
 DEFAULT_QMC_PARAMS = QMCParams(
@@ -229,21 +215,8 @@ def setup(siam: SIAM, dir_='.', worm=False, **kwds):
 
 def run(dir_=".", n_process=1):
     """Execute the **spinboson** code."""
-    from subprocess import CalledProcessError, Popen
-
-    dir_ = get_path(dir_)
     command = f"mpirun -n {n_process} {W2DYN_EXECUTABLE}"
-    with open(OUTPUT_FILE, "w") as outfile:
-        proc = Popen(command.split(), stdout=outfile, stderr=outfile)
-        try:
-            proc.wait()
-        except:
-            proc.kill()
-            proc.wait()
-            raise
-        retcode = proc.poll()
-        if retcode:
-            raise CalledProcessError(retcode, proc.args)
+    execute(command, OUTPUT_FILE)
 
 
 def get_last_output(dir_='.', cfg=CFG):

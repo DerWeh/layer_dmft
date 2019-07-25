@@ -15,6 +15,7 @@ from layer_dmft import fft, high_frequency_moments as hfm, dataio
 from layer_dmft.util import SpinResolvedArray
 from layer_dmft.model import SIAM, SIGMA
 from layer_dmft._version import get_versions
+from layer_dmft.interface.utilities import Params, execute
 
 N_TAU = 2048
 N_IW = 1024  # TODO: scan code for proper number
@@ -99,7 +100,7 @@ PARAM_TEMPLATE = textwrap.dedent(
 )
 
 
-class QMCParams(Mapping):
+class QMCParams(Params):
     """Non-physical parameters passed to **spinboson** CT-Hyb.
 
     See `QMCParams.__init__` for the meaning of the arguments.
@@ -133,19 +134,6 @@ class QMCParams(Mapping):
         if not isinstance(FLAG_TP, int) or FLAG_TP < 0:
             raise TypeError(f"'FLAG_TP' must be non-negative integer, got: {FLAG_TP}")
         self.FLAG_TP = FLAG_TP
-
-    def __len__(self):
-        """Return the number of attributes in `__slots__`."""
-        return len(self.__slots__)
-
-    def __iter__(self):
-        """Iterate over attributes in `__slots__`."""
-        return iter(self.__slots__)
-
-    @classmethod
-    def slots(cls) -> set:
-        """Return the set of existing attributes."""
-        return set(cls.__slots__)
 
 
 DEFAULT_QMC_PARAMS = QMCParams(N_BIN=10, N_MSR=10**5)
@@ -241,21 +229,8 @@ def setup(siam: SIAM, dir_='.', **kwds):
 
 def run(dir_=".", n_process=1):
     """Execute the **spinboson** code."""
-    from subprocess import Popen, CalledProcessError
-
-    dir_ = get_path(dir_)
     command = f"mpirun -n {n_process} {SB_EXECUTABLE}"
-    with open(OUTPUT_FILE, "w") as outfile:
-        proc = Popen(command.split(), stdout=outfile)
-        try:
-            proc.wait()
-        except:
-            proc.kill()
-            proc.wait()
-            raise
-        retcode = proc.poll()
-        if retcode:
-            raise CalledProcessError(retcode, proc.args)
+    execute(command, OUTPUT_FILE)
 
 
 def solve(siam: SIAM, n_process, output_name, dir_='.', **kwds):
