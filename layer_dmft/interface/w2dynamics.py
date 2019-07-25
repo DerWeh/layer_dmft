@@ -311,7 +311,7 @@ def save_data(siam: SIAM, dir_='.', name='w2d', compress=True, qmc_params=DEFAUL
             , "causality -> negative imaginary part"
 
         # FIXME: check substantial difference for U=0
-        data['gf_iw_solver'] = output['giw-meas/value'][0, :, N_iw:]  # just for debugging
+        data['gf_iw_solver'] = -output['giw-meas/value'][0, :, N_iw:]  # just for debugging
         data['gf_iw_solver_err'] = output['giw-meas/error'][0, :, N_iw:]  # just for debugging
         data['self_energy_iw_solver'] = output['siw/value'][0, :, N_iw:]  # just for debugging
         data['qmc_params'] = dict(qmc_params)
