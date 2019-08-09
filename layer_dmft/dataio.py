@@ -1,7 +1,7 @@
 """Handle in- and output for the layer_dmft loop."""
 import warnings
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 from pathlib import Path
 from weakref import finalize
 from datetime import date
@@ -129,9 +129,24 @@ class LayerData:
         finalize(self, _test)
         return data
 
-    def iter(self, it: int):
+    def iter(self, it: Union[str, int] = None, *, abs_it: int = None, rel_it: int = None,
+             return_iternum=False):
         """Return data of iteration `it`."""
-        return self.mmap_dict[it]
+        if len(set((it, abs_it, rel_it)) - {None}) != 1:
+            raise TypeError(f"{iter.__name__} takes exactly one argument.")
+        if it is not None:
+            try:
+                abs_it = tuple(self.iterations)[it]
+            except TypeError:
+                abs_it = int(it)
+        if rel_it is not None:
+            abs_it = tuple(self.iterations)[rel_it]
+        if abs_it not in self.iterations:
+            raise TypeError(f"`{abs_it!r}` no valid iteration. "
+                            f"Available iterations:\t{tuple(self.iterations)}")
+        if return_iternum:
+            return self.mmap_dict[abs_it], abs_it
+        return self.mmap_dict[abs_it]
 
     @property
     def iterations(self):

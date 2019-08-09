@@ -45,17 +45,8 @@ def plot_spectral(it: Union[int, str] = -1):
     # load data
     #
     lay_obj = dataio.LayerData()
-    try:
-        iter_num = tuple(lay_obj.iterations)[it]
-    except TypeError:  # maybe a string was used for an absolute number
-        iter_num = int(it)
-        if iter_num not in lay_obj.iterations:
-            print(f"`{it!r}` no valid iteration. "
-                  f"Available iterations:\t{tuple(lay_obj.iterations)}")
-            raise SystemExit()
-    iteration = iter_num
+    lay_data, iteration = lay_obj.iter(it, return_iternum=True)
     logging.debug("Load iteration %s of layer data", iteration)
-    lay_data = lay_obj.iter(iteration)
 
     # FIXME: imp_data gets collected upon calling `iter` and discarding the object!
     imp_obj = dataio.ImpurityData()
