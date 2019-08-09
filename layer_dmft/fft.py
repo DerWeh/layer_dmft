@@ -1,10 +1,11 @@
 """Fourier transforms for Matsubara Green's functions for iω_n ↔ τ."""
 import logging
-from functools import lru_cache
+from functools import partial, lru_cache
 
 from collections import namedtuple
 
 import numpy as np
+from scipy.interpolate import UnivariateSpline
 from scipy.optimize import curve_fit
 from wrapt import decorator
 import gftools as gt
@@ -127,6 +128,50 @@ def bare_dft_tau2iw(gf_tau, beta):
     gf_iw = gf_iw[..., 1::2]
 
     return gf_iw
+
+
+@partial(np.vectorize, signature='(n),(n),(n),(m)->(m)', excluded={'s'})
+def interpolate(x_in, fct_in, fct_err, x_out, s=None):
+    """Calculate complex interpolation of `fct_in` and evaluate it at `x_out`."""
+    w = 1./fct_err
+    fct_out = UnivariateSpline(x_in, fct_in, w=w, s=s)(x_out)
+    return fct_out
+
+
+def interpolated_dft_tau2iw(gf_tau, beta, gf_tau_err):
+    """Perform discrete Fourier transform on the real function `gf_tau`.
+
+    `gf_tau` has to be given on the interval τ in [0, β].
+    It is assumed that the high frequency moments have been stripped from `gf_iw`,
+    else oscillations will appear.
+    An smoothening spline interpolation of `gf_tau` is performed to better
+    approximate the continuous Fourier integral.
+
+    Parameters
+    ----------
+    gf_tau : (..., N_tau) float np.ndarray
+        The function at imaginary frequencies.
+    beta : float
+        The inverse temperature.
+    gf_tau_err : (..., N_tau) float np.ndarray
+        The error of `gf_tau` used to improve the smoothened interpolation.
+
+    Returns
+    -------
+    gf_iw : (..., {N_iw - 1}/2) float np.ndarray
+        The Fourier transform of `gf_tau` for positive Matsubara frequencies.
+
+    """
+    SMOTHENING = 0.01  # small value is important for noisy data
+    MULT_TAU_POINTS = 1024
+    tau_points = gf_tau.shape[-1]
+    # FIXME: pad data to ensure smoothness at boundary
+    tau = np.linspace(0, 1., num=tau_points, endpoint=True)
+    tau_interp = np.linspace(0, 1., num=MULT_TAU_POINTS*(tau_points - 1) + 1, endpoint=True)
+    gf_tau_interp = interpolate(x_in=tau, fct_in=gf_tau, fct_err=gf_tau_err,
+                                x_out=tau_interp, s=SMOTHENING*tau_points)
+    gf_iw_long = bare_dft_tau2iw(gf_tau_interp, beta=beta)
+    return gf_iw_long[..., :(tau_points - 1)//2]
 
 
 def dft_iw2tau(gf_iw, beta, moments=(1.,), dft_backend=soft_dft_iw2tau):
