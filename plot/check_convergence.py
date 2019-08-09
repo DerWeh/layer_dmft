@@ -1,4 +1,4 @@
-"""Visiualize convergecne."""
+"""Visualize convergence."""
 from functools import reduce
 from itertools import cycle
 
@@ -17,6 +17,7 @@ IMP_OUT = 'imp_output'
 
 # TODO: what if init overwrites `FORCE_PARAMAGNET`?
 PARAMAGNETIC = False if np.count_nonzero(prm.h) or not layer_dmft.FORCE_PARAMAGNET else True
+BARE_OCCUPATIONS = True
 
 # import matplotlib as mpl
 # mpl.rcParams['text.usetex'] = True
@@ -119,6 +120,8 @@ plt.tight_layout()
 # Distance of occupation
 #
 axes = get_difference_figure('Difference n_l')
+if BARE_OCCUPATIONS:
+    axes_ = get_difference_figure('n_l')
 sp_text = ('↑', '↓')
 
 marker_cycle = cycle(MARKERS - {'D'})
@@ -145,6 +148,21 @@ for lay in layers:
         for sp in (0, -1):
             plot.err_plot(lay_iterations, diff[:, sp], yerr=err[:, sp], axis=axes[sp],
                           linestyle=':', label=str(lay), marker=next(marker_cycle))
+    if BARE_OCCUPATIONS:
+        if PARAMAGNETIC:
+            # might be inaccurate but doesn't really matter
+            plot.err_plot(lay_iterations, occ_lay, yerr=occ_lay_err, axis=axes_[0],
+                          linestyle=':', label='lay'+str(lay), marker=next(marker_cycle))
+            plot.err_plot(lay_iterations, occ_imp, yerr=occ_imp_err, axis=axes_[0],
+                          linestyle=':', label='imp'+str(lay), marker=next(marker_cycle))
+        else:
+            for sp in (0, -1):
+                plot.err_plot(lay_iterations, occ_lay[:, sp], yerr=occ_lay_err[:, sp], axis=axes_[sp],
+                              linestyle=':', label='lay'+str(lay), marker=next(marker_cycle))
+                plot.err_plot(lay_iterations, occ_imp[:, sp], yerr=occ_imp_err[:, sp], axis=axes_[sp],
+                              linestyle=':', label='imp'+str(lay), marker=next(marker_cycle))
+
+
 
 for sp, axis in enumerate(axes):
     axis.set_ylabel(r'$(n_{\mathrm{lay}} - n_{\mathrm{imp}})'
@@ -153,6 +171,12 @@ for sp, axis in enumerate(axes):
     # axis.set_yscale('symlog')
     axis.set_xlabel('iteration')
     axis.legend()
+if BARE_OCCUPATIONS:
+    for sp, axis in enumerate(axes_):
+        axis.set_ylabel(r'$n_l$' + (f' $(σ={sp_text[sp]})$' if not PARAMAGNETIC else ''))
+        # axis.set_yscale('symlog')
+        axis.set_xlabel('iteration')
+        axis.legend()
 plt.tight_layout()
 
 plt.show()
