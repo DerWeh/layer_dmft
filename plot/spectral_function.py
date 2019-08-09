@@ -136,11 +136,10 @@ def plot_spectral(it: Union[int, str] = -1):
                                             gf_imp_w.err.reshape((-1, N_w))):
         plot.err_plot(x=omega.real, y=gf_imp_ll.imag, yerr=gf_imp_ll_err.imag, axis=ax,
                       fmt='--', label='Gf_imp')
-    import ipdb; ipdb.set_trace()
     for lay, siam_ll in enumerate(siams):
         siam_ll: model.SIAM
         if lay not in layers:
-            break
+            continue
         self_iw = lay_data['self_iw'][:, lay]
         coeff = pade.coefficients(iws, fct_z=siam_ll.hybrid_fct + self_iw)
         kind_self = pade.KindSelf(N_iw//10, 8*N_iw//10)
@@ -152,10 +151,9 @@ def plot_spectral(it: Union[int, str] = -1):
 
         gf_hyb = pade.Mod_Averager(z_in=iws, coeff=coeff, mod_fct=_mod,
                                    valid_pades=valid, kind=kind_self)(omega)
-        for ax, sp in zip(axes[:,lay], model.Spins):
+        for ax, sp in zip(axes[:, layers.index(lay)], model.Spins):
             plot.err_plot(x=omega.real, y=gf_hyb.x[sp].imag, yerr=gf_hyb.err[sp].imag,
                           axis=ax, fmt='--', label=r'Gf_hyb[$\Sigma$]')
-
 
     spin_strs = ('↑', '↓')
     for sp, ax in zip(spin_strs, axes[:, 0]):
