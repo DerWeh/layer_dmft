@@ -269,23 +269,26 @@ def fit_iw_tail(gf_iw, beta, order) -> FourierFct:
         # scipy only handles np.float64
         return (number.imag if odd else number.real).astype(np.float64)
 
-    def tail(iws_, moment, return_float=True):
-        tail = moment * .5 * ((iws_ + CC)**-order + (iws_ - CC)**-order)
-        return to_float(tail) if return_float else tail
-
+    norm_tail_iw = .5 * ((iws + CC)**-order + (iws - CC)**-order)  # tail with amplitude 1
     sigma = iws**(-order-2)  # next order correction that is odd/even
 
     # find temperature dependent heuristic
     START = 0  # from where to fit the tail
-    popt, pcov = curve_fit(tail, iws[START:], ydata=to_float(gf_iw)[START:],
-                           p0=(1.,), sigma=to_float(sigma)[START:])
-    LOGGER.info('Amplitude of fit: %s', popt)
-    LOGGER.debug('Accuracy of fit: %s', np.sqrt(np.diag(pcov)))
+    if np.all(to_float(gf_iw) == 0):
+        return FourierFct(iw=np.zeros_like(iws), tau=np.zeros_like(tau))
+
+    moment, pcov = curve_fit(
+        lambda xx, moment: moment*to_float(norm_tail_iw)[START:],
+        # relies that xx is always the same
+        iws[START:].imag, ydata=to_float(gf_iw)[START:],
+        p0=(1.,), sigma=to_float(sigma)[START:]
+    )
+    LOGGER.info('Amplitude of fit: %s ± %s', moment, np.sqrt(pcov))
     gf_tau_fct = get_order_n_pole(order)
-    tail_tau = popt*.5*(gf_tau_fct(tau, CC, beta) + gf_tau_fct(tau, -CC, beta))
+    tail_tau = moment*.5*(gf_tau_fct(tau, CC, beta) + gf_tau_fct(tau, -CC, beta))
     if _has_nan(tail_tau):
         raise RuntimeError("Calculation of tail-fit field. Most likely a overflow occurred.")
-    return FourierFct(iw=tail(iws, popt, return_float=False), tau=tail_tau)
+    return FourierFct(iw=moment*norm_tail_iw, tau=tail_tau)
 
 
 def ft_pole2tau(tau, pole, beta):
