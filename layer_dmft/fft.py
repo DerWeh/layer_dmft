@@ -266,7 +266,11 @@ def get_gf_from_moments(moments, beta, N_iw):
         mom_iw = moments[0]/iws
         mom_tau = -.5*moments[0]
     elif len(moments) == 2:
-        # FIXME: handle moments[0] = 0
+        if np.any(moments[0] == 0.):
+            # FIXME: handle moments[0] = 0
+            if np.all(moments[1] == 0.) and np.all(moments[0] == 0.):
+                return FourierFct(iw=0, tau=0)
+            raise NotImplementedError()
         tau = np.linspace(0, beta, num=2*N_iw + 1, endpoint=True)
         pole = moments[1]/moments[0]
         mom_iw = moments[0]/(iws - pole)
