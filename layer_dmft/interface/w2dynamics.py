@@ -6,7 +6,6 @@ from functools import partial
 from typing import Any, Dict
 from pathlib import Path
 from collections import ChainMap
-from collections.abc import Mapping
 
 import configobj
 import numpy as np
@@ -207,7 +206,7 @@ def setup(siam: SIAM, dir_='.', worm=False, **kwds):
     cfg = CFG_WORM if worm else CFG
     np.savetxt(CFG['General']['muimpFile'], [e_onsite[Spins.up], e_onsite[Spins.dn]])
     # THIS OVERWRITES THE CONFIG!
-    cfg['QMC'].update(kwds)
+    cfg['QMC'].update(ChainMap(kwds, DEFAULT_QMC_PARAMS))
     cfg['General']['beta'] = siam.beta
     cfg['Atoms']['1']['Udd'] = siam.U
     cfg.write()
@@ -324,26 +323,26 @@ def save_worm_data(siam: SIAM, dir_='.', name='w2d', compress=True,
         assert np.all(-data['gf_tau'][..., -1] - data['gf_tau'][..., 0] > 0), "Should be 1"
 
         data['hybrid_iw'] = siam.hybrid_fct
-        assert np.all(data['hybrid_iw'][..., 0].imag < 0), "causality -> negative imaginary part"
+        assert np.all(data['hybrid_iw'][..., 0].imag <= 0), "causality -> negative imaginary part"
 
         data['occ'] = -data['gf_tau'][:, -1]
         data['occ_err'] = -data['gf_tau_err'][:, -1]
 
         data['gf_iw'], data['gf_iw_err'] = get_worm(output['giw-worm'], mask=slice(N_iw, None))
-        assert np.all(data['gf_iw'][..., 0].imag < 0), "causality -> negative imaginary part"
+        assert np.all(data['gf_iw'][..., 0].imag <= 0), "causality -> negative imaginary part"
         data['gf_x_self_iw'], data['gf_x_self_iw_err'] = get_worm(output['gsigmaiw-worm'], mask=slice(N_iw, None))
         # gf_x_self_iw = dft(data['gf_x_self_tau'], moments=[gf_x_self_m1, gf_x_self_m2]) XXX
 
 
         data['self_energy_iw'] = -data['gf_x_self_iw']/data['gf_iw']
-        assert np.all(data['self_energy_iw'][..., 0].imag < 0) \
+        assert np.all(data['self_energy_iw'][..., 0].imag <= 0) \
             , "causality -> negative imaginary part"
 
         data['qmc_params'] = dict(qmc_params)
-        if not check_consistency(siam, output, N_iw=N_iw):
-            raise RuntimeError("Interface seems to be broken.")
         dataio.save_data(dir_=Path(dir_).expanduser()/dataio.IMP_OUTPUT, name=name,
                          compress=compress, **data)
+        if not check_consistency(siam, output, N_iw=N_iw):
+            raise RuntimeError("Interface seems to be broken.")
     return data
 
 
