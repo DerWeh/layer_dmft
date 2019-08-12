@@ -9,7 +9,6 @@ FORCE_PARAMAGNET: bool
 """
 # encoding: utf-8
 import logging
-import types
 
 from itertools import tee
 from functools import partial
@@ -71,7 +70,7 @@ def interpolate_siam_temperature(siams: Iterable[SIAM], iw_n) -> Iterable[SIAM]:
         yield siam
 
 
-def mapping_lay_imp(prm_U, layer_config=None)->MapLayer:
+def mapping_lay_imp(prm_U, layer_config=None) -> MapLayer:
     """Handle custom mapping between layers and impurity models.
 
     Parameters
@@ -146,7 +145,7 @@ def mapping_lay_imp(prm_U, layer_config=None)->MapLayer:
 
 def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
                  it, *, layer_config=None, self_iw=None, occ=None,
-                 n_process, **solver_kwds) -> LayerIterData:
+                 n_process, solve=sb_qmc.solve, **solver_kwds) -> LayerIterData:
     """Perform a sweep update, calculating the impurities for all layers.
 
     Parameters
@@ -180,7 +179,7 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
     """
     mlayer = mapping_lay_imp(prm.U, layer_config)
 
-    solve = partial(sb_qmc.solve, n_process=n_process, **solver_kwds)
+    solve = partial(solve, n_process=n_process, **solver_kwds)
 
     def _solve(siam: SIAM, lay: int) -> SolverResult:
         LOGGER.progress('iter %s: starting layer %s with U = %s (%s)',
@@ -524,7 +523,8 @@ def mixed_siams(mixing: float, new: Iterable[SIAM], old: Iterable[SIAM]) -> Iter
 class Runner:
     """Run r-DMFT loop using `Runner.iteration`."""
 
-    def __init__(self, prm: Hubbard_Parameters, starting_point='auto', output_dir=None) -> None:
+    def __init__(self, prm: Hubbard_Parameters, starting_point='auto', output_dir=None,
+                 default_solver=sb_qmc.solve) -> None:
         """Create runner for the model `prm`.
 
         Parameters
@@ -540,10 +540,13 @@ class Runner:
         output_dir : str, optional
             Directory from which data is loaded if `kind == 'resume'`
             (default: `dataio.LAY_OUTPUT`)
+        default_solver : Callable
+            Function which will be called to solve the impurity model, if not
+            explicitly specified.
 
         """
         log_info(prm)
-
+        self.default_solver = default_solver
         # technical parameters
         N_IW = sb_qmc.N_IW
 
@@ -577,7 +580,7 @@ class Runner:
                               it=start, self_iw=layerdat.self_iw, occ=layerdat.occ)
         self.get_impurity_models = partial(prm.get_impurity_models, z=iw_points)
 
-    def iteration(self, n_process=1, layer_config=None, **qmc_params):
+    def iteration(self, n_process=1, layer_config=None, solver=None, **qmc_params):
         r"""Perform a DMFT iteration.
 
         Parameters
@@ -593,7 +596,9 @@ class Runner:
 
         """
         # perform self-consistency loop
-        data = self.update(layer_config=layer_config, n_process=n_process, **qmc_params)
+        data = self.update(layer_config=layer_config, n_process=n_process,
+                           solve=self.default_solver if solver is None else solver,
+                           **qmc_params)
 
         update_kdws = self.update.keywords
         siams = self.get_impurity_models(self_z=data.self_iw, gf_z=data.gf_iw, occ=data.occ)
@@ -601,12 +606,12 @@ class Runner:
         update_kdws['it'] += 1
         return data
 
-    def mixed_iteration(self, mixing, n_process=1, layer_config=None, **qmc_params):
+    def mixed_iteration(self, mixing, *args, **kwds):
         """Call `Runner.iteration` and mix the hybridization functions **afterwards**."""
         update_kdws = self.update.keywords  # pylint: disable=no-member
         siams, old_siams = tee(update_kdws['siams'])
         update_kdws['siams'] = siams
-        data = self.iteration(n_process=n_process, layer_config=layer_config, **qmc_params)
+        data = self.iteration(*args, **kwds)
         new_siams = update_kdws['siams']
         update_kdws['siams'] = mixed_siams(mixing, new=new_siams, old=old_siams)
         return data
