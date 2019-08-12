@@ -4,7 +4,7 @@ import logging
 from functools import partial, partialmethod
 
 # pylint: disable=unused-import
-from layer_dmft.model import Hubbard_Parameters, SIAM
+from layer_dmft.model import Hubbard_Parameters, SIAM, hopping_matrix
 from layer_dmft._version import get_versions
 from layer_dmft.layer_dmft import Runner
 
