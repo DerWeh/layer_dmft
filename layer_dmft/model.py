@@ -834,9 +834,11 @@ def hopping_matrix(size, nearest_neighbor):
 hilbert_transform = {
     'bethe': gt.bethe_hilbert_transfrom,
     'chain': chain_hilbert_transform,
+    'square': gt.square_gf_omega,
 }
 hilbert_transform['bethe'].m2 = gt.bethe_dos.m2
 hilbert_transform['chain'].m2 = lambda D: 0
+hilbert_transform['square'].m2 = lambda D: gt.square_dos_moment_coefficients[2]*D**2
 
 rev_dict_hilbert_transfrom = {transform: name for name, transform
                               in hilbert_transform.items()}
