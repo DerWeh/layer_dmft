@@ -375,19 +375,22 @@ def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
 
 
 def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, output_dir=None
-                          ) ->Tuple[LayerIterData, int, float]:
+                          ) -> Tuple[LayerIterData, int, float]:
     """Get necessary quantities (G, Σ, n) to start DMFT loop.
 
     Parameters
     ----------
     prm : Hubbard_Parameters
         The Model parameters, necessary to calculate quantities.
-    kind : {'auto', 'resume', 'Hartree', 'Hubbard-I'}, optional
+    kind : {'auto', 'resume', 'Hartree', 'Hubbard-I', dict}, optional
         What kind of starting point is used. 'resume' loads previous iteration
         (layer data with largest iteration number). 'hartree' starts from the
         static Hartree self-energy. 'hubbard-I' starts from the Hubbard-I
         approximation, using the atomic self-energy. 'auto' tries 'resume' and
-        falls back to 'hartree'
+        falls back to 'hartree'.
+        Alternatively a dict (or instance of LayerIterData) can be given, to
+        explicitly specify the self-energy (and optionally the occupation and
+        Green's function).
     iw_points : (N_iw,) complex np.ndarray, optional
         The Matsubara frequencies at which the quantities are calculated.
         Required if `kind` is not 'resume'.
@@ -408,8 +411,12 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
         else `0`.
 
     """
-    kind = kind.lower()
-    assert kind in ('auto', 'resume', 'hartree', 'hubbard-i')
+    try:
+        kind = kind.lower()
+    except AttributeError:
+        pass
+    else:
+        assert kind in ('auto', 'resume', 'hartree', 'hubbard-i')
     if kind == 'auto':
         try:
             dataio.get_last_iter(dataio.LAY_OUTPUT if output_dir is None else output_dir)
@@ -421,22 +428,37 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
     if kind == 'resume':
         LOGGER.info("Reading old Green's function and self energy")
         layerdat, last_it, data_T = load_last_iteration(output_dir)
-        start = last_it + 1
-    elif kind == 'hartree':
+        return layerdat, last_it + 1, data_T
+
+    start = 0
+    if kind == 'hartree':
         LOGGER.info('Start from Hartree approximation')
         layerdat = hartree_solution(prm, iw_n=iw_points)
         LOGGER.progress('DONE: calculated starting point')
-        start = 0
-        data_T = prm.T
     elif kind == 'hubbard-i':
         LOGGER.info('Start from Hubbard-I approximation')
         layerdat = hubbard_I_solution(prm, iw_n=iw_points)
-        start = 0
-        data_T = prm.T
-    else:
-        raise NotImplementedError('This should not have happened')
+    else:  # giving a LayerIterData obj or a dict
+        try:  # assuming kind is NamedTuple
+            kind: LayerIterData
+            kind = kind._asdict()
+        except AttributeError:
+            pass
 
-    return layerdat, start, data_T
+        kind: Dict
+        try:
+            self_iw = kind.pop('self_iw')
+        except KeyError:
+            raise NotImplementedError('This should not have happened')
+        gf_iw = kind.pop('gf_iw') if 'gf_iw' in kind else prm.gf_dmft_s(z=iw_points, self_z=self_iw)
+        occ = kind.pop('occ') if 'occ' in kind else prm.occ0(gf_iw, return_err=False)
+        if kind:
+            raise TypeError("If `kind` is a dict, it may only have the keys 'self_iw'"
+                            "and optionally 'gf_iw' or 'occ'.\n"
+                            f"Other keys: {tuple(kind.keys())}")
+        layerdat = LayerIterData(gf_iw=gf_iw, self_iw=self_iw, occ=occ)
+
+    return layerdat, start, prm.T
 
 
 def main(prm: Hubbard_Parameters, n_iter, n_process=1,
