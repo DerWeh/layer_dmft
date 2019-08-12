@@ -347,8 +347,6 @@ def ft_pole2tau(tau, pole, beta):
     return -np.exp((beta - tau - max_exp)*pole)/(np.exp((beta - max_exp)*pole) + np.exp(-max_exp*pole))
 
 
-
-
 @lru_cache(maxsize=6)
 def get_order_n_pole(order):
     """Generate function to calculate the Fourier transform `order`-order pole.
