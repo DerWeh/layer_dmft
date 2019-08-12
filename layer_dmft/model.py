@@ -817,6 +817,42 @@ def chain_hilbert_transform(xi, half_bandwidth=None):
     return 1./xi
 
 
+def reduce_hubbard(prm: Hubbard_Parameters, mask) -> Hubbard_Parameters:
+    """Return `Hubbard_Parameters` containing only the layers in `mask`.
+
+    One of the main use cases for this function is, to calculated the Poisson
+    equation on a reduced problem for an improved starting point.
+
+    Parameters
+    ----------
+    prm : Hubbard_Parameters
+        The Hubbard Parameters to reduce.
+    mask : slice or array_like
+        The mask which will be applied to all array attributes. Depending on
+        the fact, whether `mask` generates a copy or view, the attributes of
+        the resulting `Hubbard_Parameters` are a copy or a view of the input
+        `prm`.
+
+    Returns
+    -------
+    reduce_hubbard : Hubbard_Parameters
+        `Hubbard_Parameters` containing only the layers selected by `mask`.
+
+    """
+    mu = prm.mu[mask]
+    reduced_prm = Hubbard_Parameters(mu.size,
+                                     lattice=rev_dict_hilbert_transfrom[prm.hilbert_transform])
+    reduced_prm.T = prm.T
+    reduced_prm.D = prm.D
+    reduced_prm.mu = mu
+    reduced_prm.U = prm.U[mask]
+    reduced_prm.h = prm.h[mask]
+    reduced_prm.V = prm.V[mask]
+    reduced_prm.t_mat = prm.t_mat[mask][:, mask]
+    reduced_prm.assert_valid()
+    return reduced_prm
+
+
 def hopping_matrix(size, nearest_neighbor):
     """Create a hopping matrix with nearest neighbor hopping.
 
