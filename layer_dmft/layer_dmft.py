@@ -191,8 +191,8 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
         return SolverResult(self=Sigma(iw=data['self_energy_iw'], moments=[sm0, sm1]),
                             data=data)
 
-    self_layer_iw = np.zeros((2, prm._N_l, iw_points.size), dtype=np.complex)
-    occ_imp = np.zeros((2, prm._N_l))
+    self_layer_iw = np.zeros((2, prm.N_l, iw_points.size), dtype=np.complex)
+    occ_imp = np.zeros((2, prm.N_l))
     #
     # solve impurity model for the relevant layers
     #
@@ -213,7 +213,6 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
         self_layer_iw[:, lay] = self_iw[:, lay]
         occ_imp[:, lay] = occ[:, lay]
 
-
     # average over spin if not magnetic
     if FORCE_PARAMAGNET and np.all(prm.h == 0):
         self_layer_iw = np.mean(self_layer_iw, axis=0, keepdims=True)
@@ -221,7 +220,7 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
 
     gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
 
-    if mlayer.interacting.size < prm._N_l:
+    if mlayer.interacting.size < prm.N_l:
         # calculated density from Gf for non-interacting layers
         occ = prm.occ0(gf_layer_iw, hartree=occ_imp[::-1], return_err=False)
         occ[:, mlayer.interacting] = occ_imp[:, mlayer.interacting]
@@ -600,7 +599,7 @@ class Runner:
                            solve=self.default_solver if solver is None else solver,
                            **qmc_params)
 
-        update_kdws = self.update.keywords
+        update_kdws = self.update.keywords  # pylint: disable=no-member
         siams = self.get_impurity_models(self_z=data.self_iw, gf_z=data.gf_iw, occ=data.occ)
         update_kdws.update(siams=siams, self_iw=data.self_iw, occ=data.occ)
         update_kdws['it'] += 1
