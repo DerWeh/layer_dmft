@@ -5,7 +5,7 @@ from functools import partial
 
 from pathlib import Path
 from datetime import datetime
-from collections import ChainMap, Mapping, namedtuple
+from collections import ChainMap, namedtuple
 
 import numpy as np
 
@@ -452,7 +452,8 @@ def read_occ(dir_='.') -> gt.Result:
     return gt.Result(x=-gf_tau.x[:, -1], err=gf_tau.err[:, -1])
 
 
-def save_data(siam: SIAM, dir_='.', name='sb', compress=True, qmc_params=DEFAULT_QMC_PARAMS):
+def save_data(siam: SIAM, dir_='.', name='sb', compress=True, qmc_params=DEFAULT_QMC_PARAMS
+              ) -> Dict[str, Any]:
     """Read the **spinboson** data and save it as numpy arrays."""
     data: Dict[str, Any] = {}
     data['solver'] = __name__

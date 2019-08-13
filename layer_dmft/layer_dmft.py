@@ -49,11 +49,6 @@ SolverResult = NamedTuple("SolverResult", [('self', Sigma), ('data', Dict[str, A
 MapLayer = namedtuple("MapLayer", ['interacting', 'unique', 'imp2lay', 'updated', 'unchanged'])
 
 
-def save_gf(gf_iw, self_iw, occ_layer, T, dir_='.', name='layer', compress=True):
-    dataio.save_data(gf_iw=gf_iw, self_iw=self_iw, occ=occ_layer, temperature=T,
-                     dir_=dir_, name=name, compress=compress)
-
-
 def interpolate_siam_temperature(siams: Iterable[SIAM], iw_n) -> Iterable[SIAM]:
     """Wrap interpolation of `SIAM.hybrid_tau` to continue different temperature."""
     interpolate_temperature: Optional[partial] = partial(interpolate, x_out=iw_n)
@@ -227,10 +222,10 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
     else:
         occ = occ_imp
 
+    data = LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ)
     # TODO: also save error, version, ...
-    save_gf(gf_layer_iw, self_layer_iw, occ, T=prm.T,
-            dir_=dataio.LAY_OUTPUT, name=f'layer_iter{it}')
-    return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ)
+    dataio.save_data(**data._asdict(), T=prm.T, dir_=dataio.LAY_OUTPUT, name=f'layer_iter{it}')
+    return data
 
 
 def load_last_iteration(output_dir=None) -> Tuple[LayerIterData, int, float]:
