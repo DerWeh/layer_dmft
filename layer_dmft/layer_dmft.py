@@ -9,8 +9,9 @@ FORCE_PARAMAGNET: bool
 """
 # encoding: utf-8
 import logging
+import atexit
 
-from itertools import tee
+from itertools import tee, chain, repeat
 from functools import partial
 from typing import Tuple, Optional, Dict, Iterable, Any, NamedTuple, Iterator
 from collections import namedtuple
@@ -559,6 +560,7 @@ class Runner:
         self.update = partial(sweep_update, prm=prm, siams=siams, iw_points=iw_points,
                               it=start, self_iw=layerdat.self_iw, occ=layerdat.occ)
         self.get_impurity_models = partial(prm.get_impurity_models, z=iw_points)
+        atexit.register(next(_finished_message))
 
     def iteration(self, n_process=1, layer_config=None, solver=None, **qmc_params):
         r"""Perform a DMFT iteration.
@@ -595,3 +597,7 @@ class Runner:
         new_siams = update_kdws['siams']
         update_kdws['siams'] = mixed_siams(mixing, new=new_siams, old=old_siams)
         return data
+
+
+# To register with at_exit to inform once that calculation is over
+_finished_message = chain((lambda: LOGGER.progress('Finished calculation'),), repeat(lambda: None))
