@@ -531,7 +531,7 @@ def mixed_siams(mixing: float, new: Iterable[SIAM], old: Iterable[SIAM]) -> Iter
 
     """
     assert 0. <= mixing <= 1.
-    for siam_old, siam_new in zip(new, old):
+    for siam_new, siam_old in zip(new, old):
         assert siam_old.T == siam_new.T
         assert siam_old.U == siam_new.U
         assert np.all(siam_old.e_onsite == siam_new.e_onsite)
