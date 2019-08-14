@@ -20,6 +20,7 @@ from layer_dmft.interface.utilities import Params, execute
 N_TAU = 2048
 N_IW = 1024  # TODO: scan code for proper number
 
+COMMAND = "mpirun -n {n_process} {SB_EXECUTABLE}"
 SB_EXECUTABLE = Path('~/spinboson-1.10/sb_qmc.out').expanduser()
 OUTPUT_DIR = "output"
 OUTPUT_FILE = "output.txt"
@@ -227,9 +228,9 @@ def setup(siam: SIAM, dir_='.', **kwds):
     (dir_ / INIT_FILE).write_text(init_content)
 
 
-def run(dir_=".", n_process=1):
+def run(dir_=".", n_process=1):  # pylint: disable=unused-argument
     """Execute the **spinboson** code."""
-    command = f"mpirun -n {n_process} {SB_EXECUTABLE}"
+    command = COMMAND.format(**ChainMap(locals(), globals()))
     execute(command, OUTPUT_FILE)
 
 

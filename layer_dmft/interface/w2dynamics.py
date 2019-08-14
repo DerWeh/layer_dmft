@@ -17,6 +17,7 @@ from layer_dmft.interface.utilities import Params, execute
 
 LOGGER = logging.getLogger(__name__)
 
+COMMAND = "mpirun -n {n_process} {W2DYN_EXECUTABLE}"
 W2DYN_EXECUTABLE = '/home/andreasw/.pyenv/shims/python ' \
     + str(Path('~/workspace/code/w2dynamics_p3/cthyb').expanduser())
 PARAMETERFILE = 'Parameters.in'
@@ -212,9 +213,9 @@ def setup(siam: SIAM, dir_='.', worm=False, **kwds):
     cfg.write()
 
 
-def run(dir_=".", n_process=1):
+def run(dir_=".", n_process=1):  # pylint: disable=unused-argument
     """Execute the **spinboson** code."""
-    command = f"mpirun -n {n_process} {W2DYN_EXECUTABLE}"
+    command = COMMAND.format(**ChainMap(locals(), globals()))
     execute(command, OUTPUT_FILE)
 
 
