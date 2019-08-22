@@ -7,25 +7,10 @@ from collections import namedtuple
 import numpy as np
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import curve_fit
-from wrapt import decorator
 import gftools as gt
 
 LOGGER = logging.getLogger(__name__)
 FourierFct = namedtuple('FourierFct', ['iw', 'tau'])
-
-
-def _return_fourier_fct(*args, **kwds):
-    """Vectorize function and return result as `FourierFct`."""
-    def decorate(wrapped):
-        vectorized_fct = np.vectorize(wrapped, *args, **kwds)
-
-        # pylint: disable=unused-argument
-        @decorator
-        def wrapper(wrapped, instace, args_, kwds_) -> FourierFct:
-            return FourierFct(*vectorized_fct(*args_, **kwds_))
-
-        return wrapper(wrapped)  # pylint: disable=no-value-for-parameter
-    return decorate
 
 
 def _has_nan(x):
@@ -319,7 +304,6 @@ def get_gf_from_moments(moments, beta, N_iw) -> FourierFct:
     raise NotImplementedError()
 
 
-@_return_fourier_fct(otypes=[complex, float], signature='(n),(),()->(n),(m)')
 def fit_iw_tail(gf_iw, beta, order) -> FourierFct:
     """Fit the tail of `gf_iw` with function behaving as (iw)^{-`order`}.
 
@@ -358,35 +342,42 @@ def fit_iw_tail(gf_iw, beta, order) -> FourierFct:
         return (number.imag if odd else number.real).astype(np.float64)
 
     norm_tail_iw = .5 * ((iws + CC)**-order + (iws - CC)**-order)  # tail with amplitude 1
-    sigma = iws**(-order-2)  # next order correction that is odd/even
+    sigma = to_float(iws**(-order-2))  # next order correction that is odd/even
 
-    # find temperature dependent heuristic
-    START = 0  # from where to fit the tail
-    if np.all(to_float(gf_iw) == 0):
-        return FourierFct(iw=np.zeros_like(iws), tau=np.zeros_like(tau))
-
-    moment, pcov = curve_fit(
-        lambda xx, moment: moment*to_float(norm_tail_iw)[START:],
-        # relies that xx is always the same
-        iws[START:].imag, ydata=to_float(gf_iw)[START:],
-        p0=(1.,), sigma=to_float(sigma)[START:]
-    )
-    moment, err = moment.squeeze(), np.sqrt(pcov.squeeze())
-    if moment > 5000:  # cutoff, this seems unreasonable large
-        LOGGER.warning("Amplitude of fit exceeds cutoff and seems unreasonable large (%s ± %s)!"
-                       "\nFit is ignored.")
-        return FourierFct(iw=np.zeros_like(iws), tau=np.zeros_like(tau))
-    if (moment > 500 and pcov/err > 1e-2) or pcov/err > 0.1:
-        # For very large fitted moments, we require increased accuracy
-        LOGGER.warning("Error of moment large (%s ± %s)!\nFit is ignored.",
-                       moment, err)
-        return FourierFct(iw=np.zeros_like(iws), tau=np.zeros_like(tau))
+    moment, err = _fitting(iws.imag, fit_iw=to_float(norm_tail_iw),
+                           gf_iw=to_float(gf_iw), sigma=sigma)
     LOGGER.info('Amplitude of fit (order %s): %s ± %s', order, moment, err)
+    moment = moment[..., np.newaxis]
     gf_tau_fct = get_order_n_pole(order)
     tail_tau = moment*.5*(gf_tau_fct(tau, CC, beta) + gf_tau_fct(tau, -CC, beta))
     if _has_nan(tail_tau):
         raise RuntimeError("Calculation of tail-fit failed. Most likely a overflow occurred.")
     return FourierFct(iw=moment*norm_tail_iw, tau=tail_tau)
+
+
+@partial(np.vectorize, otypes=[float, float], signature='(n),(n),(n),(n)->(),()')
+def _fitting(iws, fit_iw, gf_iw, sigma) -> (float, float):
+    """Perform fits, all input data need to be `np.float64`."""
+    if np.all(gf_iw == 0):
+        return 0, 0
+    START = 0  # from where to fit the tail
+    moment, pcov = curve_fit(
+        lambda xx, moment: moment*fit_iw[START:],
+        # relies that xx is always the same
+        iws[START:], ydata=gf_iw[START:],
+        p0=(1.,), sigma=sigma[START:]
+    )
+    moment, err = moment.squeeze(), np.sqrt(pcov.squeeze())
+    if moment > 5000:  # cutoff, this seems unreasonable large
+        LOGGER.warning("Amplitude of fit exceeds cutoff and seems unreasonable large (%s ± %s)!"
+                       "\nFit is ignored.")
+        return 0, np.nan
+    if (moment > 500 and pcov/err > 1e-2) or pcov/err > 0.1:
+        # For very large fitted moments, we require increased accuracy
+        LOGGER.warning("Error of moment large (%s ± %s)! Fit is ignored.",
+                       moment, err)
+        return 0, np.nan
+    return moment, err
 
 
 def ft_pole2tau(tau, pole, beta):
