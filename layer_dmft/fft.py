@@ -201,10 +201,40 @@ def dft_iw2tau(gf_iw, beta, moments=(1.,), dft_backend=soft_dft_iw2tau):
     # fit of tail for real part (even order) and imaginary part (odd order)
     tail1 = fit_iw_tail(gf_iw, beta=beta, order=order+1)
     tail2 = fit_iw_tail(gf_iw, beta=beta, order=order+2)
+    ensure_fit_causality(mom, tail1, tail2)
     gf_iw = gf_iw - tail1.iw - tail2.iw
     gf_tau = dft_backend(gf_iw, beta)
     gf_tau += mom.tau + tail1.tau + tail2.tau
     return gf_tau
+
+
+def ensure_fit_causality(mom: FourierFct, tail1: FourierFct, tail2: FourierFct):
+    """Set tails which violate causality to 0.
+
+    Parameters
+    ----------
+    mom : FourierFct
+        Green's function obtained from specified moments.
+    tail1, tail2 : FourierFct
+        Fitted tail of the form `c/(iw)^{n+i}`, where `n = len(mom)` and `i = 1 (2)`
+        for `tail1` (`tail2`).
+
+    """
+    # after the numeric data ends, only tail exists, its imaginary part should
+    # at no point be positive
+    if np.all((mom.iw[..., -1] + tail1.iw[..., -1] + tail2.iw[..., -1]).imag <= 0):
+        return  # calculated tail is causal, nothing to do
+    # the current implementation is dependent on the implementation of the
+    # tails it is assumed that on is purely real and one purely imaginary
+    # (`c/(iw)^n` with `c` real) and that `c<0` if `tail<0`
+    imag_tail = tail2 if np.any(np.iscomplex(tail2.iw)) else tail1
+    positive = imag_tail.iw[..., -1] > 0
+    LOGGER.warning("The fitted moments corresponding to indices %s result in non-causal"
+                   "tails and are therefore ignored!", positive)
+    imag_tail.iw[positive], imag_tail.tau[positive] = 0, 0  # set according fitted tails to 0
+    if np.any(mom.iws[..., -1] < 0):  # this should not happen!
+        LOGGER.warning("Tail calculated from moments is non-causal, "
+                       "apparently some incorrect moments were provided.")
 
 
 def dft_tau2iw(gf_tau, beta, moments=(1.,), dft_backend=bare_dft_tau2iw):
@@ -239,7 +269,7 @@ def dft_tau2iw(gf_tau, beta, moments=(1.,), dft_backend=bare_dft_tau2iw):
     return gf_iw
 
 
-def get_gf_from_moments(moments, beta, N_iw):
+def get_gf_from_moments(moments, beta, N_iw) -> FourierFct:
     """Green's function from `moments` on Matsubara axis and imaginary time.
 
     Parameters
@@ -341,11 +371,21 @@ def fit_iw_tail(gf_iw, beta, order) -> FourierFct:
         iws[START:].imag, ydata=to_float(gf_iw)[START:],
         p0=(1.,), sigma=to_float(sigma)[START:]
     )
-    LOGGER.info('Amplitude of fit: %s ± %s', moment, np.sqrt(pcov))
+    moment, err = moment.squeeze(), np.sqrt(pcov.squeeze())
+    if moment > 5000:  # cutoff, this seems unreasonable large
+        LOGGER.warning("Amplitude of fit exceeds cutoff and seems unreasonable large (%s ± %s)!"
+                       "\nFit is ignored.")
+        return FourierFct(iw=np.zeros_like(iws), tau=np.zeros_like(tau))
+    if (moment > 500 and pcov/err > 1e-2) or pcov/err > 0.1:
+        # For very large fitted moments, we require increased accuracy
+        LOGGER.warning("Error of moment large (%s ± %s)!\nFit is ignored.",
+                       moment, err)
+        return FourierFct(iw=np.zeros_like(iws), tau=np.zeros_like(tau))
+    LOGGER.info('Amplitude of fit (order %s): %s ± %s', order, moment, err)
     gf_tau_fct = get_order_n_pole(order)
     tail_tau = moment*.5*(gf_tau_fct(tau, CC, beta) + gf_tau_fct(tau, -CC, beta))
     if _has_nan(tail_tau):
-        raise RuntimeError("Calculation of tail-fit field. Most likely a overflow occurred.")
+        raise RuntimeError("Calculation of tail-fit failed. Most likely a overflow occurred.")
     return FourierFct(iw=moment*norm_tail_iw, tau=tail_tau)
 
 
