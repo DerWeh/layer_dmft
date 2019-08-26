@@ -272,6 +272,22 @@ class Hubbard_Parameters:
     def U(self):
         return self.params.U
 
+    @mu.setter
+    def mu(self, value):
+        self.params.mu[:] = value
+
+    @V.setter
+    def V(self, value):
+        self.params.V[:] = value
+
+    @h.setter
+    def h(self, value):
+        self.params.h[:] = value
+
+    @U.setter
+    def U(self, value):
+        self.params.U[:] = value
+
     def onsite_energy(self, sigma=SIGMA, hartree=False) -> xr.DataArray:
         """Return the single-particle on-site energy.
 
