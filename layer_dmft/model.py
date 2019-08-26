@@ -333,7 +333,7 @@ class Hubbard_Parameters:
         e_onsite = self.onsite_energy(sigma=sigma, hartree=hartree)
         e_onsite = e_onsite.expand_dims({'lay2': range(self.N_l)}, axis=-1)
         e_onsite = e_onsite.rename(**{Dim.lay: 'lay1'})
-        ham = e_onsite*np.eye(*self.t_mat.shape) - t_mat
+        ham = -e_onsite*np.eye(*self.t_mat.shape) - t_mat
         ham.name = 'Hamiltonian'
         return ham
 
