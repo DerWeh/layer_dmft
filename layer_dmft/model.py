@@ -359,14 +359,23 @@ class Hubbard_Parameters:
 
         """
         gf_0_inv = -self.hamiltonian(hartree=hartree)
-        assert gf_0_inv.ndim == 3
-        gf_out = []
-        for gf_inv_sp in gf_0_inv:
-            gf_decomp = gtmatrix.decompose_hamiltonian(gf_inv_sp)
-            xi_bar = self.hilbert_transform(np.add.outer(gf_decomp.xi, omega),
-                                            half_bandwidth=self.D)
-            gf_out.append(gf_decomp.reconstruct(xi_bar, kind=diag_dic[diagonal]))
-        return np.array(gf_out).view(type=SpinResolvedArray)
+        omega = _ensure_dim(omega, dims=[f"z_{ii}" for ii in range(np.asanyarray(omega).ndim)])
+
+        def _invert(gf_inv, ww):
+            gf_decomp = gtmatrix.decompose_hamiltonian(gf_inv)
+            xi_bar = self.hilbert_transform(gf_decomp.xi + ww, half_bandwidth=self.D)
+            return gf_decomp.reconstruct(xi_bar, kind=diag_dic[diagonal])
+
+        layer_dim = [Dim.lay] if diagonal else ['lay1', 'lay2']
+        gf0 = xr.apply_ufunc(_invert, gf_0_inv, omega,
+                             input_core_dims=[['lay1', 'lay2'], []],
+                             output_core_dims=[layer_dim],
+                             vectorize=True, keep_attrs=True)
+        # get standard order for numpy compatibility
+        gf0 = gf0.transpose(*gf_0_inv.dims[:-2], *layer_dim, *omega.dims)
+        gf0.name = 'G_{Hartree}' if np.any(hartree) else 'G_0'
+        gf0.attrs['temperature'] = self.T
+        return gf0
 
     def gf0_eps(self, eps, omega, hartree=False, diagonal=True):
         """Return local (diagonal) elements of the non-interacting Green's function.
@@ -429,20 +438,21 @@ class Hubbard_Parameters:
             If `return_err`, the truncation error of occupation
 
         """
-        ham = self.hamiltonian(hartree=hartree)
-        signature = '(l,w),(l,l)->' + ('({out}),({out})' if return_err else '({out})')
         if total:
-            signature = signature.format(out='')
-        else:
-            signature = signature.format(out='l')
-        density = np.vectorize(gt.density, signature=signature,
-                               excluded={'beta', 'return_err', 'matrix', 'total'})
-
-        dens = density(gf_iw, -ham, beta=self.beta, return_err=return_err, matrix=True, total=total)
+            raise NotImplementedError()
+        ham = self.hamiltonian(hartree=hartree)
+        gf_iw = _ensure_dim(gf_iw, dims=[Dim.sp, Dim.lay, Dim.iws])
+        out_dim = [] if total else [Dim.lay]
+        dens = xr.apply_ufunc(
+            partial(gt.density, beta=self.beta, return_err=return_err, matrix=True, total=total),
+            gf_iw, ham,
+            input_core_dims=[[Dim.lay, Dim.iws], ['lay1', 'lay2']],
+            output_core_dims=[out_dim, out_dim] if return_err else [out_dim],
+            vectorize=True, keep_attrs=True,
+        )
         if return_err:
-            return gt.Result(*dens)
-        else:
-            return dens
+            return xr.Dataset({'x': dens[0], 'err': dens[1]})
+        return dens
 
     def occ0_eps(self, eps, hartree=False):
         r"""Return the :math:`ϵ`-resolved occupation for the non-interacting (mean-field) model.
@@ -471,18 +481,22 @@ class Hubbard_Parameters:
             The occupation per layer and spin
 
         """
-        occ0 = {}
-        if hartree is False:
-            hartree = (False, False)
-        for sp, hartree_sp in zip(Spins, hartree):
-            ham = self.hamiltonian(sigma=SIGMA[sp], hartree=hartree_sp)
+        eps = _ensure_dim(eps, dims='epsilon')
+
+        def _occ0_eps(eps, ham):
             ham_decomp = gtmatrix.decompose_hamiltonian(ham)
-            fermi = gt.fermi_fct(np.add.outer(ham_decomp.xi, eps), beta=self.beta)
-            occ0[sp.name] = ham_decomp.reconstruct(xi=fermi, kind='diag')
+            fermi = gt.fermi_fct(ham_decomp.xi + eps, beta=self.beta)
+            return ham_decomp.reconstruct(xi=fermi, kind='diag')
 
-        return SpinResolvedArray(**occ0)
+        ham = self.hamiltonian(hartree=hartree)
+        occ = xr.apply_ufunc(
+            _occ0_eps, eps, ham,
+            input_core_dims=[[], ['lay1', 'lay2']], output_core_dims=[[Dim.lay]],
+            vectorize=True,
+        )
+        occ.coords['layer'] = range(self.N_l)
+        return occ
 
-    # TODO: use spinresolved wrapper. Add option to reverse arguments
     def occ_eps(self, eps, gf_eps_iw, hartree=False, return_err=True, total=False):
         r"""Return the :math:`ϵ`-resolved occupation.
 
@@ -569,8 +583,8 @@ class Hubbard_Parameters:
             The Green's function.
 
         """
-        assert z.size == self_z.shape[-1], "Same number of frequencies"
-        gf_inv_diag = z + self.onsite_energy()[:, :, newaxis] - self_z
+        z = _ensure_dim(z, dims='z')
+        gf_inv_diag = self.onsite_energy() + z - self_z
         return self._z_dep_inversion(gf_inv_diag, diagonal=diagonal)
 
     def gf_dmft_f(self, eff_atom_gf, diagonal=True):
@@ -678,25 +692,23 @@ class Hubbard_Parameters:
             The Green's function.
 
         """
-        assert diag_z.ndim >= 2  # (..., N_l, #z), typically (#Spin, ...)
-        N_l = diag_z.shape[-2]
+        idx = np.eye(self.N_l)
 
-        gf_bare_inv = -self.t_mat.astype(np.complex256)
-        diag_indices = np.diag_indices_from(gf_bare_inv)
-        diag_z = np.moveaxis(diag_z, -2, -1)
-        newshape = diag_z.shape
-        diag_z = diag_z.reshape(-1, N_l)  # (..., N_l)
-
-        out = []
-        for diag_el in diag_z:
-            gf_bare_inv[diag_indices] = diag_el
-            gf_dec = gtmatrix.decompose_gf_omega(gf_bare_inv)
+        def _inversion(diag):
+            mat = diag[:, np.newaxis]*idx + self.t_mat
+            gf_dec = gtmatrix.decompose_gf_omega(mat)
             gf_dec.apply(self.hilbert_transform, half_bandwidth=self.D)
-            out.append(gf_dec.reconstruct(kind=diag_dic[diagonal]))
-        last_axes = out[0].shape
-        gf_out = np.array(out).reshape(newshape[:-1] + last_axes)
-        gf_out = np.moveaxis(gf_out, -(len(last_axes) + 1), -1)  # (..., #z)
-        return gf_out
+            return gf_dec.reconstruct(kind=diag_dic[diagonal])
+
+        layer_dim = [Dim.lay] if diagonal else ['lay1', 'lay2']
+        gf = xr.apply_ufunc(
+            _inversion, diag_z,
+            input_core_dims=[[Dim.lay]], output_core_dims=[layer_dim],
+            vectorize=True, keep_attrs=True
+        )
+        gf.name = 'G'
+        gf = gf.transpose(*diag_z.dims[:-2], *layer_dim, diag_z.dims[-1])
+        return gf
 
     def hybrid_fct_moments(self, occ):
         r"""Return the first high-frequency moments of the hybridization function.
@@ -921,6 +933,14 @@ def hopping_matrix(size, nearest_neighbor):
     t_mat[row[:-1], col[:-1]+1] = nearest_neighbor
     t_mat[row[:-1]+1, col[:-1]] = nearest_neighbor.conjugate()
     return t_mat
+
+
+def _ensure_dim(data, dims):
+    try:
+        data.dims
+    except AttributeError:
+        return xr.Variable(dims=dims, data=data)
+    return data
 
 
 hilbert_transform = {
