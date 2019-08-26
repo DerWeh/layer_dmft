@@ -22,18 +22,19 @@ from functools import partial
 from typing import Iterable
 
 import numpy as np
+import xarray as xr
 import gftools as gt
 import gftools.matrix as gtmatrix
 
 from numpy import newaxis
 
 from . import high_frequency_moments as hfm
-from .util import SpinResolvedArray, Spins
+from .util import spins, Spins, Dimensions as Dim
 from .fft import dft_iw2tau
 
 
-SIGMA = SpinResolvedArray(up=0.5, dn=-0.5)
-SIGMA.flags.writeable = False
+SIGMA = xr.DataArray([0.5, -0.5], dims=[Dim.sp], coords=[list(spins)])
+SIGMA.data.flags.writeable = False
 
 diag_dic = {True: 'diag', False: 'full'}
 
@@ -215,7 +216,7 @@ class Hubbard_Parameters:
 
     """
 
-    __slots__ = ('_N_l', 'T', 'D', 'mu', 'V', 'h', 'U', 't_mat', 'hilbert_transform')
+    __slots__ = ('_N_l', 'T', 'D', 'params', 't_mat', 'hilbert_transform')
 
     def __init__(self, N_l: int, lattice: str = None) -> None:
         """Empty initialization creating of according shape filled with zeros."""
@@ -230,10 +231,15 @@ class Hubbard_Parameters:
             warnings.warn('Deprecated, state lattice at construction', DeprecationWarning)
         else:
             self.hilbert_transform = hilbert_transform[lattice]
-        self.mu = np.zeros(N_l)
-        self.V = np.zeros(N_l)
-        self.h = np.zeros(N_l)
-        self.U = np.zeros(N_l)
+        self.params = xr.Dataset(
+            {
+                'mu': (['layer'], np.zeros(N_l)),
+                'V': (['layer'], np.zeros(N_l)),
+                'h': (['layer'], np.zeros(N_l)),
+                'U': (['layer'], np.zeros(N_l)),
+            },
+            coords={'layer': range(N_l)}
+        )
         self.t_mat = np.zeros((N_l, N_l))
 
     @property
@@ -250,7 +256,23 @@ class Hubbard_Parameters:
     def beta(self, value):
         self.T = 1./value
 
-    def onsite_energy(self, sigma=SIGMA, hartree=False):
+    @property
+    def mu(self):
+        return self.params.mu
+
+    @property
+    def V(self):
+        return self.params.V
+
+    @property
+    def h(self):
+        return self.params.h
+
+    @property
+    def U(self):
+        return self.params.U
+
+    def onsite_energy(self, sigma=SIGMA, hartree=False) -> xr.DataArray:
         """Return the single-particle on-site energy.
 
         The energy is given with respect to half-filling, thus the chemical
@@ -273,19 +295,22 @@ class Hubbard_Parameters:
             The (layer dependent) on-site energy :math:`μ + U/2 - V - σh`.
 
         """
-        if np.all(self.h == 0):
-            sigma = np.mean(sigma, keepdims=True)
-        onsite_energy = +np.multiply.outer(sigma, self.h)
-        onsite_energy += self.mu + 0.5*self.U - self.V
+        params = self.params
+        if np.all(params.h == 0):
+            try:
+                sigma = sigma.mean(keepdims=True)
+            except AttributeError:
+                sigma = xr.Variable(dims=Dim.sp, data=np.mean(sigma, keepdims=True))
+        onsite_energy = sigma*params.h + params.mu + 0.5*params.U - params.V
         if np.any(hartree):
             # assert hartree.ndim <= onsite_energy.ndim
             # backward compatibility
-            onsite_energy = onsite_energy - hartree * self.U
-        if isinstance(sigma, SpinResolvedArray):
-            return onsite_energy.view(type=SpinResolvedArray)
+            onsite_energy = onsite_energy - hartree*params.U
+        onsite_energy.name = 'onsite energy'
+        onsite_energy.attrs['Note'] = 'The onsite energy has the sing of a chemical potential.'
         return onsite_energy
 
-    def hamiltonian(self, sigma=SIGMA, hartree=False):
+    def hamiltonian(self, sigma=SIGMA, hartree=False) -> xr.DataArray:
         """Return the matrix form of the non-interacting Hamiltonian.
 
         Parameters
@@ -304,9 +329,12 @@ class Hubbard_Parameters:
             The Hamiltonian matrix
 
         """
-        ham = -self.onsite_energy(sigma=sigma, hartree=hartree)[..., newaxis] \
-            * np.eye(*self.t_mat.shape) \
-            - self.t_mat
+        t_mat = xr.Variable(dims=['lay1', 'lay2'], data=self.t_mat)
+        e_onsite = self.onsite_energy(sigma=sigma, hartree=hartree)
+        e_onsite = e_onsite.expand_dims({'lay2': range(self.N_l)}, axis=-1)
+        e_onsite = e_onsite.rename(**{Dim.lay: 'lay1'})
+        ham = e_onsite*np.eye(*self.t_mat.shape) - t_mat
+        ham.name = 'Hamiltonian'
         return ham
 
     def gf0(self, omega, hartree=False, diagonal=True):

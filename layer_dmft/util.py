@@ -14,6 +14,12 @@ import gftools.pade as gtpade
 spins = ('up', 'dn')
 
 
+class Dimensions:
+    sp = 'spin'
+    lay = 'layer'
+    iws = 'Matsubara'
+
+
 class Spins(IntEnum):
     """Spins 'up'/'dn' with their corresponding index.
 
