@@ -321,6 +321,7 @@ class Hubbard_Parameters:
         if np.any(hartree):
             # assert hartree.ndim <= onsite_energy.ndim
             # backward compatibility
+            hartree = _ensure_dim(hartree, Dim.lay if hartree.ndim == 1 else [Dim.sp, Dim.lay])
             onsite_energy = onsite_energy - hartree*params.U
         onsite_energy.name = 'onsite energy'
         onsite_energy.attrs['Note'] = 'The onsite energy has the sing of a chemical potential.'
@@ -389,6 +390,8 @@ class Hubbard_Parameters:
                              vectorize=True, keep_attrs=True)
         # get standard order for numpy compatibility
         gf0 = gf0.transpose(*gf_0_inv.dims[:-2], *layer_dim, *omega.dims)
+        for lay in layer_dim:
+            gf0.coords[lay] = range(self.N_l)
         gf0.name = 'G_{Hartree}' if np.any(hartree) else 'G_0'
         gf0.attrs['temperature'] = self.T
         return gf0
@@ -636,6 +639,7 @@ class Hubbard_Parameters:
         the impurity problem.
 
         """
+        eff_atom_gf = _ensure_dim(eff_atom_gf, dims=[Dim.lay, 'z'])
         assert len(Spins) == eff_atom_gf.shape[0], "Two spin components"
         return self._z_dep_inversion(1./eff_atom_gf, diagonal=diagonal)
 
