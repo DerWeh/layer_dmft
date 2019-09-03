@@ -499,18 +499,20 @@ class Hubbard_Parameters:
         """
         eps = _ensure_dim(eps, dims='epsilon')
 
-        def _occ0_eps(eps, ham):
+        def _occ0_eps(ham):
+            # TODO: vectorize decomposition
             ham_decomp = gtmatrix.decompose_hamiltonian(ham)
-            fermi = gt.fermi_fct(ham_decomp.xi + eps, beta=self.beta)
+            fermi = gt.fermi_fct(np.add.outer(ham_decomp.xi, eps.values), beta=self.beta)
             return ham_decomp.reconstruct(xi=fermi, kind='diag')
 
         ham = self.hamiltonian(hartree=hartree)
         occ = xr.apply_ufunc(
-            _occ0_eps, eps, ham,
-            input_core_dims=[[], ['lay1', 'lay2']], output_core_dims=[[Dim.lay]],
+            _occ0_eps, ham,
+            input_core_dims=[['lay1', 'lay2']], output_core_dims=[[Dim.lay, *eps.dims]],
             vectorize=True,
         )
-        occ.coords['layer'] = range(self.N_l)
+        occ.coords[Dim.lay] = range(self.N_l)
+        occ.coords['epsilon'] = eps
         return occ
 
     def occ_eps(self, eps, gf_eps_iw, hartree=False, return_err=True, total=False):
