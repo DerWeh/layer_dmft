@@ -643,7 +643,7 @@ class Hubbard_Parameters:
         assert len(Spins) == eff_atom_gf.shape[0], "Two spin components"
         return self._z_dep_inversion(1./eff_atom_gf, diagonal=diagonal)
 
-    def gf_dmft_eps_s(self, eps, z, self_z, diagonal=True):
+    def gf_dmft_eps_s(self, eps, z, self_z, diagonal=True) -> xr.DataArray:
         """Calculate the ϵ-dependent Gf from the self-energy `self_z`.
 
         This function is written for the dynamical mean-field theory, where
@@ -671,25 +671,27 @@ class Hubbard_Parameters:
             else (2, N_l, N_l, N_e, N_z).
 
         """
-        eps = np.asarray(eps)
-        assert eps.ndim <= 1
-        assert self_z.ndim == 3
-        assert z.size == self_z.shape[-1]
-        shape = self_z.shape
-        if diagonal:
-            gf_out = SpinResolvedArray(
-                np.zeros((shape[0], shape[1], eps.size, shape[2]), dtype=np.complex)
-            )
-        diag_z = z + self.onsite_energy()[:, :, newaxis] - self_z
-        gf_bare_inv = -self.t_mat.astype(np.complex256)
-        diag = np.diag_indices_from(gf_bare_inv)
-        for diag_z_sp, gf_out_sp in zip(diag_z, gf_out):  # iterate spins
-            for ii in range(shape[-1]):  # iterate z-values
-                gf_bare_inv[diag] = diag_z_sp[:, ii]
-                gf_dec = gtmatrix.decompose_gf_omega(gf_bare_inv)
-                gf_dec.xi = 1./(gf_dec.xi[..., newaxis] - eps)
-                gf_out_sp[..., ii] = gf_dec.reconstruct(kind=diag_dic[diagonal])
-        return gf_out
+        z = _ensure_dim(z, 'z')
+        eps = _ensure_dim(eps, 'epsilon')
+        self_z = _ensure_dim(self_z, [Dim.sp, Dim.lay, 'z'])
+        diag_z = self.onsite_energy() + z - self_z
+        idx = np.eye(self.N_l)
+
+        def _gf(diag):
+            mat = diag[:, np.newaxis]*idx + self.t_mat
+            gf_dec = gtmatrix.decompose_gf_omega(mat)
+            gf_dec.xi = 1./(gf_dec.xi[..., newaxis] - eps.values)
+            return gf_dec.reconstruct(kind=diag_dic[diagonal])
+
+        layer_dim = [Dim.lay] if diagonal else ['lay1', 'lay2']
+        gf = xr.apply_ufunc(
+            _gf, diag_z,
+            input_core_dims=[[Dim.lay]], output_core_dims=[layer_dim + ['epsilon']],
+            vectorize=True
+        )
+        gf.name = 'G'
+        gf = gf.transpose(*diag_z.dims[:-2], *layer_dim, *eps.dims, diag_z.dims[-1])
+        return gf
 
     def _z_dep_inversion(self, diag_z, diagonal):
         """Calculate Gf from known inverse with diagonal elements `diag_z`.
