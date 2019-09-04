@@ -10,11 +10,14 @@ from __future__ import absolute_import, unicode_literals
 
 import pytest
 import numpy as np
+import xarray as xr
 
 import gftools as gt
 
 from .context import model, util
 
+Dim = util.Dimensions
+SIGMA = model.SIGMA
 SpinResolvedArray = util.SpinResolvedArray
 
 
@@ -62,16 +65,11 @@ def test_SpinResolvedArray_iteration():
 def test_compare_greensfunction():
     """Non-interacting and DMFT should give the same for self-energy=0."""
     N = 13
-    prm = model.Hubbard_Parameters(N)
+    prm = model.Hubbard_Parameters(N, lattice='bethe')
     prm.T = 0.137
     prm.D = 1.  # half-bandwidth
-    prm.mu = np.zeros(N)  # with respect to half filling
     prm.mu[N//2] = 0.45
-    prm.V = np.zeros(N)
-    prm.h = np.zeros(N)
     prm.h[N//2] = 0.9
-    prm.U = np.zeros(N)
-    prm.hilbert_transform = model.hilbert_transform['bethe']
     t = 0.2
     prm.t_mat = model.hopping_matrix(N, nearest_neighbor=t)
 
@@ -84,16 +82,15 @@ def test_compare_greensfunction():
 def test_non_interacting_siam():
     """Compare that the SIAM yields the correct local Green's function."""
     N_l = 7
-    prm = model.Hubbard_Parameters(N_l)
+    prm = model.Hubbard_Parameters(N_l, lattice='bethe')
     prm.T = 0.137
     prm.D = 1.3  # half-bandwidth
     prm.mu = np.linspace(-.78, .6, num=N_l)
     prm.h = np.linspace(-1.47, .47, num=N_l)
-    prm.hilbert_transform = model.hilbert_transform['bethe']
     t = 0.2
     prm.t_mat = model.hopping_matrix(N_l, nearest_neighbor=t)
 
-    iw = gt.matsubara_frequencies(np.arange(1024), beta=prm.beta)
+    iw = xr.Variable(Dim.iws, gt.matsubara_frequencies(range(1024), beta=prm.beta))
     gf_layer = prm.gf0(iw)
     occ = prm.occ0(gf_layer)
     siams = prm.get_impurity_models(iw, self_z=0, gf_z=gf_layer, occ=occ.x)
@@ -109,7 +106,7 @@ def test_2x2_matrix():
 
     Done for the 1D chain of sites.
     """
-    prm = model.Hubbard_Parameters(2)
+    prm = model.Hubbard_Parameters(2, lattice='chain')
 
     def gf_2x2(omega, t_mat, onsite_energys):
         assert np.all(np.diag(t_mat) == 0.), \
@@ -130,34 +127,32 @@ def test_2x2_matrix():
     prm.t_mat[0, 1] = prm.t_mat[1, 0] = 1.3
     prm.mu = np.array([0, 1.73])
     prm.h = np.array([0, -0.3])
-    prm.U[:] = 0
-    prm.V[:] = 0
     prm.D = None
-    prm.hilbert_transform = model.hilbert_transform['chain']
     prm.assert_valid()
 
     omegas = gt.matsubara_frequencies(np.arange(100), prm.beta)
     gf_prm = prm.gf0(omegas, diagonal=False)
-    gf_2x2_up = np.array([gf_2x2(iw, prm.t_mat, prm.onsite_energy(sigma=model.SIGMA.up))
-                          for iw in omegas])
+    e_onsite = prm.onsite_energy()
+    gf_2x2_up = np.array([gf_2x2(iw, prm.t_mat, e_onsite.sel({Dim.sp: 'up'}).values)
+                           for iw in omegas])
     gf_2x2_up = gf_2x2_up.transpose(1, 2, 0)  # adjuste axis order (2, 2, omegas)
-    assert np.allclose(gf_2x2_up, gf_prm.up)
-    gf_2x2_dn = np.array([gf_2x2(iw, prm.t_mat, prm.onsite_energy(sigma=model.SIGMA.dn))
+    assert np.allclose(gf_2x2_up, gf_prm.sel({Dim.sp: 'up'}))
+    gf_2x2_dn = np.array([gf_2x2(iw, prm.t_mat, e_onsite.sel({Dim.sp: 'dn'}).values)
                           for iw in omegas])
     gf_2x2_dn = gf_2x2_dn.transpose(1, 2, 0)  # adjuste axis order (2, 2, omegas)
-    assert np.allclose(gf_2x2_dn, gf_prm.dn)
+    assert np.allclose(gf_2x2_dn, gf_prm.sel({Dim.sp: 'dn'}))
 
 
 def test_particle_hole_symmtery():
     """Compare particle hole-symmetric case in the most simple example N_l=1."""
-    prm = model.Hubbard_Parameters(1)
+    prm = model.Hubbard_Parameters(1, lattice='bethe')
     prm.T = 0.0137
     prm.U[:] = 6
     prm.D = 1.37
-    prm.hilbert_transform = model.hilbert_transform['bethe']
     prm.assert_valid()
 
-    iws = gt.matsubara_frequencies(np.arange(1024), beta=prm.beta)
+    iws = xr.DataArray(gt.matsubara_frequencies(range(1024), beta=prm.beta),
+                       dims=Dim.iws)
     assert prm.onsite_energy(hartree=[.5,]) == 0.
     occ = prm.occ0(prm.gf0(iws, hartree=[.5,]), hartree=[.5,])
     assert occ.x - occ.err <= .5 <= occ.x + occ.err
