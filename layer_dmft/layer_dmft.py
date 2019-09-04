@@ -317,14 +317,15 @@ def hartree_solution(prm: Hubbard_Parameters, iw_n) -> xr.Dataset:
 
 
 def _hubbard_I_update(occ_init, i_omega, params: Hubbard_Parameters, out_dict):
-    self_iw = gt.hubbard_I_self_z(i_omega, params.U, occ_init[::-1])
+    # called by solver -> propagates only values
+    self_iw = gt.hubbard_I_self_z(i_omega, params.U.values, occ_init[::-1])
     out_dict['self_iw'] = self_iw = np.moveaxis(self_iw, 0, -1)
     out_dict['gf'] = gf_iw = params.gf_dmft_s(i_omega, self_z=self_iw, diagonal=True)
-    occ = out_dict['occ'] = params.occ0(gf_iw, hartree=occ_init[::-1], return_err=False)
-    return occ - occ_init
+    occ = out_dict['occ'] = params.occ0(gf_iw.values, hartree=occ_init[::-1], return_err=False)
+    return occ.values - occ_init
 
 
-def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
+def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> xr.Dataset:
     """Calculate the Hubbard I approximation of `prm` for the r-DMFT loop.
 
     Parameters
@@ -343,27 +344,18 @@ def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
         The Green's function, self-energy and occupation.
 
     """
-    N_l = prm.mu.size
-    N_iw = iw_n.size
-    gf_layer_iw = prm.gf0(iw_n)  # start with non-interacting Gf
-    occ0 = prm.occ0(gf_layer_iw)
-    if np.any(prm.U != 0):
-        # Non-interacting/Hartree is typically no good starting value!
-        occ0.x[:] = .5
-        output: Dict[str, np.ndarray] = {}
-        tol = max(np.linalg.norm(occ0.err), 1e-14)
-        root_finder = charge._root
-        optimizer = partial(_hubbard_I_update, i_omega=iw_n, params=prm, out_dict=output)
-        solve = partial(root_finder, fun=optimizer, x0=occ0.x, tol=tol)
-        solve()
-        gf_layer_iw = output['gf']
-        self_layer_iw = output['self_iw']
-        occ_layer = output['occ']
-    else:  # nonsense case
-        # start with non-interacting solution
-        self_layer_iw = np.zeros((2, N_l, N_iw), dtype=np.complex)
-        occ_layer = occ0.x
-    return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
+    gf_iw = prm.gf0(iw_n)  # start with non-interacting Gf
+    occ0 = prm.occ0(gf_iw)
+    if np.all(prm.U == 0):  # nonsense case
+        return xr.Dataset({'gf_iw': gf_iw, 'self_iw': xr.zeros_like(gf_iw), 'occ': occ0.x})
+    occ0.x[:] = .5  # Non-interacting/Hartree is typically no good starting value!
+    output: Dict[str, np.ndarray] = {}
+    tol = max(np.linalg.norm(occ0.err), 1e-14)
+    root_finder = charge._root  # pylint: disable=protected-access
+    optimizer = partial(_hubbard_I_update, i_omega=iw_n.values, params=prm, out_dict=output)
+    root_finder(fun=optimizer, x0=occ0.x, tol=tol)
+    self_iw = (output['gf'].dims, output['self_iw'])
+    return xr.Dataset({'gf_iw': output['gf'], 'self_iw': self_iw, 'occ': output['occ']})
 
 
 def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, output_dir=None
