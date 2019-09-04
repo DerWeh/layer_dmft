@@ -318,7 +318,7 @@ def hartree_solution(prm: Hubbard_Parameters, iw_n) -> xr.Dataset:
 
 def _hubbard_I_update(occ_init, i_omega, params: Hubbard_Parameters, out_dict):
     # called by solver -> propagates only values
-    self_iw = gt.hubbard_I_self_z(i_omega, params.U.values, occ_init[::-1])
+    self_iw = gt.hubbard_I_self_z(i_omega.values, params.U.values, occ_init[::-1])
     out_dict['self_iw'] = self_iw = np.moveaxis(self_iw, 0, -1)
     out_dict['gf'] = gf_iw = params.gf_dmft_s(i_omega, self_z=self_iw, diagonal=True)
     occ = out_dict['occ'] = params.occ0(gf_iw.values, hartree=occ_init[::-1], return_err=False)
@@ -352,14 +352,14 @@ def hubbard_I_solution(prm: Hubbard_Parameters, iw_n) -> xr.Dataset:
     output: Dict[str, np.ndarray] = {}
     tol = max(np.linalg.norm(occ0.err), 1e-14)
     root_finder = charge._root  # pylint: disable=protected-access
-    optimizer = partial(_hubbard_I_update, i_omega=iw_n.values, params=prm, out_dict=output)
+    optimizer = partial(_hubbard_I_update, i_omega=iw_n, params=prm, out_dict=output)
     root_finder(fun=optimizer, x0=occ0.x, tol=tol)
     self_iw = (output['gf'].dims, output['self_iw'])
     return xr.Dataset({'gf_iw': output['gf'], 'self_iw': self_iw, 'occ': output['occ']})
 
 
 def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, output_dir=None
-                          ) -> Tuple[LayerIterData, int, float]:
+                          ) -> xr.Dataset:
     """Get necessary quantities (G, Σ, n) to start DMFT loop.
 
     Parameters
@@ -412,9 +412,8 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
     if kind == 'resume':
         LOGGER.info("Reading old Green's function and self energy")
         layerdat, last_it, data_T = load_last_iteration(output_dir)
-        return layerdat, last_it + 1, data_T
-
-    start = 0
+        return xr.Dataset(layerdat._asdict(),
+                          attrs={'it': last_it + 1, 'temperature': data_T})
     if kind == 'hartree':
         LOGGER.info('Start from Hartree approximation')
         layerdat = hartree_solution(prm, iw_n=iw_points)
@@ -422,6 +421,7 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
     elif kind == 'hubbard-i':
         LOGGER.info('Start from Hubbard-I approximation')
         layerdat = hubbard_I_solution(prm, iw_n=iw_points)
+        LOGGER.progress('DONE: calculated starting point')
     else:  # giving a LayerIterData obj or a dict
         try:  # assuming kind is NamedTuple
             kind: LayerIterData
@@ -440,9 +440,9 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
             raise TypeError("If `kind` is a dict, it may only have the keys 'self_iw'"
                             "and optionally 'gf_iw' or 'occ'.\n"
                             f"Other keys: {tuple(kind.keys())}")
-        layerdat = LayerIterData(gf_iw=gf_iw, self_iw=self_iw, occ=occ)
-
-    return layerdat, start, prm.T
+        layerdat = xr.Dataset({'gf_iw': gf_iw, 'self_iw': self_iw, 'occ': occ})
+    layerdat.attrs.update(it=0, temperature=prm.T)
+    return layerdat
 
 
 def main(prm: Hubbard_Parameters, n_iter, n_process=1,
