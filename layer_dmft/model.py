@@ -824,10 +824,13 @@ class Hubbard_Parameters:
 
         for attr in self.__slots__:
             attr_val = getattr(self, attr)
-            try:  # copy the attribute if it provides a copy method
-                attr_val = attr_val.copy()
-            except AttributeError:  # if not just use it as it is
-                pass
+            try:
+                attr_val = attr_val.copy(deep=True)
+            except (TypeError, AttributeError):
+                try:  # copy the attribute if it provides a copy method
+                    attr_val = attr_val.copy()
+                except AttributeError:  # if not just use it as it is
+                    pass
             setattr(copy, attr, attr_val)
         return copy
 
