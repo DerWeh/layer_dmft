@@ -15,6 +15,7 @@ from collections import namedtuple
 
 import numpy as np
 import matplotlib.pyplot as plt
+import xarray as xr
 
 from scipy import optimize
 
@@ -22,7 +23,7 @@ import gftools as gt
 
 from . import plot, high_frequency_moments as hfm
 from .capacitor_formula import potential_energy_vector
-from .util import attribute
+from .util import attribute, Dimensions as Dim
 from .model import Hubbard_Parameters
 
 LOGGER = logging.getLogger(__name__)
@@ -268,7 +269,9 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
     assert kind in set(('auto', 'occ', 'occ_lsq', 'V')), f"Unknown kind: {kind}"
     assert V0 is None or occ0 is None
     params = parameters
-    iw_array = gt.matsubara_frequencies(np.arange(n_points), beta=params.beta)
+    iw_array = xr.Variable(data=gt.matsubara_frequencies(np.arange(n_points), beta=params.beta),
+                            dims=Dim.iws)
+
 
     if kind == 'auto':
         if np.any(params.U != 0):  # interacting case

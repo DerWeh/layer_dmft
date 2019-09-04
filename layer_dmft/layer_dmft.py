@@ -18,10 +18,11 @@ from collections import namedtuple
 
 import numpy as np
 import gftools as gt
+import xarray as xr
 from scipy.interpolate import UnivariateSpline
 
 from . import charge, dataio, high_frequency_moments as hfm
-from .model import Hubbard_Parameters, SIAM
+from .model import Hubbard_Parameters, SIAM, Dim
 from .interface import sb_qmc
 
 # setup logging
@@ -47,7 +48,7 @@ def log_info(prm: Hubbard_Parameters):
 LayerIterData = namedtuple('layer_iter_data', ['gf_iw', 'self_iw', 'occ'])
 Sigma = namedtuple('sigma', ['iw', 'moments'])
 SolverResult = NamedTuple("SolverResult", [('self', Sigma), ('data', Dict[str, Any])])
-MapLayer = namedtuple("MapLayer", ['interacting', 'unique', 'lay2imp'])
+MapLayer = namedtuple("MapLayer", ['interacting', 'unique', 'imp2lay', 'updated', 'unchanged'])
 
 
 def interpolate_siam_temperature(siams: Iterable[SIAM], iw_n) -> Iterable[SIAM]:
@@ -121,19 +122,22 @@ def mapping_lay_imp(prm_U, layer_config=None) -> MapLayer:
     """
     N_l = len(prm_U)
     interacting_layers = np.flatnonzero(prm_U)
-    lay2imp = np.arange(N_l) if layer_config is None else np.asarray(layer_config, dtype=int)
-    if len(lay2imp) != N_l:
-        raise ValueError(f"'layer_config' has wrong number of elements ({lay2imp.size}), "
+    map_lay2imp = np.arange(N_l) if layer_config is None else np.asarray(layer_config, dtype=int)
+    if len(map_lay2imp) != N_l:
+        raise ValueError(f"'layer_config' has wrong number of elements ({map_lay2imp.size}), "
                          f"expected: {N_l}")
-    if np.any(lay2imp > N_l - 1):
+    if np.any(map_lay2imp > N_l - 1):
         raise ValueError("'layer_config' doesn't point to valid layers"
                          f" (max: {N_l-1}): {layer_config}")
-    lay2imp_int = lay2imp[interacting_layers]
-    unique_layers = np.unique(lay2imp_int[lay2imp_int >= 0])
-    ulay = list(unique_layers)
-    mapping_lay2imp = {lay: (ulay.index(imp) if imp >= 0 else None)
-                       for lay, imp in zip(interacting_layers, lay2imp_int)}
-    return MapLayer(interacting_layers, unique_layers, mapping_lay2imp)
+    map_lay2imp_int = map_lay2imp[interacting_layers]
+    unique_layers, map_imp2lay = np.unique(map_lay2imp_int, return_inverse=True)
+    assert interacting_layers.size >= map_imp2lay.size, \
+        "There have to be more interacting layers than impurities"
+    unchanged = interacting_layers[np.flatnonzero(map_lay2imp_int < 0)]
+    updated = interacting_layers[np.flatnonzero(map_lay2imp_int >= 0)]
+    assert updated.size == map_imp2lay.size, \
+        "Every updated layer must be mapped to an impurity model"
+    return MapLayer(interacting_layers, unique_layers, map_imp2lay, updated, unchanged)
 
 
 def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
@@ -194,15 +198,17 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
 
     if layer_config is not None:
         LOGGER.progress('Using calculated self-energies from %s on layers %s',
-                        list(mlayer.unique), mlayer.lay2imp.values())
+                        list(mlayer.unique), list(mlayer.imp2lay))
 
-    for lay, imp in mlayer.lay2imp.items():
-        update = imp is not None
-        LOGGER.debug("Assigning %s to layer %s",
-                     f"impurity {imp} (from {mlayer.unique[imp]}) to" if update
-                     else "previous value", lay)
-        self_layer_iw[:, lay] = solutions[imp].self.iw if update else self_iw[:, lay]
-        occ_imp[:, lay] = -solutions[imp].data['gf_tau'][:, -1] if update else occ[:, lay]
+    for lay, imp in zip(mlayer.updated, mlayer.imp2lay):
+        LOGGER.debug("Assigning impurity %s (from %s) to layer %s",
+                     imp, mlayer.unique[imp], lay)
+        self_layer_iw[:, lay] = solutions[imp].self.iw
+        occ_imp[:, lay] = -solutions[imp].data['gf_tau'][:, -1]
+    for lay in mlayer.unchanged:
+        LOGGER.debug("Reusing old values for layer %s", lay)
+        self_layer_iw[:, lay] = self_iw[:, lay]
+        occ_imp[:, lay] = occ[:, lay]
 
     # average over spin if not magnetic
     if FORCE_PARAMAGNET and np.all(prm.h == 0):
@@ -278,7 +284,7 @@ def interpolate(x_in, fct_in, x_out):
     return fct_out
 
 
-def hartree_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
+def hartree_solution(prm: Hubbard_Parameters, iw_n) -> xr.Dataset:
     """Calculate the Hartree approximation of `prm` for the r-DMFT loop.
 
     Parameters
@@ -297,22 +303,17 @@ def hartree_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
         The Green's function, self-energy and occupation.
 
     """
-    N_l = prm.mu.size
-    N_iw = iw_n.size
-    gf_layer_iw = prm.gf0(iw_n)  # start with non-interacting Gf
-    occ0 = prm.occ0(gf_layer_iw)
-    if np.any(prm.U != 0):
-        tol = max(np.linalg.norm(occ0.err), 1e-14)
-        opt_res = charge.charge_self_consistency(prm, tol=tol, occ0=occ0.x, n_points=N_iw)
-        gf_layer_iw = prm.gf0(iw_n, hartree=opt_res.occ.x[::-1])
-        occ_layer = opt_res.occ.x
-        self_layer_iw = np.zeros(occ_layer.shape + (N_iw,), dtype=np.complex)
-        self_layer_iw[:] = opt_res.occ.x[::-1, :, np.newaxis] * prm.U[np.newaxis, :, np.newaxis]
-    else:  # nonsense case
-        # non-interacting solution
-        self_layer_iw = np.zeros(occ0.x.shape + (N_iw,), dtype=np.complex)
-        occ_layer = occ0.x
-    return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
+    gf_iw = prm.gf0(iw_n)  # start with non-interacting Gf
+    occ0 = prm.occ0(gf_iw)
+    if np.all(prm.U == 0):  # nonsense case, no need for Hartree
+        return xr.Dataset({'gf_iw': gf_iw, 'self_iw': xr.zeros_like(gf_iw), 'occ': occ0.x})
+    tol = max(np.linalg.norm(occ0.err), 1e-14)
+    opt_res = charge.charge_self_consistency(prm, tol=tol, occ0=occ0.x, n_points=iw_n.size)
+    gf_iw = prm.gf0(iw_n, hartree=opt_res.occ.x.roll({Dim.sp: 1}, roll_coords=False))
+    self_iw = opt_res.occ.x.roll({Dim.sp: 1}, roll_coords=False) * prm.U
+    self_iw, __ = xr.broadcast(self_iw, gf_iw)  # pylint: disable=unbalanced-tuple-unpacking
+    self_iw.name = 'Σ_{Hartree}'
+    return xr.Dataset({'gf_iw': gf_iw, 'self_iw': self_iw, 'occ': opt_res.occ.x})
 
 
 def _hubbard_I_update(occ_init, i_omega, params: Hubbard_Parameters, out_dict):
