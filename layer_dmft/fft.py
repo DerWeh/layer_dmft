@@ -275,7 +275,7 @@ def ensure_fit_causality(mom: FourierFct, tail1: FourierFct, tail2: FourierFct):
     LOGGER.warning("The fitted moments corresponding to indices %s result in non-causal"
                    "tails and are therefore ignored!", positive)
     imag_tail.iw[positive], imag_tail.tau[positive] = 0, 0  # set according fitted tails to 0
-    if np.any(mom.iws[..., -1] < 0):  # this should not happen!
+    if np.any(mom.iw[..., -1] < 0):  # this should not happen!
         LOGGER.warning("Tail calculated from moments is non-causal, "
                        "apparently some incorrect moments were provided.")
 
