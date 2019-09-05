@@ -579,7 +579,7 @@ class Hubbard_Parameters:
         else:
             return occ
 
-    def gf_dmft_s(self, z, self_z, diagonal=True):
+    def gf_dmft_s(self, z, self_z, diagonal=True) -> xr.DataArray:
         """Calculate the local Green's function from the self-energy `self_z`.
 
         This function is written for the dynamical mean-field theory, where
@@ -734,7 +734,7 @@ class Hubbard_Parameters:
         gf = gf.transpose(*diag_z.dims[:-2], *layer_dim, diag_z.dims[-1])
         return gf
 
-    def hybrid_fct_moments(self, occ):
+    def hybrid_fct_moments(self, occ) -> xr.DataArray:
         r"""Return the first high-frequency moments of the hybridization function.
 
         Currently the first and the second moment are implemented, thus N_moments = 2.
@@ -755,22 +755,20 @@ class Hubbard_Parameters:
             Array of the high-frequency moments.
 
         """
-        self_mod_0 = self.hamiltonian(hartree=occ[::-1])
-        idx = np.eye(*self_mod_0.shape[-2:])
-        self_1 = hfm.self_m1(self.U, occ[::-1])[..., newaxis] * idx
+        occ_rev = _ensure_dim(occ, dims=[Dim.sp, Dim.lay]).roll({Dim.sp: 1}, roll_coords=False)
+        self_mod_0 = self.hamiltonian(hartree=occ_rev)
+        self_1 = _diagflat(hfm.self_m1(self.U, occ_rev))
         eps_m2 = self.hilbert_transform.m2(self.D)
 
-        diag = partial(np.diagonal, axis1=-2, axis2=-1)
-
-        gf_2 = diag(hfm.gf_lattice_m2(self_mod_0))
-        gf_3_sub = diag(hfm.gf_lattice_m3_subtract(self_mod_0, eps_m2))
-        gf_3 = diag(hfm.gf_lattice_m3(self_mod_0, self_1, eps_m2))
-        gf_4_sub = diag(hfm.gf_lattice_m4_subtract(self_mod_0, self_1, eps_m2))
+        gf_2 = _diagonal(hfm.gf_lattice_m2(self_mod_0))
+        gf_3_sub = _diagonal(hfm.gf_lattice_m3_subtract(self_mod_0, eps_m2))
+        gf_3 = _diagonal(hfm.gf_lattice_m3(self_mod_0, self_1, eps_m2))
+        gf_4_sub = _diagonal(hfm.gf_lattice_m4_subtract(self_mod_0, self_1, eps_m2))
 
         hyb_m1 = hfm.hybridization_m1(gf_2, gf_3_sub)
         hyb_m2 = hfm.hybridization_m2(gf_2, gf_3, gf_4_sub)
 
-        return np.array((hyb_m1, hyb_m2))
+        return xr.concat([hyb_m1, hyb_m2], dim=xr.Variable('moment', ['m1', 'm2']))
 
     def assert_valid(self):
         """Raise error if attributes are not valid.
@@ -878,15 +876,17 @@ class Hubbard_Parameters:
         >>> imp_mod_dict = {lay: mod for lay, mod in enumerate(imp_mods) if prm.U[lay] != 0}
 
         """
-        if gf_z is None:
-            gf_z = self.gf_dmft_s(z, self_z=self_z, diagonal=True)
+        z = _ensure_dim(z, dims='z')
+        self_z = _ensure_dim(self_z, dims=[Dim.sp, Dim.lay, 'z'])
+        gf_z = (self.gf_dmft_s(z, self_z=self_z, diagonal=True) if gf_z is None
+                else _ensure_dim(gf_z, dims=[Dim.sp, Dim.lay, 'z']))
         e_onsite = self.onsite_energy()
-        hybrid_z = z + e_onsite[..., newaxis] - self_z - 1./gf_z
+        hybrid_z = e_onsite + z - self_z - 1./gf_z
         hybrid_mom = self.hybrid_fct_moments(occ)
-        impurity_models = (SIAM(e_onsite[:, ll], U=self.U[ll], T=self.T,
-                                z=z, hybrid_fct=hybrid_z[:, ll], hybrid_mom=hybrid_mom[:, :, ll])
-                           for ll in range(self._N_l))
-        return impurity_models
+        for ll in range(self._N_l):
+            lay = {Dim.lay: ll}
+            yield SIAM(e_onsite[lay], U=self.U[lay], T=self.T, z=z,
+                       hybrid_fct=hybrid_z[lay], hybrid_mom=hybrid_mom[lay])
 
 
 def _save_get(object_, attribue):
@@ -968,6 +968,33 @@ def _ensure_dim(data, dims):
     except AttributeError:
         return xr.Variable(dims=dims, data=data)
     return data
+
+
+def _diagflat(diagonal: xr.DataArray, diag_dim=Dim.lay, mat_dim=('lay1', 'lay2')
+              ) -> xr.DataArray:
+    idx = np.eye(diagonal.sizes[diag_dim])
+    mat = xr.apply_ufunc(
+        lambda dd: dd[..., np.newaxis]*idx, diagonal,
+        input_core_dims=[[diag_dim]], output_core_dims=[list(mat_dim)], keep_attrs=True
+    )
+    try:
+        coord = diagonal.coords[diag_dim]
+    except KeyError:
+        return mat
+    return mat.assign_coords(**{dim: coord.data for dim in mat_dim})
+
+
+def _diagonal(mat: xr.DataArray, mat_dim=('lay1', 'lay2'), diag_dim=Dim.lay):
+    diagonal = xr.apply_ufunc(
+        lambda mat: np.diagonal(mat, axis1=-1, axis2=-2), mat,
+        input_core_dims=[list(mat_dim)], output_core_dims=[[diag_dim]], keep_attrs=True
+    )
+    try:
+        coord = mat.coords[mat_dim[0]]
+    except KeyError:
+        return diagonal
+    return diagonal.assign_coords(**{diag_dim: coord.data})
+
 
 
 hilbert_transform = {

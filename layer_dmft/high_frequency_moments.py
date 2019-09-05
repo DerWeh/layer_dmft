@@ -29,7 +29,12 @@ Attention has to be paid to the fact, that we have matrices for the lattice
 Green's function, thus the variables do *not commute*.
 
 """
+from functools import singledispatch
+
 import numpy as np
+import xarray as xr
+
+from layer_dmft.util import Dimensions as Dim
 
 
 def self_m0(U, occ):
@@ -71,7 +76,7 @@ def self_m1(U, occ):
 
     """
     occ_other = occ  # other spin channel is relevant
-    return U**2 * occ_other * (1 - occ_other)
+    return occ_other * (1 - occ_other) * U**2
 
 
 def gf_lattice_m2(self_mod_m0):
@@ -92,7 +97,7 @@ def gf_lattice_m2(self_mod_m0):
     """
     return self_mod_m0
 
-
+@singledispatch
 def gf_lattice_m3_subtract(self_mod_m0, eps_2):
     """Third high-frequency moment without self-energy moment :math:`(G^{(3)} - Σ^{(1)})/z^3`.
 
@@ -113,6 +118,14 @@ def gf_lattice_m3_subtract(self_mod_m0, eps_2):
     """
     idx = np.eye(*self_mod_m0.shape[-2:])
     return self_mod_m0@self_mod_m0 + eps_2*idx
+
+
+@gf_lattice_m3_subtract.register
+def _(self_mod_m0: xr.DataArray, eps_2):
+    return xr.apply_ufunc(
+        lambda modm: gf_lattice_m3_subtract(modm, eps_2=eps_2), self_mod_m0,
+        input_core_dims=[['lay1', 'lay2']], output_core_dims=[['lay1', 'lay2']],
+    )
 
 
 def gf_lattice_m3(self_mod_m0, self_m1, eps_2):
@@ -138,6 +151,7 @@ def gf_lattice_m3(self_mod_m0, self_m1, eps_2):
     return self_m1 + gf_lattice_m3_subtract(self_mod_m0, eps_2)
 
 
+@singledispatch
 def gf_lattice_m4_subtract(self_mod_m0, self_m1, eps_2):
     """Fourth high-frequency moment without self-energy moment :math:`(G^{(4)} - Σ^{(2)})/z^4`.
 
@@ -163,6 +177,14 @@ def gf_lattice_m4_subtract(self_mod_m0, self_m1, eps_2):
     matrix_power = np.vectorize(np.linalg.matrix_power, signature='(n,n),()->(n,n)')
     self_1_pow3 = matrix_power(self_mod_m0, 3)
     return self_01 + eps_2_self_0 + self_1_pow3
+
+
+@gf_lattice_m4_subtract.register
+def _(self_mod_m0: xr.DataArray, self_m1: xr.DataArray, eps_2):
+    return xr.apply_ufunc(
+        lambda modm0, m1: gf_lattice_m4_subtract(modm0, m1, eps_2=eps_2), self_mod_m0, self_m1,
+        input_core_dims=[['lay1', 'lay2'], ['lay1', 'lay2']], output_core_dims=[['lay1', 'lay2']],
+    )
 
 
 def hybridization_m1(gf_m2, gf_m3_sub):
