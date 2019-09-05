@@ -1010,3 +1010,12 @@ hilbert_transform['square'].m2 = lambda D: gt.square_dos_moment_coefficients[2]*
 
 rev_dict_hilbert_transfrom = {transform: name for name, transform
                               in hilbert_transform.items()}
+
+
+def matsubara_frequencies(n_points, beta) -> xr.DataArray:
+    iws = xr.DataArray(gt.matsubara_frequencies(n_points, beta=beta),
+                       dims=[Dim.iws], coords=[n_points])
+    iws.name = 'iω_n'
+    iws.attrs['description'] = 'fermionic Matsubara frequencies'
+    iws.attrs['temperature'] = 1/beta
+    return iws
