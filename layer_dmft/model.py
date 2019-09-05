@@ -76,13 +76,12 @@ class SIAM:
             function in :math:`τ`-space correctly.
 
         """
-        self.e_onsite = np.asanyarray(e_onsite)
+        self.e_onsite = _ensure_dim(e_onsite, dims=Dim.sp)
         self.U = U
         self.T = T
-        self.z = z
-        self.hybrid_fct = hybrid_fct
-        self.hybrid_mom = hybrid_mom
-        assert z.size == hybrid_fct.shape[-1]
+        self.z = _ensure_dim(z, dims='z')
+        self.hybrid_fct = _ensure_dim(hybrid_fct, dims=[Dim.sp, 'z'])
+        self.hybrid_mom = _ensure_dim(hybrid_mom, dims=['moment'])
 
     @property
     def beta(self) -> float:
@@ -108,11 +107,15 @@ class SIAM:
             transform has no defined meaning.
 
         """
-        z = self.z
-        if not np.allclose(z, gt.matsubara_frequencies(np.arange(z.size), self.beta)):
-            raise RuntimeError("The given frequencies `z` do not correspond to"
-                               " the Matsubara frequencies.")
-        return dft_iw2tau(self.hybrid_fct, beta=self.beta, moments=self.hybrid_mom)
+        hyb_tau = xr.apply_ufunc(
+            lambda hyb, mom: dft_iw2tau(hyb, beta=self.beta, moments=mom),
+            self.hybrid_fct, self.hybrid_mom,
+            input_core_dims=[[Dim.iws], ['moment']], output_core_dims=[[Dim.tau]]
+        )
+        hyb_tau.coords[Dim.tau] = np.linspace(0, self.beta, num=hyb_tau.sizes[Dim.tau],
+                                              endpoint=True)
+        hyb_tau.name = 'Δ'
+        return hyb_tau
 
     def gf0(self, hartree=False):
         """Return the non-interacting Green's function.
@@ -130,14 +133,11 @@ class SIAM:
             The Green's function for spin up and down.
 
         """
-        if hartree is False:
-            e_onsite = self.e_onsite
-        else:  # first axis needs to be spin such that loop is possible
-            e_onsite = self.e_onsite - hartree*self.U
-        gf_0 = 1./(self.z + e_onsite[:, newaxis] - self.hybrid_fct)
-        return gf_0.view(type=SpinResolvedArray)
+        e_onsite = self.e_onsite - (0 if hartree is False else hartree*self.U)
+        gf_0 = 1./(e_onsite + self.z - self.hybrid_fct)
+        return gf_0
 
-    def occ0(self, gf_iw, hartree=False, return_err=True, total=False):
+    def occ0(self, gf_iw, hartree=False, return_err=True):
         """Return occupation for the non-interacting (mean-field) model.
 
         This is a wrapper around `gt.density`.
@@ -167,12 +167,14 @@ class SIAM:
             If `return_err`, the truncation error of occupation
 
         """
-        assert hartree is False, "Not implemented yet"
-        if hartree is False:
-            hartree = (False, False)
-        # for sp, hartree_sp in zip(Spins, hartree):
-        occ0_ = gt.density(gf_iw, potential=-self.e_onsite, beta=self.beta,
-                           return_err=return_err, matrix=False, total=total)
+        e_onsite = self.e_onsite - (hartree*self.U if hartree else 0)
+        occ0_ = xr.apply_ufunc(
+            partial(gt.density, beta=self.beta, return_err=return_err, matrix=False, total=False),
+            gf_iw, -e_onsite,
+            input_core_dims=[[Dim.iws], []], output_core_dims=[[], []] if return_err else [],
+        )
+        if return_err:
+            return xr.Dataset({'x': occ0_[0], 'err': occ0_[1]})
         return occ0_
 
     def gf_s(self, self_z):
@@ -190,8 +192,8 @@ class SIAM:
             The Green's function.
 
         """
-        gf_inv = 1./(self.z + self.e_onsite[:, newaxis] - self_z - self.hybrid_fct)
-        return gf_inv.view(type=SpinResolvedArray)
+        gf_inv = 1./(self.e_onsite + self.z - self_z - self.hybrid_fct)
+        return gf_inv
 
 
 class Hubbard_Parameters:
