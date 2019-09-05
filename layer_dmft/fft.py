@@ -226,7 +226,7 @@ def dft_iw2tau(gf_iw, beta, moments=(1.,), dft_backend=soft_dft_iw2tau):
         The function at **fermionic** Matsubara frequencies.
     beta : float
         The inverse temperature.
-    moment : (...) float array_like or float
+    moment : (..., N_m) float array_like or float
         High frequency moment of `gf_iw`.
     dft_backend : callable, optional
         The function called to perform the Fourier transform on the data stripped
@@ -333,31 +333,32 @@ def get_gf_from_moments(moments, beta, N_iw) -> FourierFct:
         Imaginary time Green's function calculated from the moments for τ in [0, β].
 
     """
-    moments = np.asarray(moments)[..., np.newaxis]
+    moments = np.asarray(moments)
     iws = gt.matsubara_frequencies(np.arange(N_iw), beta=beta)
-    if len(moments) == 1:
-        return FourierFct(iw=moments[0]/iws, tau=-.5*moments[0])
-    if len(moments) == 2:
-        if np.any(moments[0] == 0.):
-            if np.all(moments[1] == 0.) and np.all(moments[0] == 0.):
+    if moments.shape[-1] == 1:  # last dimension can be used for iws/tau
+        return FourierFct(iw=moments/iws, tau=-.5*moments)
+    if moments.shape[-1] == 2:
+        m1, m2 = moments[..., 0], moments[..., 1]
+        if np.any(m1 == 0.):
+            if np.all(m2 == 0.) and np.all(m1 == 0.):
                 return FourierFct(iw=0, tau=0)
             # TODO: TEST THIS!
             tau = np.linspace(0, beta, num=2*N_iw + 1, endpoint=True)
-            mom_iw = np.zeros((moments[0].size, N_iw), dtype=iws.dtype)
-            mom_tau = np.zeros((moments[0].size, tau.size), dtype=tau.dtype)
+            mom_iw = np.zeros((*m1.shape, N_iw), dtype=iws.dtype)
+            mom_tau = np.zeros((*m1.shape, tau.size), dtype=tau.dtype)
             # cases where mom[0] == 0:
-            mom_is0 = moments[0, :, 0] == 0
-            mom_iw[mom_is0] = moments[1, mom_is0]/iws**2
-            mom_tau[mom_is0] = moments[1, mom_is0]*(.5*tau + .25*beta)
+            mom_is0 = m1 == 0
+            mom_iw[mom_is0] = m2[mom_is0, np.newaxis]/iws**2
+            mom_tau[mom_is0] = m2[mom_is0, np.newaxis]*(.5*tau + .25*beta)
             # cases where mom[0] != 0:
-            pole = moments[1, ~mom_is0]/moments[0, ~mom_is0]
-            mom_iw[~mom_is0] = moments[0, ~mom_is0]/(iws - pole)
-            mom_tau[~mom_is0] = moments[0, ~mom_is0] * ft_pole2tau(tau, pole=pole, beta=beta)
+            pole = (m2[~mom_is0]/m1[~mom_is0])[..., np.newaxis]
+            mom_iw[~mom_is0] = m1[~mom_is0, np.newaxis]/(iws - pole)
+            mom_tau[~mom_is0] = m1[~mom_is0, np.newaxis] * ft_pole2tau(tau, pole=pole, beta=beta)
             return FourierFct(iw=mom_iw, tau=mom_tau)
         tau = np.linspace(0, beta, num=2*N_iw + 1, endpoint=True)
-        pole = moments[1]/moments[0]
-        mom_iw = moments[0]/(iws - pole)
-        mom_tau = moments[0] * ft_pole2tau(tau, pole=pole, beta=beta)
+        pole = (m2/m1)[..., np.newaxis]
+        mom_iw = m1[..., np.newaxis]/(iws - pole)
+        mom_tau = m1[..., np.newaxis] * ft_pole2tau(tau, pole=pole, beta=beta)
         return FourierFct(iw=mom_iw, tau=mom_tau)
     raise NotImplementedError()
 
