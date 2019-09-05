@@ -89,10 +89,10 @@ class SIAM:
         return 1./self.T
 
     @beta.setter
-    def beta(self, value):
+    def beta(self, value: float):
         self.T = 1./value
 
-    def hybrid_tau(self):
+    def hybrid_tau(self) -> xr.DataArray:
         """Calculate the hybridization function for imaginary times τ in [0, β].
 
         Returns
@@ -117,7 +117,7 @@ class SIAM:
         hyb_tau.name = 'Δ'
         return hyb_tau
 
-    def gf0(self, hartree=False):
+    def gf0(self, hartree=False) -> xr.DataArray:
         """Return the non-interacting Green's function.
 
         Parameters
@@ -177,7 +177,7 @@ class SIAM:
             return xr.Dataset({'x': occ0_[0], 'err': occ0_[1]})
         return occ0_
 
-    def gf_s(self, self_z):
+    def gf_s(self, self_z) -> xr.DataArray:
         """Calculate the local Green's function from the self-energy `self_z`.
 
         Parameters
@@ -255,23 +255,23 @@ class Hubbard_Parameters:
         return self._N_l
 
     @beta.setter
-    def beta(self, value):
+    def beta(self, value: float):
         self.T = 1./value
 
     @property
-    def mu(self):
+    def mu(self) -> xr.DataArray:
         return self.params.mu
 
     @property
-    def V(self):
+    def V(self) -> xr.DataArray:
         return self.params.V
 
     @property
-    def h(self):
+    def h(self) -> xr.DataArray:
         return self.params.h
 
     @property
-    def U(self):
+    def U(self) -> xr.DataArray:
         return self.params.U
 
     @mu.setter
@@ -321,12 +321,14 @@ class Hubbard_Parameters:
                 sigma = xr.Variable(dims=Dim.sp, data=np.mean(sigma, keepdims=True))
         onsite_energy = sigma*params.h + params.mu + 0.5*params.U - params.V
         if np.any(hartree):
-            # assert hartree.ndim <= onsite_energy.ndim
-            # backward compatibility
+            try:
+                hartree.ndim
+            except AttributeError:
+                hartree = np.asarray(hartree)
             hartree = _ensure_dim(hartree, Dim.lay if hartree.ndim == 1 else [Dim.sp, Dim.lay])
             onsite_energy = onsite_energy - hartree*params.U
         onsite_energy.name = 'onsite energy'
-        onsite_energy.attrs['Note'] = 'The onsite energy has the sing of a chemical potential.'
+        onsite_energy.attrs['Note'] = 'The onsite energy has the sign of a chemical potential.'
         return onsite_energy
 
     def hamiltonian(self, sigma=SIGMA, hartree=False) -> xr.DataArray:
@@ -356,7 +358,7 @@ class Hubbard_Parameters:
         ham.name = 'Hamiltonian'
         return ham
 
-    def gf0(self, omega, hartree=False, diagonal=True):
+    def gf0(self, omega, hartree=False, diagonal=True) -> xr.DataArray:
         """Return local (diagonal) elements of the non-interacting Green's function.
 
         Parameters
@@ -475,7 +477,7 @@ class Hubbard_Parameters:
             return xr.Dataset({'x': dens[0], 'err': dens[1]})
         return dens
 
-    def occ0_eps(self, eps, hartree=False):
+    def occ0_eps(self, eps, hartree=False) -> xr.DataArray:
         r"""Return the :math:`ϵ`-resolved occupation for the non-interacting (mean-field) model.
 
         `eps` is the dispersion coming from the use of the density of states
@@ -610,7 +612,7 @@ class Hubbard_Parameters:
         gf_inv_diag = self.onsite_energy() + z - self_z
         return self._z_dep_inversion(gf_inv_diag, diagonal=diagonal)
 
-    def gf_dmft_f(self, eff_atom_gf, diagonal=True):
+    def gf_dmft_f(self, eff_atom_gf, diagonal=True) -> xr.DataArray:
         """Calculate the local Green's function from the effective atomic Gf.
 
         This function is written for the dynamical mean-field theory, where
@@ -680,7 +682,7 @@ class Hubbard_Parameters:
         idx = np.eye(self.N_l)
 
         def _gf(diag):
-            mat = diag[:, np.newaxis]*idx + self.t_mat
+            mat = diag[:, newaxis]*idx + self.t_mat
             gf_dec = gtmatrix.decompose_gf_omega(mat)
             gf_dec.xi = 1./(gf_dec.xi[..., newaxis] - eps.values)
             return gf_dec.reconstruct(kind=diag_dic[diagonal])
@@ -721,7 +723,7 @@ class Hubbard_Parameters:
         idx = np.eye(self.N_l)
 
         def _inversion(diag):
-            mat = diag[:, np.newaxis]*idx + self.t_mat
+            mat = diag[:, newaxis]*idx + self.t_mat
             gf_dec = gtmatrix.decompose_gf_omega(mat)
             gf_dec.apply(self.hilbert_transform, half_bandwidth=self.D)
             return gf_dec.reconstruct(kind=diag_dic[diagonal])
@@ -976,7 +978,7 @@ def _diagflat(diagonal: xr.DataArray, diag_dim=Dim.lay, mat_dim=('lay1', 'lay2')
               ) -> xr.DataArray:
     idx = np.eye(diagonal.sizes[diag_dim])
     mat = xr.apply_ufunc(
-        lambda dd: dd[..., np.newaxis]*idx, diagonal,
+        lambda dd: dd[..., newaxis]*idx, diagonal,
         input_core_dims=[[diag_dim]], output_core_dims=[list(mat_dim)], keep_attrs=True
     )
     try:
@@ -986,7 +988,7 @@ def _diagflat(diagonal: xr.DataArray, diag_dim=Dim.lay, mat_dim=('lay1', 'lay2')
     return mat.assign_coords(**{dim: coord.data for dim in mat_dim})
 
 
-def _diagonal(mat: xr.DataArray, mat_dim=('lay1', 'lay2'), diag_dim=Dim.lay):
+def _diagonal(mat: xr.DataArray, mat_dim=('lay1', 'lay2'), diag_dim=Dim.lay) -> xr.DataArray:
     diagonal = xr.apply_ufunc(
         lambda mat: np.diagonal(mat, axis1=-1, axis2=-2), mat,
         input_core_dims=[list(mat_dim)], output_core_dims=[[diag_dim]], keep_attrs=True
