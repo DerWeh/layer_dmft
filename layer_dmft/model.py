@@ -382,18 +382,21 @@ class Hubbard_Parameters:
         gf_0_inv = -self.hamiltonian(hartree=hartree)
         omega = _ensure_dim(omega, dims=[f"z_{ii}" for ii in range(np.asanyarray(omega).ndim)])
 
-        def _invert(gf_inv, ww):
+        def _invert(gf_inv):
             gf_decomp = gtmatrix.decompose_hamiltonian(gf_inv)
-            xi_bar = self.hilbert_transform(gf_decomp.xi + ww, half_bandwidth=self.D)
+            xi_bar = self.hilbert_transform(np.add.outer(gf_decomp.xi, omega.data),
+                                            half_bandwidth=self.D)
             return gf_decomp.reconstruct(xi_bar, kind=diag_dic[diagonal])
 
         layer_dim = [Dim.lay] if diagonal else ['lay1', 'lay2']
-        gf0 = xr.apply_ufunc(_invert, gf_0_inv, omega,
-                             input_core_dims=[['lay1', 'lay2'], []],
-                             output_core_dims=[layer_dim],
+        gf0 = xr.apply_ufunc(_invert, gf_0_inv,
+                             input_core_dims=[['lay1', 'lay2']],
+                             output_core_dims=[[*layer_dim, *omega.dims]],
                              vectorize=True, keep_attrs=True)
-        # get standard order for numpy compatibility
-        gf0 = gf0.transpose(*gf_0_inv.dims[:-2], *layer_dim, *omega.dims)
+        try:
+            gf0.coords.update(omega.coords)
+        except TypeError:
+            pass
         for lay in layer_dim:
             gf0.coords[lay] = range(self.N_l)
         gf0.name = 'G_{Hartree}' if np.any(hartree) else 'G_0'
