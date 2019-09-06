@@ -311,7 +311,7 @@ def hartree_solution(prm: Hubbard_Parameters, iw_n) -> xr.Dataset:
     opt_res = charge.charge_self_consistency(prm, tol=tol, occ0=occ0.x, n_points=iw_n.size)
     gf_iw = prm.gf0(iw_n, hartree=opt_res.occ.x.roll({Dim.sp: 1}, roll_coords=False))
     self_iw = opt_res.occ.x.roll({Dim.sp: 1}, roll_coords=False) * prm.U
-    self_iw, __ = xr.broadcast(self_iw, gf_iw)  # pylint: disable=unbalanced-tuple-unpacking
+    self_iw = xr.broadcast(self_iw, gf_iw)[0].astype(np.complex)
     self_iw.name = 'Σ_{Hartree}'
     return xr.Dataset({'gf_iw': gf_iw, 'self_iw': self_iw, 'occ': opt_res.occ.x})
 

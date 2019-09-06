@@ -309,7 +309,7 @@ def charge_self_consistency(parameters, tol, V0=None, occ0=None, kind='auto',
         sol.success = False
         sol.message = 'Optimization interrupted by user, not terminated.'
     else:
-        hartree_occ = output['occ'][::-1]
+        hartree_occ = output['occ'].roll({Dim.sp: 1}, roll_coords=False)
     # finalize
     gf_iw = params.gf0(iw_array, hartree=hartree_occ)
     occ = params.occ0(gf_iw, hartree=hartree_occ, return_err=True)
