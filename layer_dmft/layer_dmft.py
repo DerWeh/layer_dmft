@@ -47,7 +47,7 @@ def log_info(prm: Hubbard_Parameters):
 LayerIterData = namedtuple('layer_iter_data', ['gf_iw', 'self_iw', 'occ'])
 Sigma = namedtuple('sigma', ['iw', 'moments'])
 SolverResult = NamedTuple("SolverResult", [('self', Sigma), ('data', Dict[str, Any])])
-MapLayer = namedtuple("MapLayer", ['interacting', 'unique', 'imp2lay', 'updated', 'unchanged'])
+MapLayer = namedtuple("MapLayer", ['interacting', 'unique', 'lay2imp'])
 
 
 def interpolate_siam_temperature(siams: Iterable[SIAM], iw_n) -> Iterable[SIAM]:
@@ -121,22 +121,19 @@ def mapping_lay_imp(prm_U, layer_config=None) -> MapLayer:
     """
     N_l = len(prm_U)
     interacting_layers = np.flatnonzero(prm_U)
-    map_lay2imp = np.arange(N_l) if layer_config is None else np.asarray(layer_config, dtype=int)
-    if len(map_lay2imp) != N_l:
-        raise ValueError(f"'layer_config' has wrong number of elements ({map_lay2imp.size}), "
+    lay2imp = np.arange(N_l) if layer_config is None else np.asarray(layer_config, dtype=int)
+    if len(lay2imp) != N_l:
+        raise ValueError(f"'layer_config' has wrong number of elements ({lay2imp.size}), "
                          f"expected: {N_l}")
-    if np.any(map_lay2imp > N_l - 1):
+    if np.any(lay2imp > N_l - 1):
         raise ValueError("'layer_config' doesn't point to valid layers"
                          f" (max: {N_l-1}): {layer_config}")
-    map_lay2imp_int = map_lay2imp[interacting_layers]
-    unique_layers, map_imp2lay = np.unique(map_lay2imp_int, return_inverse=True)
-    assert interacting_layers.size >= map_imp2lay.size, \
-        "There have to be more interacting layers than impurities"
-    unchanged = interacting_layers[np.flatnonzero(map_lay2imp_int < 0)]
-    updated = interacting_layers[np.flatnonzero(map_lay2imp_int >= 0)]
-    assert updated.size == map_imp2lay.size, \
-        "Every updated layer must be mapped to an impurity model"
-    return MapLayer(interacting_layers, unique_layers, map_imp2lay, updated, unchanged)
+    lay2imp_int = lay2imp[interacting_layers]
+    unique_layers = np.unique(lay2imp_int[lay2imp_int >= 0])
+    ulay = list(unique_layers)
+    mapping_lay2imp = {lay: (ulay.index(imp) if imp >= 0 else None)
+                       for lay, imp in zip(interacting_layers, lay2imp_int)}
+    return MapLayer(interacting_layers, unique_layers, mapping_lay2imp)
 
 
 def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
@@ -197,17 +194,15 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
 
     if layer_config is not None:
         LOGGER.progress('Using calculated self-energies from %s on layers %s',
-                        list(mlayer.unique), list(mlayer.imp2lay))
+                        list(mlayer.unique), mlayer.lay2imp.values())
 
-    for lay, imp in zip(mlayer.updated, mlayer.imp2lay):
-        LOGGER.debug("Assigning impurity %s (from %s) to layer %s",
-                     imp, mlayer.unique[imp], lay)
-        self_layer_iw[:, lay] = solutions[imp].self.iw
-        occ_imp[:, lay] = -solutions[imp].data['gf_tau'][:, -1]
-    for lay in mlayer.unchanged:
-        LOGGER.debug("Reusing old values for layer %s", lay)
-        self_layer_iw[:, lay] = self_iw[:, lay]
-        occ_imp[:, lay] = occ[:, lay]
+    for lay, imp in mlayer.lay2imp.items():
+        update = imp is not None
+        LOGGER.debug("Assigning %s to layer %s",
+                     f"impurity {imp} (from {mlayer.unique[imp]}) to" if update
+                     else "previous value", lay)
+        self_layer_iw[:, lay] = solutions[imp].self.iw if update else self_iw[:, lay]
+        occ_imp[:, lay] = -solutions[imp].data['gf_tau'][:, -1] if update else occ[:, lay]
 
     # average over spin if not magnetic
     if FORCE_PARAMAGNET and np.all(prm.h == 0):
