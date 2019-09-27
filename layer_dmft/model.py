@@ -892,7 +892,7 @@ class Hubbard_Parameters:
         hybrid_mom = self.hybrid_fct_moments(occ)
         for ll in range(self._N_l):
             lay = {Dim.lay: ll}
-            yield SIAM(e_onsite[lay], U=self.U[lay], T=self.T, z=z,
+            yield SIAM(e_onsite[lay], U=float(self.U[lay]), T=self.T, z=z,
                        hybrid_fct=hybrid_z[lay], hybrid_mom=hybrid_mom[lay])
 
 

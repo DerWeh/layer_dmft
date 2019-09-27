@@ -47,9 +47,9 @@ PARAM_TEMPLATE = textwrap.dedent(
     # ef  h (= ef_d - ef_u)
     # U
      1.
-     {T}
-     {ef}  {h}
-     {U}
+     {T:g}
+     {ef:g}  {h:g}
+     {U:g}
     #----------------------------------------------------------
     # V^2
     # g_ch^2
