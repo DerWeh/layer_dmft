@@ -117,7 +117,7 @@ def get_last_iter(dir_) -> Tuple[int, Path]:
     return last_iter, iters[last_iter]
 
 
-def get_all_iter(dir_) -> dict:
+def get_all_iter(dir_) -> Dict[int, Path]:
     """Return dictionary of files of the output with key `num`."""
     iter_files = Path(dir_).glob('*_iter*.*')
     path_dict = {_get_iter(iter_f): iter_f for iter_f in iter_files
