@@ -18,6 +18,7 @@ class Dimensions:
     sp = 'spin'
     lay = 'layer'
     iws = 'Matsubara'
+    it = 'iteration'
 
 
 class Spins(IntEnum):

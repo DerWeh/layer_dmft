@@ -8,6 +8,9 @@ from datetime import date
 from collections import defaultdict, OrderedDict
 
 import numpy as np
+import xarray as xr
+
+from layer_dmft.util import Dimensions as Dim
 
 LAY_OUTPUT = "layer_output"
 IMP_OUTPUT = "imp_output"
@@ -37,6 +40,35 @@ def save_data(dir_='.', *, name, compress=True, use_date=True, **data):
     save_method(dir_/name, **data)
 
 
+def save_dataset(data, dir_='.', *, name, use_date=True, **kwds):
+    """Save the `xr.Dataset` `data` to `dir_/name`.
+
+    If no ending is specified, '.h5' will be appended.
+
+    Parameters
+    ----------
+    dir_ : str, Path
+        Directory where the data is written.
+    name : str
+        Filename
+    compress : bool, optional
+        Whether the data is written to compressed file or uncompressed (default: True).
+    use_date : bool, optional
+        Whether the filename is perpended by the date (default: True).
+    data
+        The data written to the file.
+
+    """
+    dir_ = Path(dir_).expanduser()
+    dir_.mkdir(exist_ok=True)
+    name = date.today().isoformat() + '_' + name if use_date else name
+    dir_name = dir_ / name
+    if not dir_name.suffix:
+        dir_name = dir_name.with_suffix('.h5')
+    data.to_netcdf(dir_name, engine="h5netcdf", invalid_netcdf=True,
+                   format='NETCDF4', **kwds)
+
+
 def _get_iter(file_object) -> Optional[int]:
     r"""Return iteration `it` number of file with the name '\*_iter{it}(_*)?.ENDING'."""
     return _get_anystring(file_object, name='iter')
@@ -62,7 +94,7 @@ def _get_anystring(file_object, name: str) -> Optional[int]:
 
 def get_iter(dir_, num) -> Path:
     """Return the file of the output of iteration `num`."""
-    iter_files = Path(dir_).glob(f'*_iter{num}*.npz')
+    iter_files = Path(dir_).glob(f'*_iter{num}*.*')
 
     paths = [iter_f for iter_f in iter_files if _get_iter(iter_f) == num]
     if not paths:
@@ -75,7 +107,7 @@ def get_iter(dir_, num) -> Path:
 
 def get_last_iter(dir_) -> Tuple[int, Path]:
     """Return number and the file of the output of last iteration."""
-    iter_files = Path(dir_).expanduser().glob('*_iter*.npz')
+    iter_files = Path(dir_).expanduser().glob('*_iter*.*')
 
     iters = {_get_iter(file_): file_ for file_ in iter_files}
     try:  # remove invalid item
@@ -87,7 +119,7 @@ def get_last_iter(dir_) -> Tuple[int, Path]:
 
 def get_all_iter(dir_) -> dict:
     """Return dictionary of files of the output with key `num`."""
-    iter_files = Path(dir_).glob('*_iter*.npz')
+    iter_files = Path(dir_).glob('*_iter*.*')
     path_dict = {_get_iter(iter_f): iter_f for iter_f in iter_files
                  if _get_iter(iter_f) is not None}
     return path_dict
@@ -95,7 +127,7 @@ def get_all_iter(dir_) -> dict:
 
 def get_all_imp_iter(dir_) -> Dict[int, Dict]:
     """Return directory of {int(layer): output} with key `num`."""
-    iter_files = Path(dir_).glob('*_iter*_lay*.npz')
+    iter_files = Path(dir_).glob('*_iter*_lay*.*')
     path_dict: Dict[int, Dict] = defaultdict(dict)
     for iter_f in iter_files:
         it = _get_iter(iter_f)
@@ -112,6 +144,7 @@ class LayerData:
 
     def __init__(self, dir_=LAY_OUTPUT):
         """Mmap all data from directory."""
+        warnings.warn('Outdated methods, not certain to work anymore.', DeprecationWarning)
         if not Path(dir_).is_dir():
             raise NotADirectoryError(str(dir_))
         self._filname_dict = get_all_iter(dir_)
@@ -168,6 +201,19 @@ class LayerData:
         if item in self.keys:
             return self[item]
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
+
+
+def layer_data(dir_=None) -> xr.Dataset:
+    """Load all data from `LAY_OUTPUT`."""
+    if dir_ is None:
+        dir_ = LAY_OUTPUT
+    if not Path(dir_).is_dir():
+        raise NotADirectoryError(str(dir_))
+    files = OrderedDict(sorted(get_all_iter(dir_).items()))
+    lay_dat = xr.open_mfdataset(files.values(), engine='h5netcdf', concat_dim=Dim.it,
+                                combine='nested')
+    lay_dat = lay_dat.assign_coords(**{Dim.it: list(files.keys())})
+    return lay_dat
 
 
 class ImpurityData:
