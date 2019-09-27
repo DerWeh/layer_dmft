@@ -762,7 +762,7 @@ class Hubbard_Parameters:
             Array of the high-frequency moments.
 
         """
-        occ_rev = _ensure_dim(occ, dims=[Dim.sp, Dim.lay]).roll({Dim.sp: 1}, roll_coords=False)
+        occ_rev = rev_spin(_ensure_dim(occ, dims=[Dim.sp, Dim.lay]))
         self_mod_0 = self.hamiltonian(hartree=occ_rev)
         self_1 = _diagflat(hfm.self_m1(self.U, occ_rev))
         eps_m2 = self.hilbert_transform.m2(self.D)
@@ -969,11 +969,13 @@ def hopping_matrix(size, nearest_neighbor):
     return t_mat
 
 
-def _ensure_dim(data, dims):
+def _ensure_dim(data, dims, coords=None):
     try:
         data.dims
     except AttributeError:
-        return xr.Variable(dims=dims, data=data)
+        if coords is None:
+            return xr.Variable(dims=dims, data=data)
+        return xr.DataArray(data, dims, coords)
     return data
 
 
