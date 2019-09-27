@@ -22,8 +22,9 @@ from scipy.interpolate import UnivariateSpline
 import gftools as gt
 
 from . import charge, dataio, high_frequency_moments as hfm
-from .model import Hubbard_Parameters, SIAM, Dim, matsubara_frequencies, rev_spin
+from .model import Hubbard_Parameters, SIAM, matsubara_frequencies
 from .interface import sb_qmc
+from .util import rev_spin, Dimensions as Dim
 from ._version import get_versions
 
 # setup logging

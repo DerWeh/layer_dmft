@@ -300,3 +300,11 @@ def import_file(file, content=None):
         return getattr(module, content)
     else:
         return module
+
+
+def rev_spin(data):
+    """Reverse the spin of `data`."""
+    try:
+        return data.roll({Dimensions.sp: 1}, roll_coords=False)
+    except ValueError:  # data structure without coords
+        return data.roll({Dimensions.sp: 1})

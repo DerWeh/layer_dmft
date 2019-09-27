@@ -29,7 +29,7 @@ import gftools.matrix as gtmatrix
 from numpy import newaxis
 
 from . import high_frequency_moments as hfm
-from .util import spins, Spins, Dimensions as Dim
+from .util import spins, Spins, Dimensions as Dim, rev_spin
 from .fft import dft_iw2tau
 
 
