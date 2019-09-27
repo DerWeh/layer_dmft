@@ -181,6 +181,7 @@ def gf_lattice_m4_subtract(self_mod_m0, self_m1, eps_2):
 
 @gf_lattice_m4_subtract.register
 def _(self_mod_m0: xr.DataArray, self_m1: xr.DataArray, eps_2):
+    self_mod_m0, self_m1 = xr.broadcast(self_mod_m0, self_m1)
     return xr.apply_ufunc(
         lambda modm0, m1: gf_lattice_m4_subtract(modm0, m1, eps_2=eps_2), self_mod_m0, self_m1,
         input_core_dims=[['lay1', 'lay2'], ['lay1', 'lay2']], output_core_dims=[['lay1', 'lay2']],

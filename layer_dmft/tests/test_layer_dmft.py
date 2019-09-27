@@ -5,6 +5,7 @@ from typing import NamedTuple
 import pytest
 
 import numpy as np
+import xarray as xr
 import gftools as gt
 
 from .context import layer_dmft, model
@@ -17,7 +18,7 @@ class ExampleData(NamedTuple):
 
     prm: Hubbard_Parameters
     iws: np.ndarray
-    layer_data: layer_dmft.LayerIterData
+    layer_data: xr.Dataset
 
 
 @pytest.fixture(scope='module')
@@ -31,7 +32,7 @@ def l1_hartree() -> ExampleData:
     prm.mu[:] = -0.5
     prm.assert_valid()
 
-    iws = gt.matsubara_frequencies(np.arange(2**10), beta=prm.beta)
+    iws = model.matsubara_frequencies(range(2**10), beta=prm.beta)
     return ExampleData(prm, iws=iws, layer_data=layer_dmft.hartree_solution(prm, iw_n=iws))
 
 
@@ -47,7 +48,7 @@ def l1_mag_hartree() -> ExampleData:
     prm.mu[:] = -1.5
     prm.assert_valid()
 
-    iws = gt.matsubara_frequencies(np.arange(2**10), beta=prm.beta)
+    iws = model.matsubara_frequencies(range(2**10), beta=prm.beta)
     return ExampleData(prm, iws=iws, layer_data=layer_dmft.hartree_solution(prm, iw_n=iws))
 
 
@@ -61,7 +62,7 @@ def test_mixed_siams(l1_mag_hartree: ExampleData):
     # without self-energy
     gf0 = data.prm.gf0(data.iws)
     occ0 = data.prm.occ0(gf0, return_err=False)
-    siams_old = data.prm.get_impurity_models(data.iws, self_z=0, gf_z=gf0, occ=occ0)
+    siams_old = data.prm.get_impurity_models(data.iws, self_z=xr.zeros_like(gf0), gf_z=gf0, occ=occ0)
 
     siams_new, siams_old = list(siams_new), list(siams_old)
     siam_mixed = next(layer_dmft.mixed_siams(mixing, new=siams_new, old=siams_old))

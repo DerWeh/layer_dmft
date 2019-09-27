@@ -18,48 +18,6 @@ from .context import model, util
 
 Dim = util.Dimensions
 SIGMA = model.SIGMA
-SpinResolvedArray = util.SpinResolvedArray
-
-
-def test_SpinResolvedArray_creation():
-    """Basic test that `SpinResolvedArray` constructor creates suitable array."""
-    assert np.all(SpinResolvedArray([1, 2]) == np.array([1, 2]))
-    assert np.all(SpinResolvedArray(up=1, dn=2) == np.array([1, 2]))
-
-
-def test_SpinResolvedArray_access():
-    """Basic test for accessing elements of `SpinResolvedArray`s."""
-    updata = np.arange(0, 7)
-    dndata = np.arange(0, 7)
-    test_array = SpinResolvedArray(up=updata, dn=dndata)
-    assert np.all(test_array.up == updata)
-    assert np.all(test_array[0] == updata)
-    assert np.all(test_array['up'] == updata)
-    assert np.all(test_array['up', ...] == updata)
-    assert np.all(test_array['up', 2:5:-2] == updata[2:5:-2])
-
-    assert np.all(test_array.dn == dndata)
-    assert np.all(test_array[1] == dndata)
-    assert np.all(test_array['dn'] == dndata)
-    assert np.all(test_array['dn', ...] == dndata)
-    assert np.all(test_array['dn', 2:5:-2] == dndata[2:5:-2])
-
-
-def test_SpinResolvedArray_elements():
-    """Assert that the elements of SpinResolvedArray are regular arrays."""
-    assert not isinstance(SpinResolvedArray([1, 2]).up, SpinResolvedArray)
-    spin_array = SpinResolvedArray(up=np.arange(9), dn=np.arange(9))
-    assert not isinstance(spin_array.up, SpinResolvedArray)
-    # assert type(spin_array[slice(1, None, 1)])\
-    #     is not SpinResolvedArray
-
-
-def test_SpinResolvedArray_iteration():
-    """Assert that the array is iterable."""
-    test = SpinResolvedArray(up=np.arange(9).reshape(3, 3),
-                             dn=np.arange(9).reshape(3, 3))
-    for __ in test:
-        pass
 
 
 def test_compare_greensfunction():
@@ -90,10 +48,10 @@ def test_non_interacting_siam():
     t = 0.2
     prm.t_mat = model.hopping_matrix(N_l, nearest_neighbor=t)
 
-    iw = xr.Variable(Dim.iws, gt.matsubara_frequencies(range(1024), beta=prm.beta))
+    iw = model.matsubara_frequencies(range(1024), beta=prm.beta)
     gf_layer = prm.gf0(iw)
     occ = prm.occ0(gf_layer)
-    siams = prm.get_impurity_models(iw, self_z=0, gf_z=gf_layer, occ=occ.x)
+    siams = prm.get_impurity_models(iw, self_z=xr.zeros_like(gf_layer), gf_z=gf_layer, occ=occ.x)
 
     for lay, siam in enumerate(siams):
         assert np.allclose(gf_layer[:, lay], siam.gf0())
@@ -151,8 +109,7 @@ def test_particle_hole_symmtery():
     prm.D = 1.37
     prm.assert_valid()
 
-    iws = xr.DataArray(gt.matsubara_frequencies(range(1024), beta=prm.beta),
-                       dims=Dim.iws)
+    iws = model.matsubara_frequencies(range(1024), beta=prm.beta)
     assert prm.onsite_energy(hartree=[.5,]) == 0.
     occ = prm.occ0(prm.gf0(iws, hartree=[.5,]), hartree=[.5,])
     assert occ.x - occ.err <= .5 <= occ.x + occ.err

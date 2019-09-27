@@ -11,19 +11,20 @@ FORCE_PARAMAGNET: bool
 import logging
 import atexit
 
-from itertools import tee, chain, repeat
-from functools import partial
-from typing import Tuple, Optional, Dict, Iterable, Any, NamedTuple, Iterator
 from collections import namedtuple
+from functools import partial
+from itertools import tee, chain, repeat
+from typing import Optional, Dict, Iterable, Any, NamedTuple, Iterator
 
 import numpy as np
-import gftools as gt
 import xarray as xr
 from scipy.interpolate import UnivariateSpline
+import gftools as gt
 
 from . import charge, dataio, high_frequency_moments as hfm
-from .model import Hubbard_Parameters, SIAM, Dim
+from .model import Hubbard_Parameters, SIAM, Dim, matsubara_frequencies, rev_spin
 from .interface import sb_qmc
+from ._version import get_versions
 
 # setup logging
 LOGGER = logging.getLogger(__name__)
@@ -38,16 +39,14 @@ FORCE_PARAMAGNET = True
 
 def log_info(prm: Hubbard_Parameters):
     """Log basic information for r-DMFT."""
-    from ._version import get_versions
     LOGGER.info("layer_dmft version: %s", get_versions()['version'])
     LOGGER.info("gftools version:    %s", gt.__version__)
     LOGGER.info("%s", prm.pstr())
 
 
 # DATA necessary for the DMFT iteration
-LayerIterData = namedtuple('layer_iter_data', ['gf_iw', 'self_iw', 'occ'])
 Sigma = namedtuple('sigma', ['iw', 'moments'])
-SolverResult = NamedTuple("SolverResult", [('self', Sigma), ('data', Dict[str, Any])])
+SolverResult = NamedTuple("SolverResult", [('self', Sigma), ('occ', xr.DataArray), ('data', Dict[str, Any])])
 MapLayer = namedtuple("MapLayer", ['interacting', 'unique', 'imp2lay', 'updated', 'unchanged'])
 
 
@@ -142,7 +141,7 @@ def mapping_lay_imp(prm_U, layer_config=None) -> MapLayer:
 
 def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
                  it, *, layer_config=None, self_iw=None, occ=None,
-                 n_process, solve=sb_qmc.solve, **solver_kwds) -> LayerIterData:
+                 n_process, solve=sb_qmc.solve, **solver_kwds) -> xr.Dataset:
     """Perform a sweep update, calculating the impurities for all layers.
 
     Parameters
@@ -182,14 +181,20 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
         LOGGER.progress('iter %s: starting layer %s with U = %s (%s)',
                         it, lay, siam.U, solver_kwds)
         data = solve(siam, output_name=f'iter{it}_lay{lay}')
-        occ = -data['gf_tau'][:, -1]
-        sm0 = hfm.self_m0(siam.U, occ[::-1])
-        sm1 = hfm.self_m1(siam.U, occ[::-1])
+        _occ = xr.DataArray(-data['gf_tau'][:, -1], dims=[Dim.sp], coords=[['up', 'dn']],
+                            attrs={'layer': lay})
+        sm0 = hfm.self_m0(siam.U, rev_spin(_occ))
+        sm1 = hfm.self_m1(siam.U, rev_spin(_occ))
         return SolverResult(self=Sigma(iw=data['self_energy_iw'], moments=[sm0, sm1]),
-                            data=data)
+                            occ=_occ, data=data)
 
-    self_layer_iw = np.zeros((2, prm.N_l, iw_points.size), dtype=np.complex)
-    occ_imp = np.zeros((2, prm.N_l))
+    self_layer_iw = xr.DataArray(
+        np.zeros((2, prm.N_l, iw_points.size), dtype=np.complex),
+        name='Σ', dims=[Dim.sp, Dim.lay, Dim.iws],
+        coords={Dim.sp: ['up', 'dn'], Dim.lay: range(prm.N_l), Dim.iws: iw_points.coords[Dim.iws].values}
+    )
+    occ_imp = xr.DataArray(np.zeros((2, prm.N_l)), dims=[Dim.sp, Dim.lay], name='occ',
+                           coords=[['up', 'dn'], range(prm.N_l)])
     #
     # solve impurity model for the relevant layers
     #
@@ -203,34 +208,38 @@ def sweep_update(prm: Hubbard_Parameters, siams: Iterable[SIAM], iw_points,
     for lay, imp in zip(mlayer.updated, mlayer.imp2lay):
         LOGGER.debug("Assigning impurity %s (from %s) to layer %s",
                      imp, mlayer.unique[imp], lay)
-        self_layer_iw[:, lay] = solutions[imp].self.iw
-        occ_imp[:, lay] = -solutions[imp].data['gf_tau'][:, -1]
+        self_layer_iw[{Dim.lay: lay}] = solutions[imp].self.iw
+        occ_imp[{Dim.lay: lay}] = -solutions[imp].occ
     for lay in mlayer.unchanged:
         LOGGER.debug("Reusing old values for layer %s", lay)
-        self_layer_iw[:, lay] = self_iw[:, lay]
-        occ_imp[:, lay] = occ[:, lay]
+        self_layer_iw[{Dim.lay: lay}] = self_iw[{Dim.lay: lay}]
+        occ_imp[{Dim.lay: lay}] = occ[{Dim.lay: lay}]
 
     # average over spin if not magnetic
     if FORCE_PARAMAGNET and np.all(prm.h == 0):
-        self_layer_iw = np.mean(self_layer_iw, axis=0, keepdims=True)
-        occ_imp = np.mean(occ_imp, axis=0, keepdims=True)
+        self_layer_iw = self_layer_iw.mean(dim=Dim.sp, keep_attrs=True, keepdims=True)
+        occ_imp = occ_imp.mean(dim=Dim.sp, keep_attrs=True, keepdims=True)
 
     gf_layer_iw = prm.gf_dmft_s(iw_points, self_layer_iw)
 
     if mlayer.interacting.size < prm.N_l:
         # calculated density from Gf for non-interacting layers
-        occ = prm.occ0(gf_layer_iw, hartree=occ_imp[::-1], return_err=False)
-        occ[:, mlayer.interacting] = occ_imp[:, mlayer.interacting]
+        occ = prm.occ0(gf_layer_iw, hartree=rev_spin(occ_imp), return_err=False)
+        occ[{Dim.lay: mlayer.interacting}] = occ_imp[{Dim.lay: mlayer.interacting}]
     else:
         occ = occ_imp
 
-    data = LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ)
-    # TODO: also save error, version, ...
-    dataio.save_data(**data._asdict(), T=prm.T, dir_=dataio.LAY_OUTPUT, name=f'layer_iter{it}')
+    data = xr.Dataset(
+        {'gf_iw': gf_layer_iw, 'self_iw': self_layer_iw, 'occ': occ},  # , 'onsite-paramters': prm.params},
+        attrs={'temperature': prm.T,
+               '__version__': get_versions()['version'], 'gftools.__version__': gt.__version__,
+               Dim.it: it}
+    )
+    dataio.save_dataset(data, dir_=dataio.LAY_OUTPUT, name=f'layer_iter{it}')
     return data
 
 
-def load_last_iteration(output_dir=None) -> Tuple[LayerIterData, int, float]:
+def load_last_iteration(output_dir=None) -> xr.Dataset:
     """Load relevant data from last iteration in `output_dir`.
 
     Parameters
@@ -240,25 +249,17 @@ def load_last_iteration(output_dir=None) -> Tuple[LayerIterData, int, float]:
 
     Returns
     -------
-    layer_data : LayerIterData
-        Green's function, self-energy and occupation
-    last_iter : int
-        Number of the last iteration
-    temperature : float
-        Temperature corresponding to the layer_data
+    layer_data : xr.Dataset
+        Green's function, self-energy and occupation, iteration number and
+        temperature
 
     """
     last_iter, last_output = dataio.get_last_iter(dataio.LAY_OUTPUT if output_dir is None
                                                   else output_dir)
     LOGGER.info("Loading iteration %s: %s", last_iter, last_output.name)
 
-    with np.load(last_output) as data:
-        gf_layer_iw = data['gf_iw']
-        self_layer_iw = data['self_iw']
-        occ_layer = data['occ']
-        temperature = data['temperature']
-    result = LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
-    return result, last_iter, temperature
+    result = xr.open_dataset(last_output, engine='h5netcdf')
+    return result
 
 
 @partial(np.vectorize, signature='(n),(n),(m)->(m)')
@@ -372,7 +373,7 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
         static Hartree self-energy. 'hubbard-I' starts from the Hubbard-I
         approximation, using the atomic self-energy. 'auto' tries 'resume' and
         falls back to 'hartree'.
-        Alternatively a dict (or instance of LayerIterData) can be given, to
+        Alternatively a dict (or Dataset) can be given, to
         explicitly specify the self-energy (and optionally the occupation and
         Green's function).
     iw_points : (N_iw,) complex np.ndarray, optional
@@ -411,9 +412,7 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
 
     if kind == 'resume':
         LOGGER.info("Reading old Green's function and self energy")
-        layerdat, last_it, data_T = load_last_iteration(output_dir)
-        return xr.Dataset(layerdat._asdict(),
-                          attrs={'it': last_it + 1, 'temperature': data_T})
+        return load_last_iteration(output_dir)
     if kind == 'hartree':
         LOGGER.info('Start from Hartree approximation')
         layerdat = hartree_solution(prm, iw_n=iw_points)
@@ -422,10 +421,9 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
         LOGGER.info('Start from Hubbard-I approximation')
         layerdat = hubbard_I_solution(prm, iw_n=iw_points)
         LOGGER.progress('DONE: calculated starting point')
-    else:  # giving a LayerIterData obj or a dict
-        try:  # assuming kind is NamedTuple
-            kind: LayerIterData
-            kind = kind._asdict()
+    else:  # giving a xr.Dataset or a dict
+        try:  # assuming kind is xr.Dataset
+            kind = dict(kind.data_vars)
         except AttributeError:
             pass
 
@@ -441,7 +439,7 @@ def get_initial_condition(prm: Hubbard_Parameters, kind='auto', iw_points=None, 
                             "and optionally 'gf_iw' or 'occ'.\n"
                             f"Other keys: {tuple(kind.keys())}")
         layerdat = xr.Dataset({'gf_iw': gf_iw, 'self_iw': self_iw, 'occ': occ})
-    layerdat.attrs.update(it=0, temperature=prm.T)
+    layerdat.attrs.update(**{Dim.it: -1, 'temperature': prm.T})
     return layerdat
 
 
@@ -522,14 +520,15 @@ class Runner:
         #
         # initial condition
         #
-        iw_points = gt.matsubara_frequencies(np.arange(N_IW), prm.beta)
-        layerdat, start, data_T = get_initial_condition(
+        iw_points = matsubara_frequencies(np.arange(N_IW), prm.beta)
+        data = get_initial_condition(
             prm, kind=starting_point, iw_points=iw_points, output_dir=output_dir,
         )
-        iw_points = gt.matsubara_frequencies(np.arange(N_IW), 1./data_T)
+        data_T = data.temperature
+        iw_points = matsubara_frequencies(np.arange(N_IW), 1./data_T)
 
-        siams = prm.get_impurity_models(iw_points, self_z=layerdat.self_iw,
-                                        gf_z=layerdat.gf_iw, occ=layerdat.occ)
+        siams = prm.get_impurity_models(iw_points, self_z=data.self_iw,
+                                        gf_z=data.gf_iw, occ=data.occ)
 
         if not np.allclose(data_T, prm.T, atol=1e-14):
             # temperatures don't match
@@ -541,12 +540,12 @@ class Runner:
             LOGGER.info("Input data temperature T=%s differs from calculation T=%s"
                         "\nHybridization functions will be interpolated.",
                         data_T, prm.T)
-            iw_points = gt.matsubara_frequencies(np.arange(N_IW), prm.beta)
+            iw_points = matsubara_frequencies(np.arange(N_IW), prm.beta)
             siams = interpolate_siam_temperature(siams, iw_points)
 
         # iteration scheme: sweep updates -> calculate all impurities, then update
         self.update = partial(sweep_update, prm=prm, siams=siams, iw_points=iw_points,
-                              it=start, self_iw=layerdat.self_iw, occ=layerdat.occ)
+                              it=data.attrs[Dim.it]+1, self_iw=data.self_iw, occ=data.occ)
         self.get_impurity_models = partial(prm.get_impurity_models, z=iw_points)
         atexit.register(next(_finished_message))
 
@@ -561,7 +560,7 @@ class Runner:
 
         Returns
         -------
-        data : LayerIterData
+        data : xr.Dataset
             Green's function, self-energy and occupation of the iteration.
 
         """

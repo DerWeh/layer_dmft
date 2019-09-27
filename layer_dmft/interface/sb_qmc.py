@@ -11,11 +11,11 @@ import numpy as np
 
 import gftools as gt
 
-from layer_dmft import fft, high_frequency_moments as hfm, dataio
-from layer_dmft.util import SpinResolvedArray
+from layer_dmft import dataio, fft, high_frequency_moments as hfm
+from layer_dmft.util import Spins as SP
 from layer_dmft.model import SIAM, SIGMA
 from layer_dmft._version import get_versions
-from layer_dmft.interface.utilities import Params, execute
+from layer_dmft.interface.utilities import execute, Params
 
 N_TAU = 2048
 N_IW = 1024  # TODO: scan code for proper number
@@ -215,14 +215,14 @@ def setup(siam: SIAM, dir_='.', **kwds):
     dir_ = get_path(dir_)
 
     on_site_e = siam.e_onsite
-    h_l = on_site_e.up - on_site_e.dn
-    assert np.allclose(on_site_e.up - SIGMA.up*h_l, on_site_e.dn - SIGMA.dn*h_l,
+    h_l = on_site_e[SP.up] - on_site_e[SP.dn]
+    assert np.allclose(on_site_e[SP.up] - SIGMA[SP.up]*h_l, on_site_e[SP.dn] - SIGMA[SP.dn]*h_l,
                        rtol=1e-12, atol=1e-15)
 
     write_hybridization_tau(siam.hybrid_tau())
     (dir_ / OUTPUT_DIR).mkdir(exist_ok=True)
-    init_content = PARAM_TEMPLATE.format(T=siam.T, U=siam.U,
-                                         ef=-on_site_e.up + SIGMA.up*h_l, h=h_l,
+    init_content = PARAM_TEMPLATE.format(T=siam.T, U=float(siam.U),
+                                         ef=float(-on_site_e[SP.up] + SIGMA[SP.up]*h_l), h=float(h_l),
                                          V2_up=1, V2_dn=1,  # not in use
                                          **kwds)
     (dir_ / INIT_FILE).write_text(init_content)
@@ -303,7 +303,7 @@ def read_gf_tau(dir_='.') -> gt.Result:
 
     Returns
     -------
-    gf_tau.x, gf_tau_err : (2, N_tau) util.SpinResolvedArray
+    gf_tau.x, gf_tau_err : (2, N_tau) np.ndarray
         The imaginary time Green's function and its error.
         The shape of the arrays is (#spins, # imaginary time points).
 
@@ -311,12 +311,12 @@ def read_gf_tau(dir_='.') -> gt.Result:
     out_dir = output_dir(dir_)
     gf_output = np.loadtxt(out_dir / GF_TAU_FILE, unpack=True, usecols=range(1, 5))
     assert gf_output.shape[0] == 4
-    gf_tau = gf_output[::2].view(type=SpinResolvedArray)
-    gf_tau_err = gf_output[1::2].view(type=SpinResolvedArray)
+    gf_tau = gf_output[::2]
+    gf_tau_err = gf_output[1::2]
     return gt.Result(x=gf_tau, err=gf_tau_err)
 
 
-def read_gf_x_self_tau(dir_='.') -> SpinResolvedArray:
+def read_gf_x_self_tau(dir_='.'):
     """Return the convolution (Gf x self energy)(tau) from file in `dir_`.
 
     Parameters
@@ -326,7 +326,7 @@ def read_gf_x_self_tau(dir_='.') -> SpinResolvedArray:
 
     Returns
     -------
-    gf_x_self_tau : (2, N_tau) util.SpinResolvedArray
+    gf_x_self_tau : (2, N_tau) np.ndarray
         The convolution of Green's function and self energy as a function of
         imaginary time tau.
         The shape of the arrays is (#spins, # imaginary time points).
@@ -335,11 +335,11 @@ def read_gf_x_self_tau(dir_='.') -> SpinResolvedArray:
     out_dir = output_dir(dir_)
     gf_output = np.loadtxt(out_dir / GF_TAU_FILE, unpack=True, usecols=(5, 6))
     assert gf_output.shape[0] == 2
-    gf_x_self_tau = gf_output.view(type=SpinResolvedArray)
+    gf_x_self_tau = gf_output
     return gf_x_self_tau
 
 
-def read_gf_iw(dir_='.') -> SpinResolvedArray:
+def read_gf_iw(dir_='.'):
     """Return the Matsubara Green's function from file in `dir_`.
 
     Parameters
@@ -349,7 +349,7 @@ def read_gf_iw(dir_='.') -> SpinResolvedArray:
 
     Returns
     -------
-    gf_iw : (2, N_iw) util.SpinResolvedArray
+    gf_iw : (2, N_iw) np.ndarray
         The Matsubara Green's function. The shape of the array is
         (#spins, #Matsubara frequencies).
 
@@ -360,11 +360,11 @@ def read_gf_iw(dir_='.') -> SpinResolvedArray:
     gf_iw_imag = gf_output[2::IM_STEP]
     gf_iw = gf_iw_real + 1j*gf_iw_imag
     assert gf_iw.shape[0] == 2
-    gf_iw = gf_iw.view(type=SpinResolvedArray)
+    gf_iw = gf_iw
     return gf_iw
 
 
-def read_self_energy_iw(dir_='.') -> SpinResolvedArray:
+def read_self_energy_iw(dir_='.'):
     """Return the self-energy from file in `dir_`.
 
     Parameters
@@ -374,7 +374,7 @@ def read_self_energy_iw(dir_='.') -> SpinResolvedArray:
 
     Returns
     -------
-    self_iw : (2, N_iw) util.SpinResolvedArray
+    self_iw : (2, N_iw) np.ndarray
         The self-energy. The shape of the array is
         (#spins, #Matsubara frequencies).
 
@@ -385,7 +385,7 @@ def read_self_energy_iw(dir_='.') -> SpinResolvedArray:
     self_imag = gf_output[1::IM_STEP]
     self_iw = self_real + 1j*self_imag
     assert self_iw.shape[0] == 2
-    self_iw = self_iw.view(type=SpinResolvedArray)
+    self_iw = self_iw
     return self_iw
 
 
@@ -444,7 +444,7 @@ def read_occ(dir_='.') -> gt.Result:
 
     Returns
     -------
-    occ.x, occ.err : (2, ) util.SpinResolvedArray
+    occ.x, occ.err : (2, ) np.ndarray
         The occupation number and its error.
 
     """
