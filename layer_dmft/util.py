@@ -18,6 +18,7 @@ class Dimensions:
     sp = 'spin'
     lay = 'layer'
     iws = 'Matsubara'
+    tau = 'tau'
     it = 'iteration'
 
 
