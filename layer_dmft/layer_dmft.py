@@ -310,12 +310,12 @@ def hartree_solution(prm: Hubbard_Parameters, iw_n) -> LayerIterData:
         tol = max(np.linalg.norm(occ0.err), 1e-14)
         opt_res = charge.charge_self_consistency(prm, tol=tol, occ0=occ0.x, n_points=N_iw)
         gf_layer_iw = prm.gf0(iw_n, hartree=opt_res.occ.x[::-1])
-        self_layer_iw = np.zeros((2, N_l, N_iw), dtype=np.complex)
-        self_layer_iw[:] = opt_res.occ.x[::-1, :, np.newaxis] * prm.U[np.newaxis, :, np.newaxis]
         occ_layer = opt_res.occ.x
+        self_layer_iw = np.zeros(occ_layer.shape + (N_iw,), dtype=np.complex)
+        self_layer_iw[:] = opt_res.occ.x[::-1, :, np.newaxis] * prm.U[np.newaxis, :, np.newaxis]
     else:  # nonsense case
         # non-interacting solution
-        self_layer_iw = np.zeros((2, N_l, N_iw), dtype=np.complex)
+        self_layer_iw = np.zeros(occ0.x.shape + (N_iw,), dtype=np.complex)
         occ_layer = occ0.x
     return LayerIterData(gf_iw=gf_layer_iw, self_iw=self_layer_iw, occ=occ_layer)
 
