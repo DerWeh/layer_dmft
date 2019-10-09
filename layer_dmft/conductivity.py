@@ -36,12 +36,11 @@ def curr_acorr_n1_iv(prm: Hubbard_Parameters, self_iw, occ, N_iv: int):
 
     Returns
     -------
-    curr_acorr_n1_iv : (N_iv,) complex np.ndarray
+    curr_acorr_n1_iv : (N_sp, 1, N_iv) complex np.ndarray
         The current-current correlation function.
 
     """
     assert prm.N_l == 1
-    assert self_iw.shape[0] == 1, "Not implemented for spin."
     assert occ.shape == self_iw.shape[:-1], "Shape mismatch of occupation and self-energy."
     N_iw = self_iw.shape[-1]
     # we need sum over positive and negative Matsubaras
@@ -49,10 +48,10 @@ def curr_acorr_n1_iv(prm: Hubbard_Parameters, self_iw, occ, N_iv: int):
     iws = gt.matsubara_frequencies(range(-N_iw, N_iw), beta=prm.beta)
     assert model.rev_dict_hilbert_transfrom[prm.hilbert_transform] == 'bethe', \
         "Only Bethe lattice derivative implemented."
-    gf_iw = prm.gf_dmft_s(iws, self_iw)[0, 0]  # FIXME: only up-spin considered!
-    xi_iw = (iws + prm.onsite_energy() - self_iw)[0, 0]  # FIXME: only up-spin considered!
+    gf_iw = prm.gf_dmft_s(iws, self_iw)
+    xi_iw = (iws + prm.onsite_energy() - self_iw)
     # we assume as symmetric density of states, thus that ϵ^{(0)} = 0
-    xi0 = prm.onsite_energy(hartree=occ[::-1])[0, 0]
+    xi0 = prm.onsite_energy(hartree=occ[::-1])
     xi0_iw_inv = 1./(iws + xi0)
     gf_d1_iw = gt.bethe_gf_d1_omega(xi_iw, half_bandwidth=prm.D)
 
@@ -73,7 +72,7 @@ def curr_acorr_n1_iv(prm: Hubbard_Parameters, self_iw, occ, N_iv: int):
             return prm.T*delta_sum + gt.fermi_fct_d1(xi0, beta=prm.beta)
         return delta_sum  # for N_l == 1 there are only corrections to iν_0
 
-    return np.array([p_iv(n_b) for n_b in range(N_iv)])
+    return np.moveaxis(np.array([p_iv(n_b) for n_b in range(N_iv)]), 0, -1)
 
 
 def conductivity_pade(curr_acorr_iv, beta, shift=0j, kind=None, **kwds):
