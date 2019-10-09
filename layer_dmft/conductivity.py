@@ -18,7 +18,47 @@ from gftools import pade
 from layer_dmft import Hubbard_Parameters, model
 
 
-def curr_acorr_n1_iv(prm: Hubbard_Parameters, self_iw, N_iv: int):
+def curr_acorr0_n1_iv0(prm: Hubbard_Parameters, *, occ=None, n_iw=2**16):
+    """Calculate non-interacting bosonic Matsubara current-current correlation function.
+
+    For the non-interacting case, only the zeroth Matsubara frequency
+    :math:`iν_0 = 0` is finite, all other frequencies vanish. Thus only the
+    zeroth frequency is calculated.
+
+    Parameters
+    ----------
+    prm : Hubbard_Parameters
+        The model.
+    occ : (N_sp, N_l=1) float np.ndarray
+        Used to include Hartree contribution if `prm.U ≠ 0`
+    n_iw : int
+        How many fermionic Matsubaras will be used for the summation.
+
+    Returns
+    -------
+    curr_acorr_n1_iv : (N_sp, 1) complex np.ndarray
+        The current-current correlation function.
+
+    Notes
+    -----
+    For the non-interacting case it is in fact not a good idea, to use Matsubara
+    summation. It would probably be more efficient to perform the Matsubara sum
+    analytic and numerically integrate over the DOS.
+    Furthermore, using Pade instead of Matsubara frequencies would be way more
+    efficient.
+
+    """
+    # TODO: dynamically calculate the number of Matsubaras to use from temperature
+    iws = gt.matsubara_frequencies(range(n_iw), beta=prm.beta)
+    if occ is not None:
+        occ = occ[::-1]
+    xi = prm.onsite_energy(iws, hartree=occ)
+    assert model.rev_dict_hilbert_transfrom[prm.hilbert_transform] == 'bethe'
+    gf_d1 = gt.bethe_gf_d1_omega(np.add.outer(xi, iws), half_bandwidth=prm.D)
+    delta_sum = 2*prm.T*np.sum(gf_d1 + 1./(iws + xi)**2, axis=-1).real
+    return delta_sum + gt.fermi_fct_d1(xi, beta=prm.beta)
+
+
 def curr_acorr_n1_iv(prm: Hubbard_Parameters, self_iw, occ, N_iv: int):
     """Calculate bosonic Matsubara current-current correlation function.
 
