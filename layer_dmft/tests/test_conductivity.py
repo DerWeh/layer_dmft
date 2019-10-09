@@ -19,6 +19,18 @@ def test_curr_acorr0_n1_low_temp():
     sommerfeld = aT0 + (np.pi*prm.T)**2/6.*at2
     assert np.allclose(K_iv0, sommerfeld)
 
+    prm = model.Hubbard_Parameters(N_l=1, lattice='bethe')
+    prm.D = 1.37
+    prm.mu[:] = 0
+    prm.T = 0.001
+    prm.assert_valid()
+    K_iv0 = conduct.curr_acorr0_n1_iv0(prm, occ=np.zeros((1, 1)))
+    xi = prm.onsite_energy()
+    aT0 = gt.bethe_dos(xi, half_bandwidth=prm.D)
+    at2 = -1./np.pi*gt.bethe_gf_d2_omega(xi+1e-16j, half_bandwidth=prm.D).imag
+    sommerfeld = aT0 + (np.pi*prm.T)**2/6.*at2
+    assert np.allclose(K_iv0, sommerfeld)
+
 
 def test_U0_curr_acorr_n1():
     """Compare the results of `curr_acorr_n1_iv` with non-interacting case."""

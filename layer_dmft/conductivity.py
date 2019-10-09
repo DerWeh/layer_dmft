@@ -56,7 +56,7 @@ def curr_acorr0_n1_iv0(prm: Hubbard_Parameters, *, occ=None, n_iw=2**16):
     assert model.rev_dict_hilbert_transfrom[prm.hilbert_transform] == 'bethe'
     gf_d1 = gt.bethe_gf_d1_omega(np.add.outer(xi, iws), half_bandwidth=prm.D)
     delta_sum = 2*prm.T*np.sum(gf_d1 + 1./(iws + xi)**2, axis=-1).real
-    return delta_sum + gt.fermi_fct_d1(xi, beta=prm.beta)
+    return delta_sum - gt.fermi_fct_d1(xi, beta=prm.beta)
 
 
 def curr_acorr_n1_iv(prm: Hubbard_Parameters, self_iw, occ, N_iv: int):
@@ -68,7 +68,7 @@ def curr_acorr_n1_iv(prm: Hubbard_Parameters, self_iw, occ, N_iv: int):
         The model.
     self_iw : (N_sp, N_l=1, N_iw) complex np.ndarray
         The local self-energy, for non-negative Matsubaras `iws.imag > 0`.
-    occ : (N_sp, N_l=1), float np.ndarray
+    occ : (N_sp, N_l=1) float np.ndarray
         Occupation number, needed to perform Matsubara sum corrections.
     N_iv : int
         Number of bosonic Matsubaras to calculate. Must be non-negative,
@@ -107,9 +107,9 @@ def curr_acorr_n1_iv(prm: Hubbard_Parameters, self_iw, occ, N_iv: int):
         # symmetric, just in case
         res[small_limit] = .5*(gf_d1_iw[lmsk][small_limit] + gf_d1_iw[rmsk][small_limit])
         # Matsubara sum corrections
-        delta_sum = np.sum(res + xi0_iw_inv[lmsk]*xi0_iw_inv[rmsk], axis=-1)
-        if n_b == 0:
-            return prm.T*delta_sum + gt.fermi_fct_d1(xi0, beta=prm.beta)
+        delta_sum = prm.T*np.sum(res + xi0_iw_inv[lmsk]*xi0_iw_inv[rmsk], axis=-1)
+        if n_b == 0:  # only relevant near half filling to have corrections
+            return delta_sum - gt.fermi_fct_d1(xi0, beta=prm.beta)
         return delta_sum  # for N_l == 1 there are only corrections to iν_0
 
     return np.moveaxis(np.array([p_iv(n_b) for n_b in range(N_iv)]), 0, -1)
