@@ -2,7 +2,7 @@
 import numpy as np
 import gftools as gt
 
-from .context import conductivity as conduct, model
+from .context import conductivity as conduct, model, layer_dmft
 
 
 def test_curr_acorr0_n1_low_temp():
@@ -50,3 +50,24 @@ def test_U0_curr_acorr_n1():
     # Finite values are due to truncation of Matsubara sums
     assert np.allclose(K_iv[..., 1:], 0, atol=1e-4), "For U=0, only zeroth frequency contributes."
     assert np.allclose(K_iv[..., 0], conduct.curr_acorr0_n1_iv0(prm, occ=np.zeros([1, 1])))
+
+
+def test_Hartree_curr_acorr_n1():
+    """Compare the results of `curr_acorr_n1_iv` with the Hartree case."""
+    prm = model.Hubbard_Parameters(N_l=1, lattice='bethe')
+    prm.D = 1.37
+    prm.mu[:] = .136
+    prm.U[:] = 2.37
+    prm.T = 0.01
+    prm.assert_valid()
+
+    iws = gt.matsubara_frequencies(range(1024), beta=prm.beta)
+    hartree = layer_dmft.hartree_solution(prm, iws)
+    self_hartree = hartree.self_iw
+    occ = hartree.occ
+    K_iv = conduct.curr_acorr_n1_iv(prm, self_iw=self_hartree, occ=occ, N_iv=10)
+    assert np.allclose(K_iv.imag, 0), "Correlation is real quantity."
+    # accuracy depends on temperature!
+    # Finite values are due to truncation of Matsubara sums
+    assert np.allclose(K_iv[..., 1:], 0, atol=1e-4), "For U=0, only zeroth frequency contributes."
+    assert np.allclose(K_iv[..., 0], conduct.curr_acorr0_n1_iv0(prm, occ=occ))
