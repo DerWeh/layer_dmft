@@ -115,6 +115,64 @@ def bare_dft_tau2iw(gf_tau, beta):
     return gf_iw
 
 
+def lin_ft_tau2iw(gf_tau, beta):
+    """Fourier integration  of the real function `gf_tau` using Filon approximation.
+
+    Filon methods is used to calculated the Fourier integral
+
+    .. math:: `G^n = .5 ∫_{-β}^{β}dτ G(τ) e^{iω_n τ}`,
+
+    :math:`G(τ)` is approximated by a linear spline. A linear approximation was
+    chosen to be able to integrate noisy functions. Information on oscillatory
+    integrations can be found e.g. in [1]_ and [2]_.
+
+    Parameters
+    ----------
+    gf_tau : (..., N_tau) float np.ndarray
+        The function at imaginary frequencies.
+    beta : float
+        The inverse temperature.
+
+    Returns
+    -------
+    gf_iw : (..., {N_iw - 1}/2) float np.ndarray
+        The Fourier transform of `gf_tau` for positive Matsubara frequencies.
+
+    See Also
+    --------
+    bare_dft_tau2iw : Plain implementation using Riemann sum.
+    dft_tau2iw : Perform the Fourier transform using a back end.
+
+    Notes
+    -----
+    This function performs better than `bare_dft_tau2iw` for high frequencies,
+    for low frequencies `bare_dft_tau2iw` might perform better.
+    To my experience, `lin_ft_tau2iw` can be used for all frequencies if the
+    first two moments are stripped using `dft_tau2iw`.
+
+    .. [1] L.N. Filon, On a quadrature formula for trigonometric integrals,
+    Proc. Roy. Soc. Edinburgh 49 (1928) 38-47.
+    .. [2] A. Iserles, S.P. Nørsett, and S. Olver, Highly oscillatory
+    quadrature: The story so far,
+    http://www.sam.math.ethz.ch/~hiptmair/Seminars/OSCINT/INO06.pdf
+
+    """
+    gf_tau_full_range = np.concatenate((-gf_tau[..., :-1], gf_tau), axis=-1)
+    N_tau = gf_tau_full_range.shape[-1]
+    gf_iw_1 = np.fft.ihfft(gf_tau_full_range[..., :-1])
+    d_gf_tau = gf_tau_full_range[..., 1:] - gf_tau_full_range[..., :-1]
+    gf_iw_2 = np.fft.ihfft(d_gf_tau)
+    # d_tau_iws = 2j*np.pi*(2*np.arange(gf_iw_1.shape[-1]//2) + 1)/N_tau
+    d_tau_iws = 2j*np.pi*np.arange(1, gf_iw_1.shape[-1], 2)/N_tau
+    expm1 = np.expm1(d_tau_iws)
+    weight1 = expm1/d_tau_iws
+    weight2 = (expm1 + 1 - weight1)/d_tau_iws
+    gf_iw = weight1*gf_iw_1[..., 1::2] + weight2*gf_iw_2[..., 1::2]
+    gf_iw = -beta*gf_iw
+
+    return gf_iw
+
+
 @partial(np.vectorize, signature='(n),(n),(n),(m)->(m)', excluded={'s'})
 def interpolate(x_in, fct_in, fct_err, x_out, s=None):
     """Calculate complex interpolation of `fct_in` and evaluate it at `x_out`."""
