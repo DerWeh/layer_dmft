@@ -340,6 +340,37 @@ class Hubbard_Parameters:
             gf_out.append(gf_decomp.reconstruct(xi_bar, kind=diag_dic[diagonal]))
         return np.array(gf_out).view(type=SpinResolvedArray)
 
+    def gf0_eps(self, eps, omega, hartree=False, diagonal=True):
+        """Return local (diagonal) elements of the non-interacting Green's function.
+
+        Parameters
+        ----------
+        omega : array(complex)
+            Frequencies at which the Green's function is evaluated
+        hartree : False or float ndarray
+            If Hartree Green's function is returned. If it is `False` (default),
+            non-interacting Green's function is returned. If it is the electron
+            density, the (one-shot) Hartree Green's function is returned.
+        diagonal : bool, optional
+            Returns only array of diagonal elements if `diagonal` (default).
+            Else the whole matrix is returned.
+
+        Returns
+        -------
+        get_gf_0_loc : SpinResolvedArray(array(complex), array(complex))
+            The Green's function for spin up and down.
+
+        """
+        gf_0_inv = -self.hamiltonian(hartree=hartree)
+        oadd = np.add.outer
+        assert gf_0_inv.ndim == 3
+        gf_out = []
+        for gf_inv_sp in gf_0_inv:
+            gf_decomp = gtmatrix.decompose_hamiltonian(gf_inv_sp)
+            xi_bar = 1./oadd(gf_decomp.xi, oadd(-eps, omega))
+            gf_out.append(gf_decomp.reconstruct(xi_bar, kind=diag_dic[diagonal]))
+        return np.array(gf_out).view(type=SpinResolvedArray)
+
     def occ0(self, gf_iw, hartree=False, return_err=True, total=False):
         """Return occupation for the non-interacting (mean-field) model.
 
