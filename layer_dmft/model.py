@@ -756,12 +756,9 @@ class Hubbard_Parameters:
         return _str
 
     def __copy__(self):
-        try:
-            N_l = self._N_l
-        except AttributeError:
-            copy = self.__class__()  # create new object
-        else:
-            copy = self.__class__(N_l=N_l)  # create new object
+        lattice = rev_dict_hilbert_transfrom[self.hilbert_transform]
+        N_l = self._N_l
+        copy = self.__class__(N_l=N_l, lattice=lattice)  # create new object
 
         for attr in self.__slots__:
             attr_val = getattr(self, attr)
