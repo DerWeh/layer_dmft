@@ -395,7 +395,7 @@ class Hubbard_Parameters:
                              vectorize=True, keep_attrs=True)
         try:
             gf0.coords.update(omega.coords)
-        except TypeError:
+        except (TypeError, AttributeError):
             pass
         for lay in layer_dim:
             gf0.coords[lay] = range(self.N_l)
