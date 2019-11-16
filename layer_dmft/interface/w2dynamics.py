@@ -269,7 +269,7 @@ def save_data(siam: SIAM, dir_='.', name='w2d', compress=True, qmc_params=DEFAUL
         self_m0 = hfm.self_m0(siam.U, data['occ'][::-1])
         gf_m2 = -siam.e_onsite + self_m0
 
-        dft = partial(fft.dft_tau2iw, beta=siam.beta)
+        dft = partial(fft.dft_tau2iw, beta=siam.beta, dft_backend=fft.lin_ft_tau2iw)
         data['gf_iw'] = dft(data['gf_tau'], moments=[(1, 1), gf_m2])
         assert np.all(data['gf_iw'][..., 0].imag < 0), "causality -> negative imaginary part"
         # gf_x_self_iw = dft(data['gf_x_self_tau'], moments=[gf_x_self_m1, gf_x_self_m2]) XXX

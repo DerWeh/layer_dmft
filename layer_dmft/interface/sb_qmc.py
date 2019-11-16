@@ -472,7 +472,7 @@ def save_data(siam: SIAM, dir_='.', name='sb', compress=True, qmc_params=DEFAULT
     gf_x_self_m1 = hfm.gf_x_self_m1(self_m0)
     gf_x_self_m2 = hfm.gf_x_self_m2(self_m0, self_m1, gf_m2)
 
-    dft = partial(fft.dft_tau2iw, beta=siam.beta)
+    dft = partial(fft.dft_tau2iw, beta=siam.beta, dft_backend=fft.lin_ft_tau2iw)
     gf_iw = dft(data['gf_tau'], moments=[(1, 1), gf_m2])
     gf_x_self_iw = dft(data['gf_x_self_tau'], moments=[gf_x_self_m1, gf_x_self_m2])
 
