@@ -42,6 +42,8 @@ setup(
         'numpy',
         'scipy',
         'matplotlib',
+        'xarray',
+        'h5netcdf',  # currently needed to save complex arrays
     ],
     setup_requires=['pytest-runner'],
     tests_require=['pytest', 'hypothesis'],
